@@ -47,3 +47,6 @@ next-env.d.ts
 # test artifacts
 /test-results/
 /playwright-report/
+
+# real financial data — never committed
+/data/
