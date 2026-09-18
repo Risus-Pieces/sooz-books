@@ -1,8 +1,8 @@
 "use client";
 
 import * as React from "react";
-import { CircleAlert, Info, TriangleAlert } from "lucide-react";
 
+import { Glyph } from "@/components/ui/glyph";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/cn";
 
@@ -18,21 +18,21 @@ export function IssueList({ issues, limit = 12 }: { issues: readonly PreviewIssu
   const shown = all ? sorted : sorted.slice(0, limit);
   return (
     <div className="flex flex-col gap-1.5">
-      <p className="eyebrow">What the file says ({issues.length})</p>
+      <p className="text-sm font-semibold text-label2">Notes · {issues.length}</p>
       <ul className="flex flex-col gap-1">
         {shown.map((issue, index) => {
-          const Icon = issue.severity === "info" ? Info : issue.severity === "warn" ? TriangleAlert : CircleAlert;
           return (
             <li key={`${issue.row ?? "file"}-${index}`} className="flex gap-2 text-xs leading-relaxed">
-              <Icon
-                aria-hidden
+              <Glyph
+                name={issue.severity === "info" ? "info" : "warning"}
+                size={14}
                 className={cn(
-                  "mt-0.5 size-3.5 shrink-0",
-                  issue.severity === "info" ? "text-info" : issue.severity === "warn" ? "text-warning" : "text-negative",
+                  "mt-0.5 shrink-0",
+                  issue.severity === "info" ? "text-ink-blue" : issue.severity === "warn" ? "text-ink-orange" : "text-ink-red",
                 )}
               />
               <span>
-                {issue.row === null ? null : <span className="num mr-1.5 text-muted-foreground">row {issue.row}</span>}
+                {issue.row === null ? null : <span className="num mr-1.5 text-label2">row {issue.row}</span>}
                 {issue.message}
               </span>
             </li>
@@ -40,7 +40,7 @@ export function IssueList({ issues, limit = 12 }: { issues: readonly PreviewIssu
         })}
       </ul>
       {sorted.length > limit ? (
-        <button type="button" className="self-start text-xs text-primary hover:underline" onClick={() => setAll((v) => !v)}>
+        <button type="button" className="self-start text-xs text-ink-blue hover:underline" onClick={() => setAll((v) => !v)}>
           {all ? "Show fewer" : `Show all ${sorted.length}`}
         </button>
       ) : null}
@@ -52,10 +52,10 @@ export function IssueList({ issues, limit = 12 }: { issues: readonly PreviewIssu
 export function BlockerList({ blockers }: { blockers: readonly string[] }) {
   if (blockers.length === 0) return null;
   return (
-    <ul className="flex flex-col gap-1 rounded-sm border border-negative/35 bg-negative/8 p-3">
+    <ul className="flex flex-col gap-1 rounded-[12px] bg-tint-red/10 p-3">
       {blockers.map((b) => (
-        <li key={b} className="flex gap-2 text-xs text-foreground">
-          <CircleAlert className="mt-0.5 size-3.5 shrink-0 text-negative" aria-hidden />
+        <li key={b} className="flex gap-2 text-xs text-label">
+          <Glyph name="warning" size={14} className="mt-0.5 shrink-0 text-ink-red" />
           {b}
         </li>
       ))}
@@ -91,11 +91,8 @@ export function UnknownItems({
 
   return (
     <div className="flex flex-col gap-1.5">
-      <p className="eyebrow">New to the books ({items.length})</p>
-      <p className="text-xs text-muted-foreground">
-        Tick each item to create it as a product. Check the SKU: it is used on every COGS and margin line.
-      </p>
-      <div className="overflow-hidden rounded-sm border border-border">
+      <p className="text-sm font-semibold text-label2">New products · {items.length}</p>
+      <div className="overflow-hidden rounded-[12px] bg-inset">
         <TableScroll>
           <Table caption="Items to create as products" className="min-w-[32rem]">
             <thead>
@@ -110,14 +107,14 @@ export function UnknownItems({
               {items.map((item) => {
                 const chosen = byKey.get(item.key);
                 return (
-                  <tr key={item.key} className="rule-row">
+                  <tr key={item.key} className="[&>td]:rule-row">
                     <Td>
                       <input
                         type="checkbox"
                         aria-label={`Create ${item.label}`}
                         checked={chosen !== undefined}
                         onChange={(e) => set(item.key, e.target.checked ? {} : null, item)}
-                        className="size-3.5 accent-[var(--color-primary)]"
+                        className="size-4 accent-[var(--blue)]"
                       />
                     </Td>
                     <Td className="text-sm">{item.label}</Td>
@@ -167,7 +164,7 @@ export function FileField({
       accept=".csv,.tsv,.txt,.xlsx,text/csv"
       disabled={disabled}
       onChange={(e) => onFile(e.target.files?.[0] ?? null)}
-      className="block w-full text-xs text-muted-foreground file:mr-3 file:h-8 file:cursor-pointer file:rounded-sm file:border file:border-border-strong file:bg-surface-raised file:px-3 file:text-sm file:font-medium file:text-foreground hover:file:bg-muted"
+      className="block w-full text-xs text-label2 file:mr-3 file:h-8 file:cursor-pointer file:rounded-[8px] file:border-0 file:bg-ctl file:px-3 file:text-sm file:font-medium file:text-label file:shadow-ctl hover:file:bg-fill2"
     />
   );
 }

@@ -2,12 +2,9 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { CalendarClock, Pencil, Plus, Trash2 } from "lucide-react";
 
 import { addForecastItem, removeForecastItem, updateForecastItem } from "@/app/(app)/plan/actions";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardHeader, CardTitle } from "@/components/ui/card";
 import { DateInput } from "@/components/ui/date-input";
 import {
   Dialog,
@@ -19,13 +16,18 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { EmptyState } from "@/components/ui/empty-state";
+import { Glyph } from "@/components/ui/glyph";
+import { IconBadge } from "@/components/ui/icon-badge";
+import { InfoButton } from "@/components/ui/info-button";
 import { Input, inputBase } from "@/components/ui/input";
+import { InsetGroup } from "@/components/ui/inset-group";
 import { Label } from "@/components/ui/label";
 import { Money, formatCents } from "@/components/ui/money";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/components/ui/toast";
 import { cn } from "@/lib/cn";
 import { parseMoney } from "@/lib/money";
+import { shortDate } from "@/lib/ui/format";
 
 import type { BankAccountOption, ForecastItemForm, ForecastItemRow, RecurrenceKey } from "./types";
 
@@ -91,93 +93,129 @@ export function ForecastItems({
     });
   };
 
+  const groups: Array<{ key: "inflow" | "outflow"; label: string; rows: ForecastItemRow[] }> = [
+    { key: "inflow", label: "Money in", rows: items.filter((i) => i.direction === "inflow") },
+    { key: "outflow", label: "Money out", rows: items.filter((i) => i.direction === "outflow") },
+  ];
+  const addButton = canEdit ? (
+    <Button variant="ghost" size="sm" onClick={() => setEditing("new")} className="text-ink-blue">
+      <Glyph name="plus" />
+      Add
+    </Button>
+  ) : null;
+
   return (
-    <Card className="min-w-0">
-      <CardHeader>
-        <div className="min-w-0">
-          <CardTitle>Expected cash movements</CardTitle>
-          <p className="mt-0.5 text-xs text-muted-foreground">
-            What the books cannot see yet. Open invoices and bills are added from receivables and payables on their own.
-          </p>
-        </div>
-        {canEdit ? (
-          <Button size="sm" onClick={() => setEditing("new")}>
-            <Plus />
-            Add item
-          </Button>
-        ) : null}
-      </CardHeader>
+    <section className="min-w-0">
+      <div className="flex items-center gap-2 px-1 pt-2 pb-1">
+        <h2 className="flex flex-1 items-center gap-1 text-xl font-bold tracking-[-0.02em]">
+          Expected
+          <InfoButton label="About expected movements" align="start">
+            <p>What the books cannot see yet: a contribution the founder has promised, a co-packer deposit, a launch invoice. Open invoices and bills are added from receivables and payables on their own.</p>
+            <p>Each is weighted by its confidence: a $1,000 deposit at 50% counts as $500 in each week it lands.</p>
+          </InfoButton>
+        </h2>
+        {items.length > 0 ? addButton : null}
+      </div>
       {items.length === 0 ? (
-        <EmptyState
-          icon={<CalendarClock />}
-          title="No expected movements entered"
-          description="Add the founder contributions you plan to make, the co-packer deposit, the first production run — anything with a date and an amount. Until then the forecast only carries today's cash forward."
-          action={
-            canEdit ? (
-              <Button size="sm" onClick={() => setEditing("new")}>
-                <Plus />
-                Add item
-              </Button>
-            ) : undefined
-          }
-        />
-      ) : (
-        <div className="relative overflow-x-auto">
-          <table className="w-full min-w-3xl border-separate border-spacing-0 text-sm">
-            <caption className="sr-only">Forecast items</caption>
-            <thead>
-              <tr>
-                <Th>Item</Th>
-                <Th>Starts</Th>
-                <Th>Repeats</Th>
-                <Th className="text-right">Confidence</Th>
-                <Th className="text-right">Amount</Th>
-                <Th className="text-right">
-                  <span className="sr-only">Actions</span>
-                </Th>
-              </tr>
-            </thead>
-            <tbody>
-              {items.map((item) => (
-                <tr key={item.id} className="rule-row">
-                  <td className="px-3 py-1.5">
-                    <p className="font-medium">{item.label}</p>
-                    <p className="text-xs text-muted-foreground">
-                      {item.category}
-                      {item.bankAccountId !== null ? ` · ${bankName.get(item.bankAccountId) ?? "bank account"}` : ""}
-                    </p>
-                  </td>
-                  <td className="num px-3 py-1.5 text-xs">
-                    {item.expectedDate}
-                    {item.recurrence === "none" && item.expectedDate <= asOf ? (
-                      <Badge tone="warning" size="sm" className="ml-1.5">overdue</Badge>
-                    ) : null}
-                  </td>
-                  <td className="px-3 py-1.5 text-xs">
-                    {RECURRENCE_LABEL[item.recurrence]}
-                    {item.endDate !== null ? <span className="num text-muted-foreground"> to {item.endDate}</span> : null}
-                  </td>
-                  <td className="num px-3 py-1.5 text-right text-xs">{confidencePercent(item.confidence)}%</td>
-                  <td className="px-3 py-1.5 text-right">
-                    <Money cents={item.direction === "inflow" ? item.amountCents : -item.amountCents} signed colorPositive />
-                  </td>
-                  <td className="px-3 py-1.5 text-right whitespace-nowrap">
-                    {canEdit ? (
-                      <>
-                        <Button variant="ghost" size="icon-sm" aria-label={`Edit ${item.label}`} disabled={pending} onClick={() => setEditing(item)}>
-                          <Pencil />
-                        </Button>
-                        <Button variant="ghost" size="icon-sm" aria-label={`Remove ${item.label}`} disabled={pending} onClick={() => remove(item)}>
-                          <Trash2 />
-                        </Button>
-                      </>
-                    ) : null}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        <div className="rounded-2xl bg-card shadow-card max-md:rounded-[22px]">
+          <EmptyState
+            glyph="calendar"
+            title="Nothing expected yet"
+            description="Add the founder contributions you plan to make, the co-packer deposit, the first production run — anything with a date and an amount. Until then the forecast only carries today's cash forward."
+            action={
+              canEdit ? (
+                <Button onClick={() => setEditing("new")}>
+                  <Glyph name="plus" />
+                  Add item
+                </Button>
+              ) : undefined
+            }
+          />
         </div>
+      ) : (
+        groups
+          .filter((g) => g.rows.length > 0)
+          .map((g) => (
+            <InsetGroup
+              key={g.key}
+              header={g.label}
+              headerAccessory={
+                <Money
+                  cents={g.rows.reduce((s, i) => s + i.amountCents, 0) * (g.key === "inflow" ? 1 : -1)}
+                  currency
+                  signed
+                  plain
+                  className="text-xs font-semibold text-label2"
+                />
+              }
+              separatorInset={63}
+            >
+              {g.rows.map((item) => {
+                const overdue = item.recurrence === "none" && item.expectedDate <= asOf;
+                const body = (
+                  <>
+                    <IconBadge
+                      glyph={item.direction === "inflow" ? "arrow-in" : "arrow-out"}
+                      tint={item.direction === "inflow" ? "green" : "red"}
+                      size="xl"
+                    />
+                    <span className="min-w-0 flex-1">
+                      <span className="flex items-baseline gap-2">
+                        <span className="min-w-0 flex-1 truncate text-sm font-semibold max-sm:text-lg max-sm:font-medium">{item.label}</span>
+                        <Money
+                          cents={item.direction === "inflow" ? item.amountCents : -item.amountCents}
+                          currency
+                          signed
+                          colorPositive
+                          className="shrink-0 text-sm font-semibold max-sm:text-lg"
+                        />
+                      </span>
+                      <span className="mt-[3px] flex items-center gap-1.5 text-xs text-label2 max-sm:text-sm">
+                        <span className="min-w-0 flex-1 truncate">
+                          {item.category} · {RECURRENCE_LABEL[item.recurrence]}
+                          {item.bankAccountId !== null ? ` · ${bankName.get(item.bankAccountId) ?? "bank account"}` : ""}
+                        </span>
+                        <span className="num shrink-0">
+                          {overdue ? <span className="font-semibold text-ink-orange">Overdue · </span> : null}
+                          {shortDate(item.expectedDate)}
+                          {item.endDate !== null ? `–${shortDate(item.endDate)}` : ""} · {confidencePercent(item.confidence)}%
+                        </span>
+                      </span>
+                    </span>
+                  </>
+                );
+                return (
+                  <div key={item.id} className={cn(rowSep, "flex items-center")}>
+                    {canEdit ? (
+                      <button
+                        type="button"
+                        aria-label={`Edit ${item.label}`}
+                        disabled={pending}
+                        onClick={() => setEditing(item)}
+                        className="flex min-w-0 flex-1 items-center gap-3 py-2.5 pr-2 pl-4 text-left transition-colors hover:bg-fill2"
+                      >
+                        {body}
+                      </button>
+                    ) : (
+                      <div className="flex min-w-0 flex-1 items-center gap-3 py-2.5 pr-2 pl-4">{body}</div>
+                    )}
+                    {canEdit ? (
+                      <Button
+                        variant="ghost"
+                        size="icon-sm"
+                        aria-label={`Remove ${item.label}`}
+                        disabled={pending}
+                        onClick={() => remove(item)}
+                        className="mr-2 shrink-0 text-label2"
+                      >
+                        <Glyph name="trash" />
+                      </Button>
+                    ) : null}
+                  </div>
+                );
+              })}
+            </InsetGroup>
+          ))
       )}
       {editing === null ? null : (
         <ItemDialog
@@ -188,9 +226,12 @@ export function ForecastItems({
           onClose={() => setEditing(null)}
         />
       )}
-    </Card>
+    </section>
   );
 }
+
+const rowSep =
+  "relative before:pointer-events-none before:absolute before:top-0 before:right-0 before:left-[var(--sep-inset)] before:border-t-[0.5px] before:border-sep first:before:hidden";
 
 function ItemDialog({
   item,
@@ -339,16 +380,3 @@ function ItemDialog({
   );
 }
 
-function Th({ className, children }: { className?: string; children?: React.ReactNode }) {
-  return (
-    <th
-      scope="col"
-      className={cn(
-        "rule-head bg-surface-sunken px-3 py-1.5 text-left text-2xs font-semibold tracking-wider text-muted-foreground uppercase",
-        className,
-      )}
-    >
-      {children}
-    </th>
-  );
-}

@@ -2,6 +2,8 @@ import * as React from "react";
 
 import { cn } from "@/lib/cn";
 
+import { fieldBase, fieldInvalid } from "./menu-styles";
+
 export interface TextareaProps extends React.ComponentPropsWithRef<"textarea"> {
   invalid?: boolean;
 }
@@ -11,11 +13,7 @@ export function Textarea({ className, invalid, ...props }: TextareaProps) {
     <textarea
       data-slot="textarea"
       aria-invalid={invalid || undefined}
-      className={cn(
-        "min-h-16 w-full rounded-sm max-sm:text-lg border border-border-strong bg-surface-raised px-2.5 py-1.5 text-sm text-foreground transition-colors placeholder:text-muted-foreground/80 focus-visible:border-ring disabled:cursor-not-allowed disabled:bg-muted disabled:text-muted-foreground",
-        invalid && "border-negative focus-visible:border-negative",
-        className,
-      )}
+      className={cn(fieldBase, "h-auto min-h-16 py-1.5 max-sm:h-auto", invalid && fieldInvalid, className)}
       {...props}
     />
   );

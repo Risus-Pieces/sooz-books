@@ -72,19 +72,29 @@ const posted: Record<string, number> = {};
 
 /** The queue row for one statement line on one of this run's accounts. */
 function queueRow(page: Page, payee: string, bank: ThrowawayBank) {
-  return page.locator('tr[data-row-id]').filter({ hasText: payee }).filter({ hasText: `••${bank.mask}` });
+  return page.locator(`[data-row-id][data-bank-mask="${bank.mask}"]`).filter({ hasText: payee });
+}
+
+/** The selected transaction's detail pane, beside the list. */
+function detail(page: Page) {
+  return page.locator('[data-slot="detail-pane"]');
+}
+
+/** The Mail-style toolbar over the detail pane. */
+function actions(page: Page) {
+  return page.getByRole('toolbar', { name: 'Transaction' });
 }
 
 async function openRow(page: Page, payee: string, bank: ThrowawayBank): Promise<void> {
   const row = queueRow(page, payee, bank);
   await expect(row).toHaveCount(1);
-  // A click on a row focuses it and opens its details underneath; a click on the row that
-  // already has focus (the queue moves focus on after each decision) toggles them shut.
-  const details = page.getByRole('button', { name: /^Rule/ });
-  await row.locator('td').nth(2).click();
-  if (!(await details.isVisible())) await row.locator('td').nth(2).click();
-  await expect(details).toBeVisible();
+  // A click on a row shows it in the detail pane beside the list.
+  await row.click();
   await expect(row).toHaveAttribute('aria-current', 'true');
+  // The pane shows that row: its payee (a heading, or the statement line for a transfer leg) and bank.
+  await expect(detail(page).getByRole('heading', { level: 2 })).toBeVisible();
+  await expect(detail(page)).toContainText(payee);
+  await expect(detail(page)).toContainText(`••${bank.mask}`);
 }
 
 async function importStatement(page: Page, bank: ThrowawayBank, csv: Buffer, expectNew: number) {
@@ -196,9 +206,10 @@ test.describe.serial('bank statement to reconciled month', () => {
 
     // --- The queue shows every row with what proposed its account ------------------------
     await page.goto('/banking/review', { waitUntil: 'networkidle' });
-    await expect(queueRow(page, 'Andrew Firestone', bankA)).toContainText('6310');
-    await expect(queueRow(page, 'Blue Pacific Flavors', bankA)).toContainText('1320');
-    await expect(queueRow(page, 'Target', bankA)).toContainText('6740');
+    // Each row names the account its suggestion posts to (6310, 1320, 6740).
+    await expect(queueRow(page, 'Andrew Firestone', bankA)).toContainText('Formulation & Bench Work');
+    await expect(queueRow(page, 'Blue Pacific Flavors', bankA)).toContainText('Raw Ingredients');
+    await expect(queueRow(page, 'Target', bankA)).toContainText('Office Supplies & Postage');
     await expect(queueRow(page, bankB.name, bankA)).toContainText(/Transfer to/);
     await expect(queueRow(page, bankA.name, bankB)).toContainText(/Transfer from/);
     for (const payee of ['Andrew Firestone', 'Blue Pacific Flavors', 'Target']) {
@@ -210,25 +221,28 @@ test.describe.serial('bank statement to reconciled month', () => {
 
     // --- Accept one, as suggested -------------------------------------------------------
     await openRow(page, 'Andrew Firestone', bankA);
-    await page.getByRole('button', { name: /^Accept/ }).click();
+    await detail(page).getByRole('button', { name: /^Accept/ }).click();
     posted.accept = Number((await toast(page, /Posted as entry #\d+/)).match(/#(\d+)/)?.[1]);
     await expect(queueRow(page, 'Andrew Firestone', bankA)).toHaveCount(0);
 
     // --- Keys on a focused button belong to the button, never to the queue -------------------
-    // Enter on "Flagged" toggles the filter; "x" there excludes nothing.
-    const flagged = page.getByRole('button', { name: 'Flagged', exact: true });
+    // Enter on the "Flagged" segment chooses it; "x" there excludes nothing. Enter on "All" returns.
+    const flagged = page.getByRole('radio', { name: /^Flagged/ });
+    const all = page.getByRole('radio', { name: 'All', exact: true });
     await flagged.focus();
     await page.keyboard.press('x');
     await page.keyboard.press('Enter');
-    await expect(flagged).toHaveAttribute('aria-pressed', 'true');
+    await expect(flagged).toHaveAttribute('aria-checked', 'true');
+    await all.focus();
+    await page.keyboard.press('x');
     await page.keyboard.press('Enter');
-    await expect(flagged).toHaveAttribute('aria-pressed', 'false');
+    await expect(flagged).toHaveAttribute('aria-checked', 'false');
     await expect(queueRow(page, 'Blue Pacific Flavors', bankA)).toHaveCount(1);
 
     // --- Split one: ingredients and packaging, both capitalized ---------------------------
     // Enter on the focused Split button opens the split; it does not post the row as suggested.
     await openRow(page, 'Blue Pacific Flavors', bankA);
-    await page.getByRole('button', { name: /^Split/ }).focus();
+    await actions(page).getByRole('button', { name: /^Split/ }).focus();
     await page.keyboard.press('Enter');
     const split = page.getByRole('dialog');
     await expect(split.getByRole('heading', { name: 'Split Blue Pacific Flavors' })).toBeVisible();
@@ -242,19 +256,19 @@ test.describe.serial('bank statement to reconciled month', () => {
 
     // --- Mark one personal: a mixed-use payee the owner re-tags to Owner Draws -------------
     await openRow(page, 'Target', bankA);
-    await page.getByRole('button', { name: /^Personal/ }).click();
+    await actions(page).getByRole('button', { name: /^Personal/ }).click();
     posted.personal = Number((await toast(page, /Posted to Owner Draws as entry #\d+/)).match(/#(\d+)/)?.[1]);
 
     // --- Confirm the transfer pair ---------------------------------------------------------
     await openRow(page, bankB.name, bankA);
-    await page.getByRole('button', { name: /^Post transfer/ }).click();
+    await detail(page).getByRole('button', { name: /^Post transfer/ }).click();
     posted.transfer = Number((await toast(page, /Transfer posted as entry #\d+/)).match(/#(\d+)/)?.[1]);
     await expect(queueRow(page, bankA.name, bankB)).toHaveCount(0);
     await noErrorToast(page);
 
     // --- Post what the owner's auto-post rule coded ------------------------------------------
     await page.goto('/banking/review?stage=ready', { waitUntil: 'networkidle' });
-    await expect(queueRow(page, 'Adv SafeBalance Banking', bankA)).toContainText('3015');
+    await expect(queueRow(page, 'Adv SafeBalance Banking', bankA)).toContainText('Member Contributions');
     await page.getByRole('button', { name: /Post .*auto-post/i }).click();
     const confirmAuto = page.getByRole('dialog');
     await expect(confirmAuto).toContainText('your auto-post rules coded');
@@ -270,10 +284,14 @@ test.describe.serial('bank statement to reconciled month', () => {
     expect(await postedBalance(sql, bankB.glCode, MONTH.first, MONTH.last)).toBe(10_000);
 
     await page.goto(`/ledger?from=${MONTH.first}&to=${MONTH.last}`);
+    // Each journal row is a link carrying its entry number; choosing one shows it beside the list.
+    const journalRow = (entryNo: number) => page.getByRole('link', { name: new RegExp(`#${entryNo}(?!\\d)`) });
     for (const entryNo of Object.values(posted)) {
-      await expect(page.getByRole('link', { name: `#${entryNo}`, exact: true })).toBeVisible();
+      await expect(journalRow(entryNo)).toBeVisible();
     }
-    await page.getByRole('link', { name: `#${posted.split}`, exact: true }).click();
+    await journalRow(posted.split).click();
+    await expect(journalRow(posted.split)).toHaveAttribute('aria-current', 'true');
+    await page.getByRole('link', { name: 'Open entry', exact: true }).click();
     await expect(page.getByRole('heading', { level: 1, name: `Entry #${posted.split}` })).toBeVisible();
     const lines = page.locator('table').filter({ hasText: 'Debit' }).last();
     await expect(lines).toContainText('1320');
@@ -348,7 +366,7 @@ test.describe.serial('bank statement to reconciled month', () => {
     // A reconciled row cannot be unposted: the books would no longer agree with the bank.
     await page.goto('/banking/review?stage=posted', { waitUntil: 'networkidle' });
     await openRow(page, 'Andrew Firestone', bankA);
-    await page.getByRole('button', { name: /^Unpost/ }).click();
+    await actions(page).getByRole('button', { name: /^Unpost/ }).click();
     await page.getByRole('dialog').getByRole('button', { name: 'Unpost' }).click();
     await toast(page, /is reconciled and locked\. Undo the reconciliation before unposting it\./);
     await expect(queueRow(page, 'Andrew Firestone', bankA)).toHaveCount(1);

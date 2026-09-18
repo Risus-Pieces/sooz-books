@@ -2,14 +2,21 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
+import { CategoryBars } from "@/components/charts";
 import { DeductionTable } from "@/components/trade/deduction-table";
-import { longDate, monthLabel, percent } from "@/components/trade/labels";
-import { Fact, PromoStatusBadge, Table, TableScroll, Td, Th } from "@/components/trade/parts";
+import { longDate, monthLabel, percent, shortDate } from "@/components/trade/labels";
+import { PromoStatusPill } from "@/components/trade/parts";
 import { AccrueButton, ClosePromotionButton } from "@/components/trade/promotion-actions";
-import { Badge } from "@/components/ui/badge";
-import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { PROMO_TINT } from "@/components/trade/promotion-calendar";
+import { PageToolbar } from "@/components/shell/page-toolbar";
+import { DetailPane } from "@/components/ui/detail-pane";
+import { Glyph } from "@/components/ui/glyph";
+import { IconBadge } from "@/components/ui/icon-badge";
+import { InfoButton } from "@/components/ui/info-button";
+import { GroupRow, InsetGroup } from "@/components/ui/inset-group";
 import { Money } from "@/components/ui/money";
-import { PageHeader } from "@/components/ui/page-header";
+import { Pill } from "@/components/ui/pill";
+import { ToolbarGroup } from "@/components/ui/toolbar";
 import { can } from "@/lib/auth/roles";
 import { requireUser } from "@/lib/auth/session";
 import { today } from "@/lib/dates";
@@ -23,9 +30,9 @@ export async function generateMetadata({ params }: { params: Promise<{ promotion
 }
 
 /**
- * One promotion: the plan, its month-by-month accrual (posted and still to post), the
- * deductions charged against it, and the variance. Accruing and closing each show the entries
- * they post first.
+ * One promotion: plan, accrued, taken and released as bars, the month-by-month accrual (posted and
+ * still to post), what it pays for, and the deductions charged against it. Accruing and closing
+ * each show the entries they post first.
  */
 export default async function PromotionPage({ params }: { params: Promise<{ promotionId: string }> }) {
   const [user, { promotionId }] = await Promise.all([requireUser(), params]);
@@ -35,190 +42,151 @@ export default async function PromotionPage({ params }: { params: Promise<{ prom
   const canManage = can(user.role, "trade.manage");
   const open = row.status === "planned" || row.status === "active";
   const now = today();
+  const varianceBad = row.accrualVarianceCents > 0;
 
   return (
-    <div className="flex flex-col gap-4">
-      <PageHeader
-        eyebrow="Trade · Promotion"
-        title={row.name}
-        meta={<PromoStatusBadge status={row.status} />}
-        description={`${row.customerName ?? "No customer"} · ${row.typeLabel} · runs ${longDate(row.startDate)} to ${longDate(row.endDate)}${
-          row.shipStartDate !== null && row.shipEndDate !== null ? ` · ships ${longDate(row.shipStartDate)} to ${longDate(row.shipEndDate)}` : ""
-        }`}
+    <div className="flex flex-col gap-3.5 max-md:gap-3">
+      <PageToolbar
+        title="Promotion"
+        phoneTitleRow
+        back={{ href: "/trade/promotions", label: "Promotions" }}
+        info={
+          <>
+            <p>
+              Each month-end of the ship window posts Dr {detail.contraAccount.code} {detail.contraAccount.name}
+              {detail.fixedFeeCents > 0 ? " and 4560 for fixed fees" : ""}, Cr 2120 Accrued Trade Spend, so the cost lands with the sales.
+            </p>
+            <p>Closing releases whatever is still accrued and unclaimed back to contra revenue.</p>
+          </>
+        }
         actions={
           canManage && open ? (
-            <>
-              <ClosePromotionButton promotionId={row.id} release={detail.releasePreview} today={now} cancel />
+            <ToolbarGroup>
               <ClosePromotionButton promotionId={row.id} release={detail.releasePreview} today={now} cancel={false} />
-              <AccrueButton promotionId={row.id} due={detail.duePreview} through={detail.dueThrough} />
-            </>
-          ) : null
+              <ClosePromotionButton promotionId={row.id} release={detail.releasePreview} today={now} cancel />
+            </ToolbarGroup>
+          ) : undefined
         }
       />
 
-      <Card>
-        <dl className="grid grid-cols-2 gap-x-4 gap-y-3 px-4 py-3 sm:grid-cols-3 lg:grid-cols-6">
-          <Fact label="Planned">
-            <Money cents={row.plannedCents} currency plain />
-          </Fact>
-          <Fact label="Accrued">
-            <Money cents={row.accruedCents} plain zeroDash />
-          </Fact>
-          <Fact label="Taken by deductions">
-            <Money cents={row.deductedCents} plain zeroDash />
-          </Fact>
-          <Fact label="Still accrued">
-            <Money cents={row.openAccrualCents} plain zeroDash />
-          </Fact>
-          <Fact label="Released on close">
-            <Money cents={row.releasedCents} plain zeroDash />
-          </Fact>
-          <Fact label="Accrual variance">
-            <Money cents={row.accrualVarianceCents} signed zeroDash plain={row.accrualVarianceCents <= 0} className={row.accrualVarianceCents > 0 ? "text-negative" : undefined} />
-            <span className="num ml-1.5 text-2xs text-muted-foreground">{percent(row.accrualVarianceRatio)}</span>
-          </Fact>
-        </dl>
-        <p className="border-t border-border px-4 py-2 text-xs text-muted-foreground">
-          Deal number <span className="num text-foreground">{row.authorizationNo ?? "none"}</span>
-          {row.authorizationNo === null ? " — deductions can only be tied to this promotion by hand." : " — deductions quoting it are charged against this accrual."}
-          {detail.notes ? <span className="block pt-1 text-foreground">{detail.notes}</span> : null}
-        </p>
-      </Card>
-
-      <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
-        <Card className="min-w-0">
-          <CardHeader>
-            <div className="min-w-0">
-              <CardTitle>Accrual schedule</CardTitle>
-              <CardDescription>
-                Dr {detail.contraAccount.code} {detail.contraAccount.name}
-                {detail.fixedFeeCents > 0 ? " and 4560 for fixed fees" : ""}, Cr 2120 Accrued Trade Spend, at each month-end.
-              </CardDescription>
-            </div>
-          </CardHeader>
-          <TableScroll>
-            <Table caption="Accrual schedule" className="min-w-[30rem]">
-              <thead>
-                <tr>
-                  <Th>Month</Th>
-                  <Th align="right">Days</Th>
-                  <Th align="right">Allowance</Th>
-                  <Th align="right">Fees</Th>
-                  <Th align="right">Accrual</Th>
-                  <Th>Posted</Th>
-                </tr>
-              </thead>
-              <tbody>
-                {detail.schedule.map((m) => (
-                  <tr key={m.periodEnd} className="rule-row">
-                    <Td className="num text-xs whitespace-nowrap">{monthLabel(m.periodEnd)}</Td>
-                    <Td align="right" className="num text-xs text-muted-foreground">
-                      {m.days}
-                    </Td>
-                    <Td align="right">
-                      <Money cents={m.allowanceCents} plain zeroDash />
-                    </Td>
-                    <Td align="right">
-                      <Money cents={m.feeCents} plain zeroDash />
-                    </Td>
-                    <Td align="right" className="font-medium">
-                      <Money cents={m.allowanceCents + m.feeCents} plain />
-                    </Td>
-                    <Td className="text-xs">
-                      {m.entryId !== null ? (
-                        <Link href={`/ledger/${m.entryId}`} className="num text-primary hover:underline">
-                          JE #{m.entryNo}
-                        </Link>
-                      ) : m.periodEnd <= now && open ? (
-                        <Badge tone="warning" size="sm">
-                          Due
-                        </Badge>
-                      ) : (
-                        <span className="text-muted-foreground">{open ? `on ${longDate(m.periodEnd)}` : "—"}</span>
-                      )}
-                    </Td>
-                  </tr>
-                ))}
-                <tr>
-                  <Td className="rule-subtotal text-xs font-semibold text-muted-foreground" colSpan={2}>
-                    {detail.schedule.length} {detail.schedule.length === 1 ? "month" : "months"}
-                  </Td>
-                  <Td align="right" className="rule-subtotal rule-total font-semibold">
-                    <Money cents={detail.allowanceCents} plain />
-                  </Td>
-                  <Td align="right" className="rule-subtotal rule-total font-semibold">
-                    <Money cents={detail.fixedFeeCents} plain zeroDash />
-                  </Td>
-                  <Td align="right" className="rule-subtotal rule-total font-semibold">
-                    <Money cents={detail.allowanceCents + detail.fixedFeeCents} plain />
-                  </Td>
-                  <Td className="rule-subtotal" />
-                </tr>
-              </tbody>
-            </Table>
-          </TableScroll>
-        </Card>
-
-        <Card className="min-w-0">
-          <CardHeader>
-            <div className="min-w-0">
-              <CardTitle>What it pays for</CardTitle>
-              <CardDescription>Units times the allowance per unit, plus any fixed fee.</CardDescription>
-            </div>
-          </CardHeader>
-          {detail.products.length === 0 ? (
-            <p className="px-4 py-4 text-xs text-muted-foreground">Planned as a whole deal, not per product.</p>
-          ) : (
-            <TableScroll>
-              <Table caption="Products on the promotion" className="min-w-[24rem]">
-                <thead>
-                  <tr>
-                    <Th>Product</Th>
-                    <Th align="right">Units</Th>
-                    <Th align="right">Per unit</Th>
-                    <Th align="right">Extended</Th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {detail.products.map((p) => (
-                    <tr key={p.sku} className="rule-row">
-                      <Td>
-                        <span className="num mr-1.5 text-xs text-muted-foreground">{p.sku}</span>
-                        {p.name}
-                      </Td>
-                      <Td align="right" className="num text-xs">
-                        {p.units ?? "—"}
-                      </Td>
-                      <Td align="right">{p.allowancePerUnitCents === null ? "—" : <Money cents={p.allowancePerUnitCents} plain />}</Td>
-                      <Td align="right">
-                        <Money cents={p.extendedCents} plain />
-                      </Td>
-                    </tr>
-                  ))}
-                </tbody>
-              </Table>
-            </TableScroll>
-          )}
-          <dl className="grid grid-cols-2 gap-3 border-t border-border px-4 py-3">
-            <Fact label="Allowance">
-              <Money cents={detail.allowanceCents} plain />
-            </Fact>
-            <Fact label="Fixed fees">
-              <Money cents={detail.fixedFeeCents} plain zeroDash />
-            </Fact>
-          </dl>
-        </Card>
-      </div>
-
-      <Card>
-        <CardHeader>
-          <div className="min-w-0">
-            <CardTitle>Deductions charged to it</CardTitle>
-            <CardDescription>Taken by the distributor quoting this promotion’s deal number, or tied to it when validated.</CardDescription>
+      <DetailPane
+        leading={<IconBadge glyph="megaphone" tint={PROMO_TINT[row.status] ?? "gray"} size="xl" className="size-14 rounded-[14px] [&_svg]:size-7" />}
+        title={row.name}
+        meta={[row.customerName ?? "No customer", row.typeLabel, `${shortDate(row.startDate)} – ${longDate(row.endDate)}`]}
+        amount={<Money cents={row.plannedCents} currency plain />}
+        status={
+          <div className="flex flex-wrap gap-1.5">
+            <PromoStatusPill status={row.status} />
+            {row.authorizationNo !== null ? (
+              <Pill tone="neutral" glyph="tag">
+                Deal <span className="num">{row.authorizationNo}</span>
+              </Pill>
+            ) : (
+              <span className="inline-flex items-center gap-1">
+                <Pill tone="orange" glyph="tag">
+                  No deal number
+                </Pill>
+                <InfoButton label="About the deal number">
+                  <p>Without a deal number, deductions can only be tied to this promotion by hand.</p>
+                </InfoButton>
+              </span>
+            )}
           </div>
-        </CardHeader>
-        <DeductionTable rows={detail.deductions} compact deadlines={false} empty="No deduction has been charged against this promotion yet." />
-      </Card>
+        }
+        actions={canManage && open && detail.duePreview.length > 0 ? <AccrueButton promotionId={row.id} due={detail.duePreview} through={detail.dueThrough} /> : undefined}
+      >
+        <section aria-labelledby="plan" className="rounded-[14px] bg-card px-5 pt-4 pb-3 shadow-card max-sm:px-4">
+          <div className="mb-1 flex items-baseline gap-2">
+            <h2 id="plan" className="flex-1 text-lg font-semibold tracking-[-0.01em]">
+              Plan and actual
+            </h2>
+            <span className={varianceBad ? "text-sm font-semibold text-ink-red" : "text-sm font-semibold text-label2"}>
+              <Money cents={row.accrualVarianceCents} currency signed plain zeroDash /> <span className="num text-xs">{percent(row.accrualVarianceRatio)}</span>
+            </span>
+          </div>
+          <CategoryBars
+            rows={[
+              { key: "planned", label: "Planned", tint: "gray", cents: row.plannedCents },
+              { key: "accrued", label: "Accrued", tint: "cyan", cents: row.accruedCents },
+              { key: "taken", label: "Taken", tint: "orange", cents: row.deductedCents },
+              { key: "open", label: "Still accrued", tint: "teal", cents: row.openAccrualCents },
+              ...(row.releasedCents !== 0 ? [{ key: "released", label: "Released", tint: "mint" as const, cents: row.releasedCents }] : []),
+            ]}
+          />
+        </section>
+
+        <InsetGroup header="Accrual" separatorInset={16}>
+          {detail.schedule.map((m) => (
+            <GroupRow
+              key={m.periodEnd}
+              label={
+                <span>
+                  {monthLabel(m.periodEnd)} <span className="num text-xs text-label2">· {m.days}d</span>
+                </span>
+              }
+            >
+              {m.entryId !== null ? (
+                <Link href={`/ledger/${m.entryId}`} className="num inline-flex items-center gap-1 text-xs font-semibold text-ink-green hover:underline">
+                  <Glyph name="check-circle" size={12} />#{m.entryNo}
+                </Link>
+              ) : m.periodEnd <= now && open ? (
+                <Pill tone="orange" className="self-auto">
+                  Due
+                </Pill>
+              ) : (
+                <span className="text-xs">{open ? shortDate(m.periodEnd) : "—"}</span>
+              )}
+              <Money cents={m.allowanceCents + m.feeCents} currency plain className="w-24 text-right text-label" />
+            </GroupRow>
+          ))}
+        </InsetGroup>
+
+        <InsetGroup header="Pays for" separatorInset={16}>
+          {detail.products.map((p) => (
+            <GroupRow
+              key={p.sku}
+              label={
+                <span>
+                  {p.name} <span className="num text-xs text-label2">{p.sku}</span>
+                </span>
+              }
+            >
+              <span className="num text-xs">
+                {p.units ?? "—"} × {p.allowancePerUnitCents === null ? "—" : <Money cents={p.allowancePerUnitCents} currency plain />}
+              </span>
+              <Money cents={p.extendedCents} currency plain className="text-label" />
+            </GroupRow>
+          ))}
+          {detail.products.length === 0 ? (
+            <GroupRow label="Allowance">
+              <Money cents={detail.allowanceCents} currency plain className="text-label" />
+            </GroupRow>
+          ) : null}
+          <GroupRow label="Fixed fees">
+            <Money cents={detail.fixedFeeCents} currency plain zeroDash className="text-label" />
+          </GroupRow>
+          {row.shipStartDate !== null && row.shipEndDate !== null ? (
+            <GroupRow label="Ships">
+              {shortDate(row.shipStartDate)} – {longDate(row.shipEndDate)}
+            </GroupRow>
+          ) : null}
+        </InsetGroup>
+
+        {detail.notes ? (
+          <InsetGroup header="Notes">
+            <p className="px-4 py-3 text-sm whitespace-pre-line">{detail.notes}</p>
+          </InsetGroup>
+        ) : null}
+
+        <section aria-labelledby="charged">
+          <h3 id="charged" className="px-4 pt-5 pb-1.5 text-sm font-semibold text-label2">
+            Deductions
+          </h3>
+          <div className="overflow-hidden rounded-[14px] bg-card shadow-card">
+            <DeductionTable rows={detail.deductions} deadlines={false} empty="None charged yet" />
+          </div>
+        </section>
+      </DetailPane>
     </div>
   );
 }

@@ -1,10 +1,7 @@
 import type { Metadata } from 'next';
-import Link from 'next/link';
 
 import { MoneyDocForm } from '@/components/arap/money-doc-form';
 import { termsLabel } from '@/components/arap/math';
-import { Button } from '@/components/ui/button';
-import { PageHeader } from '@/components/ui/page-header';
 import { can } from '@/lib/auth/roles';
 import { requireUser } from '@/lib/auth/session';
 import { today } from '@/lib/dates';
@@ -28,18 +25,17 @@ export default async function NewReceiptPage({ searchParams }: { searchParams: P
   const undeposited = accounts.find((a) => a.hint === '1040') ?? accounts[0] ?? null;
 
   return (
-    <div className="flex flex-col gap-5">
-      <PageHeader
-        eyebrow="Sales"
-        title="Record receipt"
-        description="Checks usually go to Undeposited Funds until the deposit clears; an ACH or wire can go straight to the bank account it landed in."
-        actions={
-          <Button asChild variant="ghost" size="sm">
-            <Link href="/sales/receipts">Back to receipts</Link>
-          </Button>
-        }
-      />
-      <MoneyDocForm
+    <MoneyDocForm
+        toolbar={{
+          title: 'Record receipt',
+          back: { href: '/sales/receipts', label: 'Receipts' },
+          info: (
+            <p>
+              Checks usually go to Undeposited Funds until the deposit clears; an ACH or wire can go straight to the
+              bank account it landed in.
+            </p>
+          ),
+        }}
         side="ar"
         parties={customers.map((c) => ({
           id: c.id,
@@ -57,6 +53,5 @@ export default async function NewReceiptPage({ searchParams }: { searchParams: P
         preselect={invoiceId === null ? [] : [invoiceId]}
         canSubmit={can(user.role, 'ar.manage')}
       />
-    </div>
   );
 }

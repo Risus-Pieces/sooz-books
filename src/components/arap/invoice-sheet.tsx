@@ -2,20 +2,18 @@ import * as React from "react";
 
 import { formatCents } from "@/components/ui/money";
 import { cn } from "@/lib/cn";
-import { formatDateUS } from "@/lib/dates";
+import { initials, mediumDate } from "@/lib/ui/format";
 
 import { termsLabel } from "./math";
 import type { Address, InvoiceDetail } from "./types";
 
 /**
- * The invoice as the buyer receives it — a restaurant's back office, a
- * wholesale buyer's AP clerk. It is the same element on screen and on paper:
- * the print stylesheet below hides the application around it, so the
- * browser's Print → Save as PDF produces the invoice and nothing else.
+ * The invoice as the buyer receives it — a restaurant's back office, a wholesale buyer's AP clerk.
+ * It is the same element on screen and on paper: the print stylesheet below hides the application
+ * around it, so the browser's Print → Save as PDF produces the invoice and nothing else.
  *
- * On paper the ink is always black on white, whatever theme the screen is in.
- * A draft or void invoice carries a stamp across it, so a PDF of one can never
- * be mistaken for a bill to pay.
+ * On paper the ink is always black on white, whatever appearance the screen is in. A draft or void
+ * invoice carries a stamp across it, so a PDF of one can never be mistaken for a bill to pay.
  */
 export function InvoiceSheet({
   invoice,
@@ -33,10 +31,11 @@ export function InvoiceSheet({
   const stamp =
     invoice.status === "draft" ? "Draft" : invoice.status === "void" ? "Void" : invoice.status === "paid" ? "Paid" : null;
   const terms = termsLabel(invoice.termsDays, invoice.termsDiscountPct, invoice.termsDiscountDays);
+  const balance = invoice.status === "void" ? 0 : invoice.balanceCents;
 
   return (
     <article
-      className="invoice-sheet relative mx-auto w-full max-w-[52rem] overflow-hidden rounded-md border border-border bg-surface-raised text-foreground shadow-raised"
+      className="invoice-sheet relative mx-auto w-full max-w-[52rem] overflow-hidden rounded-2xl bg-card text-label shadow-card max-sm:rounded-[22px]"
       aria-label={`Invoice ${invoice.invoiceNo}`}
     >
       <style>{PRINT_CSS}</style>
@@ -45,8 +44,8 @@ export function InvoiceSheet({
         <div aria-hidden className="pointer-events-none absolute inset-0 flex items-center justify-center">
           <span
             className={cn(
-              "invoice-stamp -rotate-12 rounded-md border-4 px-6 py-1 text-6xl font-black tracking-[0.2em] uppercase opacity-[0.13] sm:text-8xl",
-              stamp === "Paid" ? "border-positive text-positive" : stamp === "Void" ? "border-negative text-negative" : "border-warning text-warning",
+              "invoice-stamp -rotate-[14deg] rounded-[18px] border-[5px] px-7 py-1 text-6xl font-bold tracking-[0.18em] uppercase opacity-[0.12] sm:text-8xl",
+              stamp === "Paid" ? "border-tint-green text-tint-green" : stamp === "Void" ? "border-tint-red text-tint-red" : "border-tint-orange text-tint-orange",
             )}
           >
             {stamp}
@@ -54,54 +53,54 @@ export function InvoiceSheet({
         </div>
       ) : null}
 
-      <div className="relative flex flex-col gap-8 px-5 py-7 sm:px-10 sm:py-10">
+      <div className="relative flex flex-col gap-9 px-12 pt-11 pb-10 max-sm:gap-7 max-sm:px-5 max-sm:pt-7 max-sm:pb-6">
         <header className="flex flex-wrap items-start justify-between gap-6">
-          <div className="min-w-0">
-            <p className="text-2xl leading-none font-semibold tracking-tight">{companyName}</p>
-            <p className="mt-1.5 text-xs text-muted-foreground">{companyLocation}</p>
+          <div className="flex min-w-0 items-center gap-3.5">
+            <span
+              aria-hidden
+              className="inv-mark grid size-12 shrink-0 place-items-center rounded-[13px] bg-[linear-gradient(160deg,color-mix(in_srgb,var(--pink)_80%,#fff),var(--pink))] text-lg font-bold tracking-[-0.02em] text-white"
+            >
+              {initials(companyName).slice(0, 1) || "S"}
+            </span>
+            <div className="min-w-0">
+              <p className="text-xl leading-tight font-semibold tracking-[-0.015em]">{companyName}</p>
+              <p className="inv-quiet mt-0.5 text-sm text-label2">{companyLocation}</p>
+            </div>
           </div>
           <div className="sm:text-right">
-            <p className="eyebrow">Invoice</p>
-            <p className="num text-2xl leading-tight font-semibold">{invoice.invoiceNo}</p>
+            <p className="text-[2rem] leading-none font-semibold tracking-[-0.03em]">Invoice</p>
+            <p className="num inv-quiet mt-1.5 text-sm font-medium text-label2">{invoice.invoiceNo}</p>
           </div>
         </header>
 
-        <div className="grid gap-6 sm:grid-cols-[1fr_auto]">
-          <div className="grid gap-6 sm:grid-cols-2">
-            <PartyBlock label="Bill to" name={invoice.customerName} address={invoice.billingAddress} email={invoice.customerEmail} />
+        <div className="grid gap-x-8 gap-y-5 sm:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
+          <div className="grid gap-5 sm:grid-cols-2">
+            <PartyBlock label="Billed to" name={invoice.customerName} address={invoice.billingAddress} email={invoice.customerEmail} />
             {invoice.shippingAddress ? (
               <PartyBlock label="Ship to" name={invoice.customerName} address={invoice.shippingAddress} email={null} />
             ) : null}
           </div>
-          <dl className="grid grid-cols-[auto_auto] gap-x-6 gap-y-1 self-start text-sm">
-            <dt className="text-muted-foreground">Invoice date</dt>
-            <dd className="num text-right">{formatDateUS(invoice.invoiceDate)}</dd>
-            <dt className="text-muted-foreground">Due date</dt>
-            <dd className="num text-right font-semibold">{formatDateUS(invoice.dueDate)}</dd>
-            <dt className="text-muted-foreground">Terms</dt>
-            <dd className="text-right">{terms}</dd>
-            {invoice.poNumber ? (
-              <>
-                <dt className="text-muted-foreground">PO number</dt>
-                <dd className="num text-right">{invoice.poNumber}</dd>
-              </>
-            ) : null}
+          <dl className="grid grid-cols-2 gap-x-6 gap-y-3.5 self-start text-sm">
+            <Meta label="Issued" value={mediumDate(invoice.invoiceDate)} />
+            <Meta label="Due" value={mediumDate(invoice.dueDate)} strong />
+            <Meta label="Terms" value={terms} />
+            {invoice.poNumber ? <Meta label="PO" value={invoice.poNumber} /> : null}
           </dl>
         </div>
 
-        <div className="relative -mx-5 overflow-x-auto px-5 sm:mx-0 sm:px-0">
-          <table className="w-full min-w-[30rem] border-separate border-spacing-0 text-sm">
+        <div className="relative">
+          <table className="w-full border-separate border-spacing-0 text-sm">
             <thead>
               <tr>
                 <SheetTh className="min-w-44">Description</SheetTh>
-                <SheetTh align="right" className="w-20">
+                <SheetTh align="right" className="w-16 max-sm:hidden">
                   Qty
                 </SheetTh>
-                <SheetTh align="right" className="w-28">
-                  Unit price
+                <SheetTh align="right" className="w-28 max-sm:hidden">
+                  Price
                 </SheetTh>
                 {showLineDiscounts ? (
-                  <SheetTh align="right" className="w-24">
+                  <SheetTh align="right" className="w-24 max-sm:hidden">
                     Discount
                   </SheetTh>
                 ) : null}
@@ -113,20 +112,24 @@ export function InvoiceSheet({
             <tbody>
               {invoice.lines.map((line) => (
                 <tr key={line.lineNo} className="align-top">
-                  <td className="rule-row py-2 pr-3">
-                    {line.description}
+                  <td className="inv-row py-3 pr-3">
+                    <span className="font-medium">{line.description}</span>
                     {line.productLabel ? (
-                      <span className="num block text-2xs text-muted-foreground">{line.productLabel.split(" · ")[0]}</span>
+                      <span className="num inv-quiet block text-xs text-label2">{line.productLabel.split(" · ")[0]}</span>
                     ) : null}
+                    <span className="num inv-quiet block text-xs text-label2 sm:hidden">
+                      {trimQuantity(line.quantity)} × {formatCents(line.unitPriceCents)}
+                      {line.discountCents > 0 ? ` − ${formatCents(line.discountCents)}` : ""}
+                    </span>
                   </td>
-                  <td className="rule-row num py-2 pl-3 text-right">{trimQuantity(line.quantity)}</td>
-                  <td className="rule-row num py-2 pl-3 text-right">{formatCents(line.unitPriceCents)}</td>
+                  <td className="inv-row num py-3 pl-3 text-right max-sm:hidden">{trimQuantity(line.quantity)}</td>
+                  <td className="inv-row num py-3 pl-3 text-right max-sm:hidden">{formatCents(line.unitPriceCents)}</td>
                   {showLineDiscounts ? (
-                    <td className="rule-row num py-2 pl-3 text-right">
-                      {line.discountCents > 0 ? `(${formatCents(line.discountCents)})` : ""}
+                    <td className="inv-row num py-3 pl-3 text-right max-sm:hidden">
+                      {line.discountCents > 0 ? `−${formatCents(line.discountCents)}` : ""}
                     </td>
                   ) : null}
-                  <td className="rule-row num py-2 pl-3 text-right">
+                  <td className="inv-row num py-3 pl-3 text-right font-medium">
                     {formatCents(line.amountCents - line.discountCents)}
                   </td>
                 </tr>
@@ -135,60 +138,71 @@ export function InvoiceSheet({
           </table>
         </div>
 
-        <div className="flex flex-wrap items-end justify-between gap-6">
+        <div className="flex flex-wrap items-start justify-between gap-8">
           <div className="max-w-sm text-sm">
             {invoice.memo ? <p className="whitespace-pre-line">{invoice.memo}</p> : null}
             {invoice.termsDiscountDays > 0 && Number(invoice.termsDiscountPct) > 0 && invoice.status !== "paid" ? (
-              <p className="mt-2 text-xs text-muted-foreground">
+              <p className="inv-quiet mt-2 text-xs text-label2">
                 Take {invoice.termsDiscountPct.replace(/\.?0+$/, "")}% off if paid within {invoice.termsDiscountDays} days of
                 the invoice date.
               </p>
             ) : null}
           </div>
-          <dl className="grid w-full max-w-xs grid-cols-[1fr_auto] gap-y-1 text-sm sm:w-72 [&>dd]:pl-6">
-            <dt className="text-muted-foreground">Subtotal</dt>
-            <dd className="num text-right">{formatCents(invoice.subtotalCents - lineDiscounts)}</dd>
-            {headerDiscount > 0 ? (
-              <>
-                <dt className="text-muted-foreground">Discount</dt>
-                <dd className="num text-right">({formatCents(headerDiscount)})</dd>
-              </>
-            ) : null}
-            {invoice.shippingCents > 0 ? (
-              <>
-                <dt className="text-muted-foreground">Shipping</dt>
-                <dd className="num text-right">{formatCents(invoice.shippingCents)}</dd>
-              </>
-            ) : null}
-            {invoice.taxCents > 0 ? (
-              <>
-                <dt className="text-muted-foreground">Sales tax</dt>
-                <dd className="num text-right">{formatCents(invoice.taxCents)}</dd>
-              </>
-            ) : null}
-            <dt className="rule-subtotal pt-1.5 font-semibold">Total</dt>
-            <dd className="num rule-subtotal pt-1.5 text-right font-semibold">{formatCents(invoice.totalCents, { currency: true })}</dd>
-            {settled > 0 && invoice.status !== "void" ? (
-              <>
-                <dt className="text-muted-foreground">Paid and credited</dt>
-                <dd className="num text-right">({formatCents(settled)})</dd>
-              </>
-            ) : null}
-            <dt className="rule-subtotal pt-1.5 text-base font-semibold">Balance due</dt>
-            <dd className="num rule-subtotal rule-total pt-1.5 pb-0.5 text-right text-base font-semibold">
-              {formatCents(invoice.status === "void" ? 0 : invoice.balanceCents, { currency: true })}
-            </dd>
-          </dl>
+          <div className="flex w-full max-w-xs flex-col gap-3 sm:w-80">
+            <dl className="grid grid-cols-[1fr_auto] gap-y-1.5 text-sm [&>dd]:pl-6">
+              <dt className="inv-quiet text-label2">Subtotal</dt>
+              <dd className="num text-right">{formatCents(invoice.subtotalCents - lineDiscounts)}</dd>
+              {headerDiscount > 0 ? (
+                <>
+                  <dt className="inv-quiet text-label2">Discount</dt>
+                  <dd className="num text-right">−{formatCents(headerDiscount)}</dd>
+                </>
+              ) : null}
+              {invoice.shippingCents > 0 ? (
+                <>
+                  <dt className="inv-quiet text-label2">Shipping</dt>
+                  <dd className="num text-right">{formatCents(invoice.shippingCents)}</dd>
+                </>
+              ) : null}
+              {invoice.taxCents > 0 ? (
+                <>
+                  <dt className="inv-quiet text-label2">Sales tax</dt>
+                  <dd className="num text-right">{formatCents(invoice.taxCents)}</dd>
+                </>
+              ) : null}
+              <dt className="inv-rule-top mt-1 pt-2 font-semibold">Total</dt>
+              <dd className="num inv-rule-top mt-1 pt-2 text-right font-semibold">{formatCents(invoice.totalCents, { currency: true })}</dd>
+              {settled > 0 && invoice.status !== "void" ? (
+                <>
+                  <dt className="inv-quiet text-label2">Paid and credited</dt>
+                  <dd className="num text-right">−{formatCents(settled)}</dd>
+                </>
+              ) : null}
+            </dl>
+            <dl className="inv-due flex items-baseline justify-between gap-4 rounded-[12px] bg-inset px-4 py-3">
+              <dt className="text-sm font-semibold">Balance due</dt>
+              <dd className="num text-2xl font-bold tracking-[-0.02em]">{formatCents(balance, { currency: true })}</dd>
+            </dl>
+          </div>
         </div>
 
-        <footer className="rule-subtotal flex flex-wrap justify-between gap-2 pt-3 text-xs text-muted-foreground">
+        <footer className="inv-rule-top inv-quiet flex flex-wrap justify-between gap-2 pt-4 text-xs text-label2">
           <span>
-            Please reference <span className="num text-foreground">{invoice.invoiceNo}</span> with your payment.
+            Please reference <span className="num font-medium text-label">{invoice.invoiceNo}</span> with your payment.
           </span>
           <span>Thank you for your business.</span>
         </footer>
       </div>
     </article>
+  );
+}
+
+function Meta({ label, value, strong }: { label: string; value: string; strong?: boolean }) {
+  return (
+    <div className="min-w-0">
+      <dt className="inv-quiet text-xs font-medium text-label2">{label}</dt>
+      <dd className={cn("num mt-0.5", strong && "font-semibold")}>{value}</dd>
+    </div>
   );
 }
 
@@ -205,13 +219,13 @@ function PartyBlock({
 }) {
   const cityLine = address ? [address.city, [address.state, address.postalCode].filter(Boolean).join(" ")].filter(Boolean).join(", ") : "";
   return (
-    <div className="min-w-0 text-sm">
-      <p className="eyebrow mb-1">{label}</p>
+    <div className="min-w-0 text-sm leading-relaxed">
+      <p className="inv-quiet mb-0.5 text-xs font-medium text-label2">{label}</p>
       <p className="font-semibold">{name}</p>
       {address?.line1 ? <p>{address.line1}</p> : null}
       {address?.line2 ? <p>{address.line2}</p> : null}
       {cityLine ? <p>{cityLine}</p> : null}
-      {email ? <p className="text-muted-foreground">{email}</p> : null}
+      {email ? <p className="inv-quiet text-label2">{email}</p> : null}
     </div>
   );
 }
@@ -229,7 +243,7 @@ function SheetTh({
     <th
       scope="col"
       className={cn(
-        "rule-head pb-1.5 text-2xs font-semibold tracking-wider text-muted-foreground uppercase",
+        "inv-head inv-quiet pb-2 text-xs font-medium text-label2",
         align === "right" ? "pl-3 text-right" : "pr-3 text-left",
         className,
       )}
@@ -245,17 +259,19 @@ function trimQuantity(quantity: string): string {
 }
 
 /**
- * Print: show only the sheet, on white, at letter size. The application shell
- * is a fixed-height flex column that scrolls inside `main`; on paper that
- * clipping has to go, or a long invoice would be cut at one page.
+ * On screen: hairlines in the separator colour. On paper: show only the sheet, black on white, at
+ * letter size. The sticky shell must not clip it, or a long invoice would be cut at one page.
  */
 const PRINT_CSS = `
+.invoice-sheet .inv-row { border-bottom: 0.5px solid var(--sep); }
+.invoice-sheet .inv-head { border-bottom: 0.5px solid var(--sep-strong); }
+.invoice-sheet .inv-rule-top { border-top: 0.5px solid var(--sep-strong); }
 @media print {
   @page { size: letter; margin: 0.55in; }
   html, body { background: #fff !important; height: auto !important; overflow: visible !important; }
   body * { visibility: hidden !important; }
   .invoice-sheet, .invoice-sheet * { visibility: visible !important; }
-  .h-dvh, #main, #main * { height: auto !important; overflow: visible !important; max-height: none !important; }
+  .min-h-dvh, .h-dvh, #main, #main * { height: auto !important; min-height: 0 !important; overflow: visible !important; max-height: none !important; }
   .invoice-sheet {
     position: absolute !important; left: 0; top: 0; width: 100% !important; max-width: none !important;
     border: 0 !important; box-shadow: none !important; border-radius: 0 !important;
@@ -263,11 +279,11 @@ const PRINT_CSS = `
     -webkit-print-color-adjust: exact; print-color-adjust: exact;
   }
   .invoice-sheet > div { padding: 0 !important; }
-  .invoice-sheet .text-muted-foreground, .invoice-sheet .eyebrow { color: #555 !important; }
-  .invoice-sheet .text-foreground { color: #111 !important; }
-  .invoice-sheet .rule-row { border-bottom-color: #ddd !important; }
-  .invoice-sheet .rule-head, .invoice-sheet .rule-subtotal { border-color: #999 !important; }
-  .invoice-sheet .rule-total { border-bottom-color: #555 !important; }
+  .invoice-sheet .inv-quiet { color: #6e6e73 !important; }
+  .invoice-sheet .text-label { color: #111 !important; }
+  .invoice-sheet .inv-row { border-bottom: 0.5px solid #d2d2d7 !important; }
+  .invoice-sheet .inv-head, .invoice-sheet .inv-rule-top { border-color: #86868b !important; }
+  .invoice-sheet .inv-due { background: #f5f5f7 !important; }
   .invoice-sheet tr { break-inside: avoid; }
 }
 `;

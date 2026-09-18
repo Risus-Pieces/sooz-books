@@ -1,16 +1,17 @@
 @import "tailwindcss";
 
 /*
-  Sooz Books — "Iron gall on ledger paper".
+  Sooz Books — "Native Mac".
 
-  The field is a warm greige desk; the reading surfaces are a lighter paper laid on top of it,
-  so data is always the brightest thing on screen. Ink is a blue-black. The single chromatic
-  accent is a deep mulberry, chosen by elimination: red belongs to money out, green to money in,
-  and neither may be spent on chrome.
+  The values below are lifted from docs/design/native-mac/mockup.html, the owner-approved
+  reference. They are semantic: `--label` is text, `--label2` secondary text, `--sep` a
+  hairline, `--card` a reading surface on the grouped `--bg`. System colours carry meaning
+  (green in, red out, orange attention) and each account category owns one (src/lib/ui/categories.ts).
 
-  The signature is the rule system. On ruled ledger paper the weight of a line carries meaning,
-  and it does here too: a hairline separates rows, a solid rule closes a header, a single rule
-  sits above a subtotal, and a double rule closes a grand total. See the `rule-*` utilities.
+  Two deliberate departures from the mockup, both for 4.5:1 text contrast:
+    - `--label2` is 74% rather than 62% in light, and `--label3` is for glyphs and rules only.
+    - Filled accent controls use `--accent-fill`, a slightly deeper blue than `--blue`, so white
+      text on them passes. `--ink-*` are the text-safe versions of the tints.
 */
 
 @custom-variant dark {
@@ -25,65 +26,85 @@
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-surface: var(--surface);
-  --color-surface-raised: var(--surface-raised);
-  --color-surface-sunken: var(--surface-sunken);
-  --color-border: var(--border);
-  --color-border-strong: var(--border-strong);
-  --color-foreground: var(--foreground);
-  --color-muted: var(--muted);
-  --color-muted-foreground: var(--muted-foreground);
-  --color-primary: var(--primary);
-  --color-primary-hover: var(--primary-hover);
-  --color-primary-foreground: var(--primary-foreground);
-  --color-positive: var(--positive);
-  --color-negative: var(--negative);
-  --color-warning: var(--warning);
-  --color-info: var(--info);
-  --color-ring: var(--ring);
+  /* ---- Native Mac semantic colours ---- */
+  --color-bg: var(--bg);
+  --color-card: var(--card);
+  --color-inset: var(--inset);
+  --color-fill: var(--fill);
+  --color-fill2: var(--fill2);
+  --color-label: var(--label);
+  --color-label2: var(--label2);
+  --color-label3: var(--label3);
+  --color-sep: var(--sep);
+  --color-glass: var(--glass);
+  --color-glass-border: var(--glass-b);
+  --color-ctl: var(--ctl);
+  --color-accent-fill: var(--accent-fill);
+  --color-accent-fill-hover: var(--accent-fill-hover);
+  --color-danger-fill: var(--danger-fill);
 
-  --color-sidebar: var(--sidebar);
-  --color-sidebar-foreground: var(--sidebar-foreground);
-  --color-sidebar-strong: var(--sidebar-strong);
-  --color-sidebar-border: var(--sidebar-border);
-  --color-sidebar-accent: var(--sidebar-accent);
+  --color-tint-blue: var(--blue);
+  --color-tint-green: var(--green);
+  --color-tint-red: var(--red);
+  --color-tint-orange: var(--orange);
+  --color-tint-indigo: var(--indigo);
+  --color-tint-teal: var(--teal);
+  --color-tint-purple: var(--purple);
+  --color-tint-pink: var(--pink);
+  --color-tint-brown: var(--brown);
+  --color-tint-cyan: var(--cyan);
+  --color-tint-mint: var(--mint);
+  --color-tint-gray: var(--gray);
 
-  /* The inner fallbacks keep the declaration valid before next/font resolves its variables. */
-  --font-sans: var(--font-public-sans, ui-sans-serif), system-ui, -apple-system, "Segoe UI",
+  --color-ink-blue: var(--ink-blue);
+  --color-ink-green: var(--ink-green);
+  --color-ink-red: var(--ink-red);
+  --color-ink-orange: var(--ink-orange);
+
+  --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", "Inter", system-ui,
     sans-serif;
-  --font-num: var(--font-plex-mono, ui-monospace), "SF Mono", "Cascadia Mono", Menlo, monospace;
-  --font-mono: var(--font-plex-mono, ui-monospace), "SF Mono", Menlo, monospace;
+  --font-num: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", "Inter", system-ui,
+    sans-serif;
+  --font-mono: ui-monospace, "SF Mono", Menlo, monospace;
 
-  /* A precise instrument, not a consumer app: radii stay under 6px everywhere. */
-  --radius-xs: 2px;
-  --radius-sm: 3px;
-  --radius-md: 4px;
-  --radius-lg: 6px;
-  --radius-xl: 8px;
+  /* Cards 12–16px, controls 6–8px. */
+  --radius-xs: 4px;
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 14px;
+  --radius-2xl: 16px;
+  --radius-3xl: 22px;
 
-  /* Denser than stock Tailwind by one step — 13px is the register's reading size. */
-  --text-2xs: 0.625rem;
+  /*
+    The Apple type ramp on Tailwind's own size names (so tailwind-merge knows them):
+    2xs 11 caption · xs 12 footnote · sm/base 13 body · lg 15 headline · xl 20 title 3 ·
+    2xl 22 title 2 · 3xl 28 figure · 4xl 34 large title · 5xl 44 hero figure.
+  */
+  --text-2xs: 0.6875rem;
   --text-2xs--line-height: 0.875rem;
-  --text-xs: 0.6875rem;
+  --text-xs: 0.75rem;
   --text-xs--line-height: 1rem;
   --text-sm: 0.8125rem;
-  --text-sm--line-height: 1.25rem;
-  --text-base: 0.875rem;
-  --text-base--line-height: 1.375rem;
-  --text-lg: 1rem;
-  --text-lg--line-height: 1.5rem;
-  --text-xl: 1.125rem;
-  --text-xl--line-height: 1.625rem;
+  --text-sm--line-height: 1.125rem;
+  --text-base: 0.8125rem;
+  --text-base--line-height: 1.125rem;
+  --text-lg: 0.9375rem;
+  --text-lg--line-height: 1.25rem;
+  --text-xl: 1.25rem;
+  --text-xl--line-height: 1.5rem;
   --text-2xl: 1.375rem;
   --text-2xl--line-height: 1.75rem;
   --text-3xl: 1.75rem;
   --text-3xl--line-height: 2.125rem;
-  --text-4xl: 2.25rem;
+  --text-4xl: 2.125rem;
   --text-4xl--line-height: 2.5rem;
+  --text-5xl: 2.75rem;
+  --text-5xl--line-height: 3rem;
 
-  --shadow-raised: 0 1px 2px -1px rgb(0 0 0 / 0.1), 0 2px 8px -3px rgb(0 0 0 / 0.12);
-  --shadow-overlay: 0 4px 12px -4px rgb(0 0 0 / 0.16), 0 16px 40px -12px rgb(0 0 0 / 0.22);
+  --shadow-card: var(--shadow);
+  --shadow-glass: var(--gshadow);
+  --shadow-ctl: var(--ctl-shadow);
 
   --animate-shimmer: sb-shimmer 1.6s ease-in-out infinite;
 }
@@ -91,150 +112,212 @@
 :root {
   color-scheme: light;
 
-  --background: #e9e5dc;
-  --surface: #faf8f3;
-  --surface-raised: #ffffff;
-  --surface-sunken: #e2ddd2;
-  --border: #d7d1c5;
-  --border-strong: #b1a998;
-  --foreground: #1d2127;
-  --muted: #efebe2;
-  --muted-foreground: #64676d;
-  --primary: #5b2750;
-  --primary-hover: #4a1f42;
-  --primary-foreground: #fbf7f5;
-  --positive: #1c5d46;
-  --negative: #a32c2c;
-  --warning: #8a5a0f;
-  --info: #2d5273;
-  --ring: #5b2750;
+  --bg: #f2f2f7;
+  --card: #ffffff;
+  --inset: #f2f2f7;
+  --fill: rgba(120, 120, 128, 0.14);
+  --fill2: rgba(120, 120, 128, 0.08);
+  --label: #1d1d1f;
+  --label2: rgba(60, 60, 67, 0.74);
+  --label3: rgba(60, 60, 67, 0.3);
+  --sep: rgba(60, 60, 67, 0.22);
+  --sep-strong: rgba(60, 60, 67, 0.36);
+  --glass: rgba(248, 248, 250, 0.74);
+  --glass-solid: #f6f6f8;
+  --glass-b: rgba(0, 0, 0, 0.07);
+  --shadow: 0 0 0 0.5px rgba(0, 0, 0, 0.045), 0 1px 2px rgba(0, 0, 0, 0.035),
+    0 6px 20px -8px rgba(0, 0, 0, 0.06);
+  --gshadow: 0 0 0 0.5px rgba(0, 0, 0, 0.06), 0 8px 30px -10px rgba(0, 0, 0, 0.12);
+  --ctl: #ffffff;
+  --ctl-shadow: 0 0 0 0.5px rgba(0, 0, 0, 0.12), 0 1px 1.5px rgba(0, 0, 0, 0.08);
 
-  --sidebar: #1e2127;
-  --sidebar-foreground: #a9a69e;
-  --sidebar-strong: #f6f3ec;
-  --sidebar-border: #2e333a;
-  --sidebar-accent: #d9a6ce;
+  --blue: #007aff;
+  --green: #34c759;
+  --red: #ff3b30;
+  --orange: #ff9500;
+  --indigo: #5856d6;
+  --teal: #30b0c7;
+  --purple: #af52de;
+  --pink: #ff2d55;
+  --brown: #a2845e;
+  --cyan: #32ade6;
+  --mint: #00c7be;
+  --gray: #8e8e93;
+  --mono1: #a8adb6;
+  --mono2: #858a94;
+
+  --ink-blue: #0066cc;
+  --ink-green: #1f7a35;
+  --ink-red: #d70015;
+  --ink-orange: #c93400;
+  --accent-fill: #0071e3;
+  --accent-fill-hover: #0064cc;
+  --danger-fill: #d70015;
 }
 
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
     color-scheme: dark;
 
-    --background: #121417;
-    --surface: #191c21;
-    --surface-raised: #21252b;
-    --surface-sunken: #0e1013;
-    --border: #2e333a;
-    --border-strong: #464c55;
-    --foreground: #e7e3d9;
-    --muted: #23272d;
-    --muted-foreground: #969ba4;
-    --primary: #c98fbe;
-    --primary-hover: #d9a6ce;
-    --primary-foreground: #1a1116;
-    --positive: #4fb286;
-    --negative: #e8776f;
-    --warning: #d3a03f;
-    --info: #74a6c9;
-    --ring: #bd84b3;
+    --bg: #111113;
+    --card: #1f1f21;
+    --inset: #2a2a2d;
+    --fill: rgba(120, 120, 128, 0.3);
+    --fill2: rgba(120, 120, 128, 0.18);
+    --label: #f5f5f7;
+    --label2: rgba(235, 235, 245, 0.6);
+    --label3: rgba(235, 235, 245, 0.28);
+    --sep: rgba(255, 255, 255, 0.1);
+    --sep-strong: rgba(255, 255, 255, 0.2);
+    --glass: rgba(38, 38, 42, 0.66);
+    --glass-solid: #242427;
+    --glass-b: rgba(255, 255, 255, 0.08);
+    --shadow: 0 0 0 0.5px rgba(255, 255, 255, 0.07), 0 1px 2px rgba(0, 0, 0, 0.4);
+    --gshadow: 0 0 0 0.5px rgba(255, 255, 255, 0.1), 0 10px 30px -10px rgba(0, 0, 0, 0.6);
+    --ctl: #3a3a3d;
+    --ctl-shadow: 0 0 0 0.5px rgba(255, 255, 255, 0.1), 0 1px 1.5px rgba(0, 0, 0, 0.3);
 
-    --sidebar: #0d0f12;
-    --sidebar-foreground: #8e949c;
-    --sidebar-strong: #edeae2;
-    --sidebar-border: #23272d;
-    --sidebar-accent: #d9a6ce;
+    --blue: #0a84ff;
+    --green: #30d158;
+    --red: #ff453a;
+    --orange: #ff9f0a;
+    --indigo: #5e5ce6;
+    --teal: #40c8e0;
+    --purple: #bf5af2;
+    --pink: #ff375f;
+    --brown: #ac8e68;
+    --cyan: #64d2ff;
+    --mint: #63e6e2;
+    --gray: #98989d;
+    --mono1: #6e717a;
+    --mono2: #55575e;
+
+    --ink-blue: #409cff;
+    --ink-green: #30d158;
+    --ink-red: #ff6961;
+    --ink-orange: #ffb340;
+    --accent-fill: #0a6cdc;
+    --accent-fill-hover: #1a78e6;
+    --danger-fill: #c8101c;
   }
 }
 
 :root[data-theme="dark"] {
   color-scheme: dark;
 
-  --background: #121417;
-  --surface: #191c21;
-  --surface-raised: #21252b;
-  --surface-sunken: #0e1013;
-  --border: #2e333a;
-  --border-strong: #464c55;
-  --foreground: #e7e3d9;
-  --muted: #23272d;
-  --muted-foreground: #969ba4;
-  --primary: #c98fbe;
-  --primary-hover: #d9a6ce;
-  --primary-foreground: #1a1116;
-  --positive: #4fb286;
-  --negative: #e8776f;
-  --warning: #d3a03f;
-  --info: #74a6c9;
-  --ring: #bd84b3;
+  --bg: #111113;
+  --card: #1f1f21;
+  --inset: #2a2a2d;
+  --fill: rgba(120, 120, 128, 0.3);
+  --fill2: rgba(120, 120, 128, 0.18);
+  --label: #f5f5f7;
+  --label2: rgba(235, 235, 245, 0.6);
+  --label3: rgba(235, 235, 245, 0.28);
+  --sep: rgba(255, 255, 255, 0.1);
+  --sep-strong: rgba(255, 255, 255, 0.2);
+  --glass: rgba(38, 38, 42, 0.66);
+  --glass-solid: #242427;
+  --glass-b: rgba(255, 255, 255, 0.08);
+  --shadow: 0 0 0 0.5px rgba(255, 255, 255, 0.07), 0 1px 2px rgba(0, 0, 0, 0.4);
+  --gshadow: 0 0 0 0.5px rgba(255, 255, 255, 0.1), 0 10px 30px -10px rgba(0, 0, 0, 0.6);
+  --ctl: #3a3a3d;
+  --ctl-shadow: 0 0 0 0.5px rgba(255, 255, 255, 0.1), 0 1px 1.5px rgba(0, 0, 0, 0.3);
 
-  --sidebar: #0d0f12;
-  --sidebar-foreground: #8e949c;
-  --sidebar-strong: #edeae2;
-  --sidebar-border: #23272d;
-  --sidebar-accent: #d9a6ce;
+  --blue: #0a84ff;
+  --green: #30d158;
+  --red: #ff453a;
+  --orange: #ff9f0a;
+  --indigo: #5e5ce6;
+  --teal: #40c8e0;
+  --purple: #bf5af2;
+  --pink: #ff375f;
+  --brown: #ac8e68;
+  --cyan: #64d2ff;
+  --mint: #63e6e2;
+  --gray: #98989d;
+  --mono1: #6e717a;
+  --mono2: #55575e;
+
+  --ink-blue: #409cff;
+  --ink-green: #30d158;
+  --ink-red: #ff6961;
+  --ink-orange: #ffb340;
+  --accent-fill: #0a6cdc;
+  --accent-fill-hover: #1a78e6;
+  --danger-fill: #c8101c;
 }
 
 @layer base {
   *,
   ::before,
   ::after {
-    border-color: var(--color-border);
+    border-color: var(--sep);
   }
 
   html {
     -webkit-text-size-adjust: 100%;
-    scrollbar-width: thin;
-    scrollbar-color: var(--color-border-strong) transparent;
+    background-color: var(--bg);
   }
 
   body {
-    background-color: var(--color-background);
-    color: var(--color-foreground);
-    font-family: var(--font-public-sans, ui-sans-serif), system-ui, -apple-system, "Segoe UI",
-      sans-serif;
-    font-size: var(--text-base);
-    line-height: var(--text-base--line-height);
+    background-color: var(--bg);
+    color: var(--label);
+    font-family: var(--font-sans);
+    font-size: 13px;
+    line-height: 1.35;
+    letter-spacing: -0.003em;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    /* Every figure in the books lines up to the digit. */
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: "tnum" 1;
+  }
+
+  button,
+  input,
+  select,
+  textarea {
+    font: inherit;
+    letter-spacing: inherit;
   }
 
   ::selection {
-    background-color: color-mix(in oklab, var(--color-primary) 22%, transparent);
+    background-color: color-mix(in srgb, var(--blue) 28%, transparent);
   }
 
   :focus-visible {
-    outline: 2px solid var(--color-ring);
-    outline-offset: 2px;
+    outline: 3px solid color-mix(in srgb, var(--blue) 50%, transparent);
+    outline-offset: 1px;
   }
 
-  ::-webkit-scrollbar {
-    width: 10px;
-    height: 10px;
-  }
-
-  ::-webkit-scrollbar-thumb {
-    background-color: var(--color-border-strong);
-    border: 3px solid transparent;
-    border-radius: 9999px;
-    background-clip: content-box;
-  }
-
-  ::-webkit-scrollbar-track {
-    background: transparent;
-  }
-
-  /* Native date/number controls inherit the register's figure treatment. */
-  input[type="date"],
-  input[type="number"] {
-    font-family: var(--font-num);
-    font-variant-numeric: tabular-nums slashed-zero;
+  /* Native selects wear the pop-up button's up-down chevron, so they read as one control family. */
+  select:not([multiple]):not([size]) {
+    appearance: none;
+    -webkit-appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%238e8e93' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M8 9.5 12 5.5l4 4M8 14.5l4 4 4-4'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 8px center;
+    background-size: 12px 12px;
+    padding-right: 28px !important;
   }
 
   input[type="date"]::-webkit-calendar-picker-indicator {
-    opacity: 0.5;
+    opacity: 0.55;
     cursor: pointer;
   }
 
   input[type="date"]::-webkit-calendar-picker-indicator:hover {
     opacity: 1;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) input[type="date"]::-webkit-calendar-picker-indicator {
+      filter: invert(1);
+    }
+  }
+
+  :root[data-theme="dark"] input[type="date"]::-webkit-calendar-picker-indicator {
+    filter: invert(1);
   }
 
   @media (prefers-reduced-motion: reduce) {
@@ -249,48 +332,125 @@
   }
 }
 
-/*
-  Figures. Every money, quantity, date and account-code cell wears `.num` so that columns
-  align to the digit and a 9 never reads wider than a 1.
-*/
+/* ------------------------------------------------------------------ utilities */
+
+/* Tabular figures. Every money, quantity, date and account-code cell wears it. */
 @utility num {
-  font-family: var(--font-plex-mono, ui-monospace), "SF Mono", "Cascadia Mono", Menlo, monospace;
-  font-variant-numeric: tabular-nums slashed-zero;
-  font-feature-settings: "tnum" 1, "zero" 1;
-  letter-spacing: -0.012em;
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
 }
 
-/* The rule vocabulary — weight carries meaning. */
+@utility tabular {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
+}
+
+/*
+  Vibrancy: the material of the sidebar, toolbar groups, sheets, popovers and the tab bar.
+  Where backdrop-filter is unavailable the glass falls back to a solid, equally legible fill.
+*/
+@utility vibrancy {
+  background-color: var(--glass-solid);
+  @supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+    background-color: var(--glass);
+    -webkit-backdrop-filter: blur(30px) saturate(180%);
+    backdrop-filter: blur(30px) saturate(180%);
+  }
+}
+
+/* The toolbar's material: the page colour, frosted. */
+@utility vibrancy-bar {
+  background-color: var(--bg);
+  @supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+    background-color: color-mix(in srgb, var(--bg) 80%, transparent);
+    -webkit-backdrop-filter: blur(20px) saturate(180%);
+    backdrop-filter: blur(20px) saturate(180%);
+  }
+}
+
+/*
+  Keyboard focus rings. Controls clear the browser outline with `outline-none` (which, as a utility,
+  also beats the base :focus-visible rule), so every interactive control names its ring explicitly.
+  The pseudo-class raises specificity above `outline-none`, whatever the utility order.
+  focus-ring        the macOS halo, outside the control.
+  focus-ring-inset  inside the control, for rows clipped by a rounded card.
+  focus-ring-white  inside, in white, for a control that sits on the blue selection fill.
+*/
+@utility focus-ring {
+  &:focus-visible {
+    outline: 3px solid color-mix(in srgb, var(--blue) 50%, transparent);
+    outline-offset: 1px;
+  }
+}
+
+@utility focus-ring-inset {
+  &:focus-visible {
+    outline: 2px solid var(--blue);
+    outline-offset: -2px;
+  }
+}
+
+@utility focus-ring-white {
+  &:focus-visible {
+    outline: 2px solid #fff;
+    outline-offset: -3px;
+  }
+}
+
+/* Hairlines: 0.5px on a retina screen, one device pixel elsewhere. */
+@utility hairline-t {
+  border-top: 0.5px solid var(--sep);
+}
+
+@utility hairline-b {
+  border-bottom: 0.5px solid var(--sep);
+}
+
+@utility hairline-l {
+  border-left: 0.5px solid var(--sep);
+}
+
+@utility hairline-r {
+  border-right: 0.5px solid var(--sep);
+}
+
+@utility hairline {
+  box-shadow: inset 0 0 0 0.5px var(--sep);
+}
+
+/* Table rules, Numbers-style: a hairline under each row, weight only where a total closes. */
 @utility rule-row {
-  border-bottom: 1px solid color-mix(in oklab, var(--color-border) 62%, transparent);
+  border-bottom: 0.5px solid var(--sep);
 }
 
 @utility rule-head {
-  border-bottom: 1px solid var(--color-border-strong);
+  border-bottom: 0.5px solid var(--sep-strong);
 }
 
 @utility rule-subtotal {
-  border-top: 1px solid var(--color-border-strong);
-}
-
-/* The accountant's double underline: nothing is added below a grand total. */
-@utility rule-total {
-  border-bottom: 3px double var(--color-border-strong);
-}
-
-/* The gutter between the debit and credit columns of a ledger page. */
-@utility rule-gutter {
-  border-left: 1px solid color-mix(in oklab, var(--color-border) 70%, transparent);
-}
-
-@utility eyebrow {
-  font-size: var(--text-2xs);
-  line-height: var(--text-2xs--line-height);
+  border-top: 0.5px solid var(--sep-strong);
   font-weight: 600;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: var(--color-muted-foreground);
 }
+
+@utility rule-total {
+  border-bottom: 3px double var(--sep-strong);
+  font-weight: 700;
+}
+
+@utility rule-gutter {
+  border-left: 0.5px solid var(--sep);
+}
+
+/* A quiet section label: Apple's footnote-weight header, never shouted in capitals. */
+@utility eyebrow {
+  font-size: 0.75rem;
+  line-height: 1rem;
+  font-weight: 600;
+  letter-spacing: 0;
+  color: var(--label2);
+}
+
+/* ------------------------------------------------------------------ motion */
 
 @keyframes sb-fade-in {
   from {
@@ -313,7 +473,7 @@
 @keyframes sb-pop-in {
   from {
     opacity: 0;
-    transform: translateY(-3px) scale(0.985);
+    transform: scale(0.97);
   }
   to {
     opacity: 1;
@@ -328,7 +488,7 @@
   }
   to {
     opacity: 0;
-    transform: translateY(-3px) scale(0.985);
+    transform: scale(0.97);
   }
 }
 
@@ -350,6 +510,42 @@
   }
 }
 
+@keyframes sb-rise-in {
+  from {
+    transform: translateY(100%);
+  }
+  to {
+    transform: none;
+  }
+}
+
+@keyframes sb-rise-out {
+  from {
+    transform: none;
+  }
+  to {
+    transform: translateY(100%);
+  }
+}
+
+@keyframes sb-slide-in-right {
+  from {
+    transform: translateX(100%);
+  }
+  to {
+    transform: none;
+  }
+}
+
+@keyframes sb-slide-out-right {
+  from {
+    transform: none;
+  }
+  to {
+    transform: translateX(100%);
+  }
+}
+
 @keyframes sb-shimmer {
   0%,
   100% {
@@ -361,25 +557,41 @@
 }
 
 @utility anim-fade-in {
-  animation: sb-fade-in 130ms ease-out;
+  animation: sb-fade-in 180ms ease-out;
 }
 
 @utility anim-fade-out {
-  animation: sb-fade-out 110ms ease-in;
+  animation: sb-fade-out 150ms ease-in;
 }
 
 @utility anim-pop-in {
-  animation: sb-pop-in 130ms cubic-bezier(0.16, 1, 0.3, 1);
+  animation: sb-pop-in 180ms cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 @utility anim-pop-out {
-  animation: sb-pop-out 100ms ease-in;
+  animation: sb-pop-out 150ms ease-in;
 }
 
 @utility anim-sheet-in {
-  animation: sb-sheet-in 200ms cubic-bezier(0.16, 1, 0.3, 1);
+  animation: sb-sheet-in 240ms cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 @utility anim-sheet-out {
-  animation: sb-sheet-out 160ms ease-in;
+  animation: sb-sheet-out 180ms ease-in;
+}
+
+@utility anim-rise-in {
+  animation: sb-rise-in 250ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@utility anim-rise-out {
+  animation: sb-rise-out 200ms ease-in;
+}
+
+@utility anim-slide-in-right {
+  animation: sb-slide-in-right 250ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@utility anim-slide-out-right {
+  animation: sb-slide-out-right 200ms ease-in;
 }

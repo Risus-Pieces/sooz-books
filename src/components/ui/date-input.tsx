@@ -2,6 +2,7 @@ import * as React from "react";
 
 import { cn } from "@/lib/cn";
 import { inputBase } from "@/components/ui/input";
+import { fieldInvalid } from "@/components/ui/menu-styles";
 
 export const ISO_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -55,8 +56,8 @@ export function DateInput({
       aria-invalid={invalid || undefined}
       className={cn(
         inputBase,
-        "num w-[9.5rem] tracking-normal",
-        invalid && "border-negative focus-visible:border-negative",
+        "num w-[9.5rem]",
+        invalid && fieldInvalid,
         className,
       )}
       {...props}

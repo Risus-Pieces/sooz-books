@@ -5,43 +5,56 @@ import * as DialogPrimitive from "@radix-ui/react-dialog";
 
 import { cn } from "@/lib/cn";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { NAV_COLLAPSE_COOKIE } from "@/components/shell/nav";
-import { SideNav } from "@/components/shell/side-nav";
-import { TopBar } from "@/components/shell/top-bar";
-import type { SearchTarget } from "@/components/shell/global-search";
+
+import { GlobalSearch, type SearchTarget } from "./global-search";
+import { MoreSheet } from "./more-sheet";
+import { NAV_COLLAPSE_COOKIE } from "./nav";
+import { ShellProvider, type ShellAccount, type ShellPeriod, type ShellState } from "./shell-context";
+import { SideNav } from "./side-nav";
+import { TabBar } from "./tab-bar";
 
 export interface AppShellProps {
   children: React.ReactNode;
-  /** Read from the rail cookie on the server, so the first paint is already the right width. */
+  /** Read from the sidebar cookie on the server, so the first paint is already right. */
   defaultCollapsed?: boolean;
-  period?: React.ReactNode;
-  user?: React.ReactNode;
-  actions?: React.ReactNode;
+  reviewCount?: number;
+  account?: ShellAccount | null;
+  period?: ShellPeriod | null;
   searchTargets?: SearchTarget[];
 }
 
 const ONE_YEAR_SECONDS = 60 * 60 * 24 * 365;
 
+/**
+ * The window. Desktop (≥1024px): the floating translucent sidebar beside the page, which can be
+ * hidden. Tablet (768–1023px): the sidebar opens over the page from the toolbar's sidebar button.
+ * Phone (<768px): no sidebar; a floating tab bar with a More sheet.
+ *
+ * The document scrolls, not an inner box, so mobile Safari's bars, pull-to-refresh and full-page
+ * screenshots all behave natively. Each page draws its own <PageToolbar/>, which sticks to the top.
+ */
 export function AppShell({
   children,
   defaultCollapsed = false,
-  period,
-  user,
-  actions,
+  reviewCount = 0,
+  account = null,
+  period = null,
   searchTargets,
 }: AppShellProps) {
-  const [collapsed, setCollapsed] = React.useState(defaultCollapsed);
+  const [sidebarHidden, setSidebarHidden] = React.useState(defaultCollapsed);
   const [drawerOpen, setDrawerOpen] = React.useState(false);
+  const [searchOpen, setSearchOpen] = React.useState(false);
+  const [moreOpen, setMoreOpen] = React.useState(false);
 
-  const toggleCollapsed = React.useCallback(() => {
-    setCollapsed((current) => !current);
+  const toggleSidebar = React.useCallback(() => {
+    setSidebarHidden((hidden) => {
+      const next = !hidden;
+      document.cookie = `${NAV_COLLAPSE_COOKIE}=${next ? "1" : "0"}; path=/; max-age=${ONE_YEAR_SECONDS}; samesite=lax`;
+      return next;
+    });
   }, []);
 
-  React.useEffect(() => {
-    document.cookie = `${NAV_COLLAPSE_COOKIE}=${collapsed ? "1" : "0"}; path=/; max-age=${ONE_YEAR_SECONDS}; samesite=lax`;
-  }, [collapsed]);
-
-  // Widening past the rail breakpoint leaves the drawer stranded over the layout.
+  // Widening past the sidebar breakpoint leaves the drawer stranded over the layout.
   React.useEffect(() => {
     const media = window.matchMedia("(min-width: 1024px)");
     const onChange = () => {
@@ -51,51 +64,65 @@ export function AppShell({
     return () => media.removeEventListener("change", onChange);
   }, []);
 
+  const state = React.useMemo<ShellState>(
+    () => ({
+      reviewCount,
+      account,
+      period,
+      sidebarHidden,
+      toggleSidebar,
+      openNav: () => setDrawerOpen(true),
+      openSearch: () => setSearchOpen(true),
+      openMore: () => setMoreOpen(true),
+    }),
+    [reviewCount, account, period, sidebarHidden, toggleSidebar],
+  );
+
   return (
-    <TooltipProvider delayDuration={350} skipDelayDuration={500}>
-      <div className="flex h-dvh overflow-hidden bg-background">
+    <ShellProvider value={state}>
+      <TooltipProvider delayDuration={450} skipDelayDuration={300}>
         <a
           href="#main"
-          className="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-50 focus:rounded-sm focus:border focus:border-border-strong focus:bg-surface-raised focus:px-3 focus:py-1.5 focus:text-sm focus:font-medium"
+          className="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-[60] focus:rounded-[8px] focus:bg-card focus:px-3 focus:py-2 focus:text-sm focus:font-medium focus:shadow-glass"
         >
           Skip to content
         </a>
 
-        <aside
-          className={cn(
-            "hidden shrink-0 transition-[width] duration-150 ease-out lg:block",
-            collapsed ? "w-13" : "w-56",
-          )}
-        >
-          <SideNav collapsed={collapsed} onToggleCollapsed={toggleCollapsed} />
-        </aside>
+        <div className="flex min-h-dvh bg-bg">
+          <aside
+            aria-label="Sidebar"
+            className={cn(
+              "sticky top-0 hidden h-dvh w-[260px] shrink-0 p-2 lg:block",
+              sidebarHidden && "lg:hidden",
+            )}
+          >
+            <SideNav />
+          </aside>
 
-        <DialogPrimitive.Root open={drawerOpen} onOpenChange={setDrawerOpen}>
-          <DialogPrimitive.Portal>
-            <DialogPrimitive.Overlay className="fixed inset-0 z-40 bg-foreground/40 data-[state=open]:anim-fade-in data-[state=closed]:anim-fade-out lg:hidden" />
-            <DialogPrimitive.Content className="fixed inset-y-0 left-0 z-50 w-60 outline-none data-[state=open]:anim-sheet-in data-[state=closed]:anim-sheet-out lg:hidden">
-              <DialogPrimitive.Title className="sr-only">Sections</DialogPrimitive.Title>
-              <DialogPrimitive.Description className="sr-only">
-                Move between the registers, reports and settings.
-              </DialogPrimitive.Description>
-              <SideNav variant="drawer" onNavigate={() => setDrawerOpen(false)} />
-            </DialogPrimitive.Content>
-          </DialogPrimitive.Portal>
-        </DialogPrimitive.Root>
+          <DialogPrimitive.Root open={drawerOpen} onOpenChange={setDrawerOpen}>
+            <DialogPrimitive.Portal>
+              <DialogPrimitive.Overlay className="fixed inset-0 z-40 bg-black/20 data-[state=open]:anim-fade-in data-[state=closed]:anim-fade-out" />
+              <DialogPrimitive.Content
+                aria-describedby={undefined}
+                className="fixed inset-y-0 left-0 z-50 w-[276px] p-2 outline-none data-[state=open]:anim-sheet-in data-[state=closed]:anim-sheet-out"
+              >
+                <DialogPrimitive.Title className="sr-only">Sections</DialogPrimitive.Title>
+                <SideNav variant="drawer" onNavigate={() => setDrawerOpen(false)} />
+              </DialogPrimitive.Content>
+            </DialogPrimitive.Portal>
+          </DialogPrimitive.Root>
 
-        <div className="flex min-w-0 flex-1 flex-col">
-          <TopBar
-            period={period}
-            user={user}
-            actions={actions}
-            searchTargets={searchTargets}
-            onOpenNav={() => setDrawerOpen(true)}
-          />
-          <main id="main" className="min-h-0 flex-1 overflow-y-auto">
-            <div className="mx-auto w-full max-w-[104rem] px-4 py-5 lg:px-6 lg:py-6">{children}</div>
+          <main id="main" className="min-w-0 flex-1">
+            <div className="mx-auto w-full max-w-[100rem] px-5 pb-8 max-md:flex max-md:min-h-dvh max-md:flex-col max-md:px-4 max-md:pb-[calc(env(safe-area-inset-bottom)+22px)]">
+              {children}
+              <TabBar moreOpen={moreOpen} />
+            </div>
           </main>
         </div>
-      </div>
-    </TooltipProvider>
+
+        <MoreSheet open={moreOpen} onOpenChange={setMoreOpen} />
+        <GlobalSearch open={searchOpen} onOpenChange={setSearchOpen} targets={searchTargets} />
+      </TooltipProvider>
+    </ShellProvider>
   );
 }

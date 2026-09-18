@@ -2,7 +2,6 @@
 
 import * as React from 'react';
 import { useActionState } from 'react';
-import { AlertCircle, CheckCircle2, KeyRound, Mail } from 'lucide-react';
 
 import {
   acceptInvite,
@@ -13,6 +12,7 @@ import {
   type AuthFormState,
 } from '@/lib/auth/actions';
 import { Button } from '@/components/ui/button';
+import { Glyph, type GlyphName } from '@/components/ui/glyph';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { cn } from '@/lib/cn';
@@ -108,14 +108,14 @@ function MethodSwitch({
   method: 'password' | 'link';
   onChange: (next: 'password' | 'link') => void;
 }) {
-  const options = [
-    { value: 'password' as const, label: 'Password', icon: KeyRound },
-    { value: 'link' as const, label: 'Email link', icon: Mail },
+  const options: Array<{ value: 'password' | 'link'; label: string; glyph: GlyphName }> = [
+    { value: 'password', label: 'Password', glyph: 'key' },
+    { value: 'link', label: 'Email link', glyph: 'mail' },
   ];
 
   return (
-    <div role="tablist" aria-label="How to sign in" className="mb-5 flex gap-1 rounded-sm bg-muted p-1">
-      {options.map(({ value, label, icon: Icon }) => (
+    <div role="tablist" aria-label="How to sign in" className="mb-5 flex gap-0.5 rounded-[8px] bg-fill2 p-0.5">
+      {options.map(({ value, label, glyph }) => (
         <button
           key={value}
           type="button"
@@ -123,13 +123,11 @@ function MethodSwitch({
           aria-selected={method === value}
           onClick={() => onChange(value)}
           className={cn(
-            'flex h-7 flex-1 items-center justify-center gap-1.5 rounded-xs text-xs font-medium transition-colors',
-            method === value
-              ? 'bg-surface-raised text-foreground shadow-raised'
-              : 'text-muted-foreground hover:text-foreground',
+            'flex h-7 flex-1 items-center justify-center gap-1.5 rounded-[6px] text-xs font-medium transition-[background-color,box-shadow] duration-150 max-sm:h-9 max-sm:text-sm',
+            method === value ? 'bg-ctl font-semibold text-label shadow-ctl' : 'text-label hover:bg-fill2',
           )}
         >
-          <Icon className="size-3.5" />
+          <Glyph name={glyph} size={14} />
           {label}
         </button>
       ))}
@@ -233,13 +231,17 @@ function Panel({
   children: React.ReactNode;
 }) {
   return (
-    <div className="rounded-md border border-border bg-surface shadow-raised">
-      <div className="rule-head px-6 pt-6 pb-4">
-        <p className="eyebrow">Sooz Books</p>
-        <h1 className="mt-1.5 text-xl font-semibold tracking-tight text-foreground">{title}</h1>
-        <p className="mt-1 text-xs leading-relaxed text-muted-foreground">{subtitle}</p>
-      </div>
-      <div className="px-6 pt-5 pb-6">{children}</div>
+    <div className="flex flex-col items-center">
+      <span
+        aria-hidden
+        className="grid size-16 place-items-center rounded-[18px] bg-[linear-gradient(135deg,#ff9f0a,#ff375f)] text-[1.875rem] font-bold text-white shadow-[0_8px_24px_-8px_rgba(255,55,95,0.55)]"
+      >
+        S
+      </span>
+      <p className="mt-4 text-sm font-semibold text-label2">Sooz Books</p>
+      <h1 className="mt-0.5 text-2xl font-bold tracking-[-0.022em] text-label">{title}</h1>
+      <p className="mt-1 max-w-xs text-center text-sm text-label2">{subtitle}</p>
+      <div className="mt-6 w-full rounded-2xl bg-card p-5 shadow-card max-sm:rounded-[22px]">{children}</div>
     </div>
   );
 }
@@ -256,7 +258,7 @@ function Field({ label, name, hint, ...props }: FieldProps) {
     <div className="flex flex-col gap-1.5">
       <Label htmlFor={id}>{label}</Label>
       <Input id={id} name={name} className="h-9" {...props} />
-      {hint ? <p className="text-2xs text-muted-foreground">{hint}</p> : null}
+      {hint ? <p className="text-xs text-label2">{hint}</p> : null}
     </div>
   );
 }
@@ -275,19 +277,16 @@ function Notice({ notice, state }: { notice: string | null; state: AuthFormState
 }
 
 function Callout({ tone, children }: { tone: 'positive' | 'negative'; children: React.ReactNode }) {
-  const Icon = tone === 'positive' ? CheckCircle2 : AlertCircle;
   return (
     <p
       role="alert"
       className={cn(
-        'flex items-start gap-2 rounded-sm border px-2.5 py-2 text-xs leading-relaxed',
-        tone === 'positive'
-          ? 'border-positive/35 bg-positive/8 text-positive'
-          : 'border-negative/35 bg-negative/8 text-negative',
+        'flex items-start gap-2 rounded-[10px] px-3 py-2.5 text-sm leading-snug',
+        tone === 'positive' ? 'bg-tint-green/10 text-ink-green' : 'bg-tint-red/10 text-ink-red',
       )}
     >
-      <Icon className="mt-px size-3.5 shrink-0" />
-      <span className="text-foreground/90">{children}</span>
+      <Glyph name={tone === 'positive' ? 'check-circle' : 'warning'} size={16} className="mt-px" />
+      <span className="text-label">{children}</span>
     </p>
   );
 }

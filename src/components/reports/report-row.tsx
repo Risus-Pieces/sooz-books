@@ -1,5 +1,6 @@
 import * as React from "react";
 
+import { Dot } from "@/components/ui/icon-badge";
 import { Money } from "@/components/ui/money";
 import { cn } from "@/lib/cn";
 import {
@@ -10,6 +11,9 @@ import {
   cellIsPercent,
   formatBasisPoints,
 } from "@/lib/reports/types";
+import { categoryForCode } from "@/lib/ui/categories";
+
+import { sourceLabel } from "@/components/ledger/types";
 
 import { DrilldownLink } from "./drilldown-link";
 
@@ -22,6 +26,17 @@ const HEADER_STYLES: ReadonlySet<ReportRowModel["style"]> = new Set([
   "spacer",
 ]);
 
+/**
+ * Statements shout their totals in capitals ("TOTAL ASSETS"); on screen a total is bold, not loud.
+ * The part before an em dash is set in sentence case; anything after it is left as written.
+ */
+export function displayLabel(label: string): string {
+  const [head, ...rest] = label.split(" — ");
+  if (!/[A-Z]/.test(head) || head !== head.toUpperCase()) return label;
+  const sentence = head.charAt(0) + head.slice(1).toLowerCase();
+  return [sentence, ...rest].join(" — ");
+}
+
 /** The rule above a row. Weight carries meaning: see the `rule-*` utilities. */
 const RULE: Partial<Record<ReportRowModel["style"], string>> = {
   subtotal: "rule-subtotal",
@@ -30,27 +45,27 @@ const RULE: Partial<Record<ReportRowModel["style"], string>> = {
 };
 
 const LABEL: Record<ReportRowModel["style"], string> = {
-  section: "eyebrow text-foreground",
-  group: "font-medium text-foreground",
-  detail: "text-foreground",
-  subtotal: "font-medium text-foreground",
-  total: "text-2xs font-semibold tracking-[0.1em] uppercase text-foreground",
-  ratio: "text-xs text-muted-foreground",
+  section: "font-semibold text-label",
+  group: "font-semibold text-label",
+  detail: "text-label",
+  subtotal: "font-semibold text-label",
+  total: "font-bold text-label",
+  ratio: "text-xs text-label2",
   spacer: "",
-  note: "text-xs text-muted-foreground",
-  error: "text-2xs font-semibold tracking-[0.1em] uppercase text-negative",
+  note: "text-xs text-label2",
+  error: "font-bold text-ink-red",
 };
 
 const FIGURE: Record<ReportRowModel["style"], string> = {
   section: "",
   group: "",
   detail: "",
-  subtotal: "font-medium",
-  total: "font-semibold",
-  ratio: "text-xs text-muted-foreground",
+  subtotal: "font-semibold",
+  total: "font-bold",
+  ratio: "text-xs text-label2",
   spacer: "",
-  note: "text-xs text-muted-foreground",
-  error: "font-semibold text-negative",
+  note: "text-xs text-label2",
+  error: "font-bold text-ink-red",
 };
 
 export interface ReportRowProps {
@@ -63,7 +78,8 @@ export interface ReportRowProps {
 }
 
 /**
- * One line of a statement.
+ * One line of a statement, Numbers-style: hairlines, indentation instead of borders, bold totals,
+ * right-aligned tabular figures, and each account's category colour as a dot.
  *
  * Figures that were never measured — a percentage of a percentage, a balance
  * column on a movement total — are left blank rather than printed as zero,
@@ -72,49 +88,43 @@ export interface ReportRowProps {
 export function ReportRowView({ row, columns, basis, grandTotal, dense }: ReportRowProps) {
   if (row.style === "spacer") {
     return (
-      <tr className="h-2">
+      <tr aria-hidden className="h-2.5">
         <td colSpan={columns.length + 1} />
       </tr>
     );
   }
 
-  const padding = dense ? "py-0.5" : "py-1";
+  const padding = dense ? "py-[5px]" : "py-[7px]";
   const isHeader = HEADER_STYLES.has(row.style);
   const rule = cn(RULE[row.style], grandTotal && "rule-total");
-  // The sticky label cell must be opaque so figures scrolling under it stay hidden, and it
-  // must match the row's own tint exactly rather than stack a second translucent layer on it.
-  const tinted =
-    row.style === "section"
-      ? "bg-[color-mix(in_oklab,var(--color-surface-sunken)_60%,var(--color-surface))]"
-      : "bg-surface";
+  const rowRule = row.style === "detail" || row.style === "ratio" || row.style === "note" ? "rule-row" : undefined;
+  // The sticky label cell must be opaque so figures scrolling under it stay hidden.
+  const surface = row.style === "error" ? "bg-[color-mix(in_srgb,var(--red)_9%,var(--card))]" : "bg-card";
+  const named = row.label !== "";
+  const category = row.style === "detail" && row.code && named ? categoryForCode(row.code) : null;
 
   const label = (
-    <span className={LABEL[row.style]}>
-      {row.code ? <span className="num mr-2 text-2xs text-muted-foreground">{row.code}</span> : null}
-      {row.label}
+    <span className={cn("inline-flex min-w-0 items-center gap-2", LABEL[row.style])}>
+      {category ? <Dot tint={category.tint} size={7} /> : null}
+      <span className="truncate max-sm:whitespace-normal">{displayLabel(row.label)}</span>
+      {row.code && named ? <span className="num shrink-0 text-xs font-normal text-label2 max-sm:hidden">{row.code}</span> : null}
     </span>
   );
 
   return (
-    <tr
-      className={cn(
-        row.style === "section" && "bg-surface-sunken/60",
-        row.style === "error" && "bg-negative/10",
-        !isHeader && row.style !== "error" && "hover:bg-muted/50",
-      )}
-    >
+    <tr className={cn("group/row", !isHeader && row.style !== "error" && "hover:[&>*]:bg-[color-mix(in_srgb,var(--fill2)_60%,var(--card))]")}>
       <th
         scope="row"
-        style={{ paddingLeft: `${8 + row.level * 14}px` }}
+        style={{ paddingLeft: `${20 + row.level * 18}px` }}
         className={cn(
           // On a phone the label wraps inside a narrower column, so the figures are on screen
           // without scrolling; from `sm` up it keeps to one truncated line.
-          "sticky left-0 z-10 max-w-[30rem] truncate pr-4 text-left font-normal max-sm:max-w-[11rem] max-sm:min-w-[8.5rem] max-sm:whitespace-normal",
+          "sticky left-0 z-10 max-w-[30rem] truncate pr-4 text-left text-sm font-normal max-sm:max-w-[11rem] max-sm:min-w-[8.5rem] max-sm:whitespace-normal",
           padding,
-          tinted,
-          row.style === "error" && "bg-negative/10",
-          row.style === "section" && "pt-3",
+          surface,
+          row.style === "section" && "pt-4",
           rule,
+          rowRule,
         )}
       >
         {row.drilldown?.accountId !== undefined ? (
@@ -131,7 +141,7 @@ export function ReportRowView({ row, columns, basis, grandTotal, dense }: Report
           label
         )}
         {row.note ? (
-          <span className="ml-2 text-2xs text-muted-foreground italic max-sm:ml-0 max-sm:block">{row.note}</span>
+          <span className="ml-2 text-xs text-label2 max-sm:ml-0 max-sm:block">{row.note}</span>
         ) : null}
       </th>
 
@@ -139,14 +149,15 @@ export function ReportRowView({ row, columns, basis, grandTotal, dense }: Report
         <td
           key={column.key}
           className={cn(
-            "px-3 whitespace-nowrap",
+            "px-3 text-sm whitespace-nowrap last:pr-5",
             padding,
+            surface,
             column.kind === "text" || column.kind === "date" ? "text-left" : "text-right",
-            column.emphasis && "bg-muted/35",
-            column.group === "compare" && "rule-gutter",
-            column.group === "variance" && "rule-gutter",
+            column.emphasis && columns.length > 1 && "bg-[color-mix(in_srgb,var(--fill2)_45%,var(--card))]",
+            (column.group === "compare" || column.group === "variance") && "rule-gutter",
             FIGURE[row.style],
             rule,
+            rowRule,
           )}
         >
           <Cell row={row} column={column} index={index} />
@@ -158,15 +169,18 @@ export function ReportRowView({ row, columns, basis, grandTotal, dense }: Report
 
 function Cell({ row, column, index }: { row: ReportRowModel; column: ColumnDef; index: number }) {
   if (column.kind === "text" || column.kind === "date") {
-    const text = row.cells?.[index] ?? "";
-    if (text === "") return null;
+    const raw = row.cells?.[index] ?? "";
+    if (raw === "") return null;
+    const text = column.key === "source" ? sourceLabel(raw) : raw;
     return (
       <span
         className={cn(
-          "block max-w-[22rem] truncate",
+          "block truncate",
+          column.key === "memo" ? "max-w-[15rem]" : column.key === "counter" ? "max-w-[12rem]" : "max-w-[22rem]",
           (column.kind === "date" || column.key === "entry") && "num",
+          column.key !== "date" && column.key !== "entry" && "text-label2",
         )}
-        title={text.length > 40 ? text : undefined}
+        title={text.length > 24 ? text : undefined}
       >
         {text}
       </span>
@@ -178,13 +192,14 @@ function Cell({ row, column, index }: { row: ReportRowModel; column: ColumnDef; 
   const value = row.values[index] ?? 0;
 
   if (cellIsPercent(column, row)) {
-    if (value === 0) return <span className="num text-muted-foreground">{EM_DASH}</span>;
+    if (value === 0) return <span className="num text-label2">{EM_DASH}</span>;
     return (
-      <span className={cn("num", value < 0 && "text-negative")}>
+      <span className={cn("num", value < 0 && "text-ink-red")}>
         {formatBasisPoints(value, { sign: column.kind === "variance_pct" })}
       </span>
     );
   }
 
-  return <Money cents={value} parens zeroDash signed={column.kind === "variance"} />;
+  if (value === 0) return <span className="num text-label2">{EM_DASH}</span>;
+  return <Money cents={value} parens signed={column.kind === "variance"} />;
 }

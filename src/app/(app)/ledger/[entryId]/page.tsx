@@ -1,13 +1,12 @@
 import type { Metadata } from 'next';
-import Link from 'next/link';
 import { notFound } from 'next/navigation';
 
+import { EntryActions } from '@/components/ledger/entry-actions';
 import { EntryDetail } from '@/components/ledger/entry-detail';
 import { JournalEntryForm } from '@/components/ledger/entry-form';
-import { sourceLabel, type EntrySeedLine } from '@/components/ledger/types';
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
-import { PageHeader } from '@/components/ui/page-header';
+import type { EntrySeedLine } from '@/components/ledger/types';
+import { PageToolbar } from '@/components/shell/page-toolbar';
+import { Pill } from '@/components/ui/pill';
 import { can } from '@/lib/auth/roles';
 import { requireUser } from '@/lib/auth/session';
 
@@ -62,17 +61,17 @@ export default async function EntryPage({ params }: { params: Promise<{ entryId:
     }));
 
     return (
-      <div className="flex flex-col gap-5">
-        <PageHeader
-          eyebrow="Books"
+      <div className="flex flex-col gap-3.5 max-md:gap-3">
+        <PageToolbar
           title={`Draft #${entry.entryNo}`}
-          description="Unposted, so it counts for nothing until it balances and is posted."
-          meta={<Badge tone="warning">Draft</Badge>}
-          actions={
-            <Button asChild variant="ghost" size="sm">
-              <Link href="/ledger">Back to the journal</Link>
-            </Button>
+          back={{ href: '/ledger', label: 'Journal' }}
+          phoneTitleRow
+          subtitle={
+            <Pill tone="orange" glyph="pencil">
+              Draft
+            </Pill>
           }
+          info={<p>Unposted, so it counts for nothing until it balances and is posted.</p>}
         />
         <JournalEntryForm
           accounts={accounts}
@@ -91,18 +90,29 @@ export default async function EntryPage({ params }: { params: Promise<{ entryId:
   }
 
   return (
-    <div className="flex flex-col gap-5">
-      <PageHeader
-        eyebrow="Books"
+    <div className="flex flex-col gap-3.5 max-md:gap-3">
+      <PageToolbar
         title={`Entry #${entry.entryNo}`}
-        description={`${sourceLabel(entry.sourceType)} · ${entry.date}`}
+        back={{ href: '/ledger', label: 'Journal' }}
+        phoneTitleRow
+        info={
+          <p>
+            A posted entry never changes. To correct it, reverse it: that posts its mirror image and links the two.
+          </p>
+        }
         actions={
-          <Button asChild variant="ghost" size="sm">
-            <Link href="/ledger">Back to the journal</Link>
-          </Button>
+          <EntryActions
+            entryId={entry.id}
+            entryNo={entry.entryNo}
+            date={entry.date}
+            sourceType={entry.sourceType}
+            status={entry.status}
+            reversed={entry.reversedById !== null}
+            canPost={canPost}
+          />
         }
       />
-      <EntryDetail entry={entry} lines={lines} audit={audit} canPost={canPost} />
+      <EntryDetail entry={entry} lines={lines} audit={audit} />
     </div>
   );
 }

@@ -1,13 +1,13 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
-import { ShieldOff } from 'lucide-react';
 
 import { JournalEntryForm } from '@/components/ledger/entry-form';
 import type { EntrySeedLine } from '@/components/ledger/types';
+import { PageToolbar } from '@/components/shell/page-toolbar';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { EmptyState } from '@/components/ui/empty-state';
-import { PageHeader } from '@/components/ui/page-header';
+import { Pill } from '@/components/ui/pill';
 import { can } from '@/lib/auth/roles';
 import { requireUser } from '@/lib/auth/session';
 import { today } from '@/lib/dates';
@@ -48,16 +48,16 @@ export default async function NewEntryPage({
 
   if (!can(user.role, 'ledger.post')) {
     return (
-      <div className="flex flex-col gap-5">
-        <PageHeader eyebrow="Books" title="New journal entry" />
+      <div className="flex flex-col gap-3.5 max-md:gap-3">
+        <PageToolbar title="New entry" back={{ href: '/ledger', label: 'Journal' }} />
         <Card>
           <EmptyState
-            icon={<ShieldOff />}
-            title="Your role may not post to the ledger"
+            glyph="lock"
+            title="Read-only role"
             description="A viewer can read every report but cannot write an entry. Ask an owner to change your role."
             action={
-              <Button asChild variant="secondary" size="sm">
-                <Link href="/ledger">Back to the journal</Link>
+              <Button asChild variant="secondary">
+                <Link href="/ledger">Journal</Link>
               </Button>
             }
           />
@@ -89,19 +89,23 @@ export default async function NewEntryPage({
         }));
 
   return (
-    <div className="flex flex-col gap-5">
-      <PageHeader
-        eyebrow="Books"
-        title="New journal entry"
-        description={
-          source === null
-            ? 'Tab across the grid, Enter for another line. Nothing posts until it balances.'
-            : `Copied from entry #${source.entry.entryNo}. Check the date before posting.`
+    <div className="flex flex-col gap-3.5 max-md:gap-3">
+      <PageToolbar
+        title="New entry"
+        back={{ href: '/ledger', label: 'Journal' }}
+        phoneTitleRow
+        subtitle={
+          source === null ? undefined : (
+            <Pill tone="blue" glyph="doc">
+              Copy of #{source.entry.entryNo}
+            </Pill>
+          )
         }
-        actions={
-          <Button asChild variant="ghost" size="sm">
-            <Link href="/ledger">Cancel</Link>
-          </Button>
+        info={
+          <>
+            <p>Tab across the grid; Enter adds a line. Nothing posts until debits equal credits.</p>
+            {source === null ? null : <p>Copied from entry #{source.entry.entryNo}. Check the date before posting.</p>}
+          </>
         }
       />
 

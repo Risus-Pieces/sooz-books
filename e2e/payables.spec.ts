@@ -41,7 +41,7 @@ async function materialsCents(page: Page): Promise<number> {
   await page.goto('/inventory');
   const station = page.locator('ol > li').filter({ hasText: '1320 · 1330' });
   await expect(station).toBeVisible();
-  return centsFromText(await station.locator('div.text-xl').innerText());
+  return centsFromText(await station.locator('[data-slot="station-value"]').innerText());
 }
 
 test('flow 4: vendor bill with an inventory line, AP aging, inventory, paid', async ({ page }) => {
@@ -76,7 +76,7 @@ test('flow 4: vendor bill with an inventory line, AP aging, inventory, paid', as
   await pickAccount(page, lineAccount(page, 2), '6740');
   await page.getByLabel('Amount, line 2').fill('25.00');
 
-  const summary = page.locator('dl').filter({ hasText: 'Capitalized to inventory' });
+  const summary = page.locator('dl').filter({ hasText: 'Inventory' }).filter({ hasText: 'Expense' });
   await expect(summary).toContainText('200.00');
   await expect(summary).toContainText('25.00');
   await expect(summary).toContainText('$225.00');

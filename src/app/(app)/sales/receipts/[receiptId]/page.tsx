@@ -1,13 +1,13 @@
 import type { Metadata } from 'next';
-import Link from 'next/link';
 import { notFound } from 'next/navigation';
 
 import { ApplyCredit } from '@/components/arap/apply-credit';
 import { MoneyDocDetailView } from '@/components/arap/money-doc-detail';
 import { VoidButton } from '@/components/arap/void-button';
 import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
-import { PageHeader } from '@/components/ui/page-header';
+import { PageToolbar } from '@/components/shell/page-toolbar';
+import { formatCents } from '@/components/ui/money';
+import { ToolbarGroup } from '@/components/ui/toolbar';
 import { can } from '@/lib/auth/roles';
 import { requireUser } from '@/lib/auth/session';
 import { today } from '@/lib/dates';
@@ -32,46 +32,48 @@ export default async function ReceiptPage({ params }: { params: Promise<{ receip
     canManage && !receipt.void && unapplied > 0 && receipt.partyId !== null ? await openInvoicesFor(receipt.partyId) : [];
 
   return (
-    <div className="flex flex-col gap-5">
-      <PageHeader
-        eyebrow="Sales · Receipt"
+    <div className="flex flex-col gap-3.5 max-md:gap-3">
+      <PageToolbar
+        back={{ href: '/sales/receipts', label: 'Receipts' }}
         title={receipt.docNo}
-        description={`${receipt.partyName ?? 'Unidentified customer'} · ${receipt.date}`}
-        meta={receipt.void ? <Badge tone="neutral">Void</Badge> : null}
+        subtitle={receipt.void ? <Badge tone="neutral">Void</Badge> : undefined}
+        info={
+          <p>
+            Money received from a customer and the invoices it paid. Money not applied stays on their account as a credit and can be applied below.
+          </p>
+        }
         actions={
-          <>
-            <Button asChild variant="ghost" size="sm">
-              <Link href="/sales/receipts">All receipts</Link>
-            </Button>
-            {canManage && !receipt.void ? (
+          canManage && !receipt.void ? (
+            <ToolbarGroup>
               <VoidButton
                 label="Void receipt"
                 docNo={receipt.docNo}
                 consequence={
                   receipt.bankTransactionId
-                    ? 'Reverses the receipt, reopens the invoices it paid, and returns its bank line to the review queue.'
-                    : 'Reverses the receipt and reopens the invoices it paid.'
+                    ? `Posts a reversal of the ${formatCents(receipt.amountCents, { currency: true })} receipt, reopens the invoices it paid, and returns its bank line to the review queue.`
+                    : `Posts a reversal of the ${formatCents(receipt.amountCents, { currency: true })} receipt and reopens the invoices it paid.`
                 }
                 minDate={receipt.date}
                 defaultDate={today()}
                 needsDate
                 onVoid={voidReceiptAction.bind(null, receipt.id)}
               />
-            ) : null}
-          </>
+            </ToolbarGroup>
+          ) : undefined
         }
       />
-      <MoneyDocDetailView doc={receipt} side="ar" />
-      {openDocs.length > 0 ? (
-        <ApplyCredit
-          side="ar"
-          unappliedCents={unapplied}
-          docs={openDocs}
-          minDate={receipt.date}
-          today={today()}
-          onApply={applyReceiptCreditAction.bind(null, receipt.id)}
-        />
-      ) : null}
+      <MoneyDocDetailView doc={receipt} side="ar">
+        {openDocs.length > 0 ? (
+          <ApplyCredit
+            side="ar"
+            unappliedCents={unapplied}
+            docs={openDocs}
+            minDate={receipt.date}
+            today={today()}
+            onApply={applyReceiptCreditAction.bind(null, receipt.id)}
+          />
+        ) : null}
+      </MoneyDocDetailView>
     </div>
   );
 }

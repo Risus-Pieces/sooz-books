@@ -2,10 +2,11 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { Upload } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Glyph } from "@/components/ui/glyph";
+import { ToolbarButton } from "@/components/ui/toolbar";
 import { DateInput } from "@/components/ui/date-input";
 import {
   Dialog,
@@ -40,7 +41,7 @@ const SOURCE_LABEL = { file: "Peasy cost", product_cost: "Book unit cost", none:
  * item, since Peasy has no stage field of its own), and what the file could not
  * be sure of. Nothing is written until the preview is accepted.
  */
-export function SnapshotImport({ variant = "default" }: { variant?: "default" | "secondary" }) {
+export function SnapshotImport({ variant = "default" }: { variant?: "default" | "secondary" | "toolbar" }) {
   const router = useRouter();
   const [open, setOpen] = React.useState(false);
   const [file, setFile] = React.useState<File | null>(null);
@@ -111,10 +112,14 @@ export function SnapshotImport({ variant = "default" }: { variant?: "default" | 
 
   return (
     <>
-      <Button size="sm" variant={variant} onClick={() => setOpen(true)}>
-        <Upload />
-        Import a Peasy count
-      </Button>
+      {variant === "toolbar" ? (
+        <ToolbarButton glyph="import" label="Import Peasy count" onClick={() => setOpen(true)} />
+      ) : (
+        <Button variant={variant} onClick={() => setOpen(true)}>
+          <Glyph name="import" />
+          Import a Peasy count
+        </Button>
+      )}
       <Dialog
         open={open}
         onOpenChange={(next) => {
@@ -175,12 +180,12 @@ export function SnapshotImport({ variant = "default" }: { variant?: "default" | 
             {preview ? (
               <div className="flex flex-col gap-4">
                 <div className="flex flex-wrap items-baseline justify-between gap-2">
-                  <p className="text-xs text-muted-foreground">
-                    <span className="text-foreground">{preview.filename}</span>
+                  <p className="text-xs text-label2">
+                    <span className="text-label">{preview.filename}</span>
                     {preview.snapshotDate ? (
                       <>
                         {" "}
-                        · counted <span className="num text-foreground">{preview.snapshotDate}</span>
+                        · counted <span className="num text-label">{preview.snapshotDate}</span>
                       </>
                     ) : null}{" "}
                     · {preview.rows.data} rows, {preview.rows.used} used, {preview.rows.excluded} excluded,{" "}
@@ -197,7 +202,7 @@ export function SnapshotImport({ variant = "default" }: { variant?: "default" | 
                 <BlockerList blockers={preview.blockers} />
                 <UnknownItems items={preview.unknownItems} value={create} onChange={setCreate} />
                 {preview.lines.length > 0 ? (
-                  <div className="overflow-hidden rounded-sm border border-border">
+                  <div className="overflow-hidden rounded-[12px] bg-inset">
                     <TableScroll className="max-h-80">
                       <Table caption="Inventory lines to import" className="min-w-[42rem]">
                         <thead>
@@ -212,10 +217,10 @@ export function SnapshotImport({ variant = "default" }: { variant?: "default" | 
                         </thead>
                         <tbody>
                           {preview.lines.map((l) => (
-                            <tr key={l.key} className="rule-row">
+                            <tr key={l.key} className="[&>td]:rule-row">
                               <Td>
                                 {l.productSku && l.productSku !== l.label ? (
-                                  <span className="num mr-2 text-xs text-muted-foreground">{l.productSku}</span>
+                                  <span className="num mr-2 text-xs text-label2">{l.productSku}</span>
                                 ) : null}
                                 {l.label}
                                 {l.productSku === null ? (
@@ -224,7 +229,7 @@ export function SnapshotImport({ variant = "default" }: { variant?: "default" | 
                                   </Badge>
                                 ) : null}
                               </Td>
-                              <Td className="text-muted-foreground">{l.location}</Td>
+                              <Td className="text-label2">{l.location}</Td>
                               <Td>
                                 <NativeSelect
                                   aria-label={`Stage for ${l.label}`}
@@ -246,7 +251,7 @@ export function SnapshotImport({ variant = "default" }: { variant?: "default" | 
                               <Td align="right">
                                 <Money cents={l.valueCents} plain />
                               </Td>
-                              <Td className={l.valueSource === "none" ? "text-xs text-warning" : "text-xs text-muted-foreground"}>
+                              <Td className={l.valueSource === "none" ? "text-xs text-ink-orange" : "text-xs text-label2"}>
                                 {SOURCE_LABEL[l.valueSource]}
                               </Td>
                             </tr>
@@ -272,7 +277,7 @@ export function SnapshotImport({ variant = "default" }: { variant?: "default" | 
                       type="checkbox"
                       checked={replace}
                       onChange={(e) => setReplace(e.target.checked)}
-                      className="mt-0.5 size-3.5 accent-[var(--color-primary)]"
+                      className="mt-0.5 size-4 accent-[var(--blue)]"
                     />
                     <span>A count for {preview.snapshotDate} is already imported. Replace it with this file.</span>
                   </label>

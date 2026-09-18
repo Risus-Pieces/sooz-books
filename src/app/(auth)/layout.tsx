@@ -11,12 +11,12 @@ export const metadata: Metadata = {
  */
 export default function AuthLayout({ children }: { children: React.ReactNode }) {
   return (
-    <div className="flex min-h-dvh flex-col bg-background">
+    <div className="flex min-h-dvh flex-col bg-bg">
       <main className="flex flex-1 items-center justify-center px-4 py-10">
-        <div className="w-full max-w-sm">{children}</div>
+        <div className="w-full max-w-[360px]">{children}</div>
       </main>
       <footer className="pb-8 text-center">
-        <p className="text-2xs text-muted-foreground">Sooz Books · double-entry books for Sooz</p>
+        <p className="text-xs text-label2">Sooz Beverage LLC</p>
       </footer>
     </div>
   );

@@ -1,123 +1,122 @@
 import * as React from "react";
 import Link from "next/link";
 
-import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Glyph } from "@/components/ui/glyph";
+import { IconBadge } from "@/components/ui/icon-badge";
+import { InfoButton } from "@/components/ui/info-button";
 import { cn } from "@/lib/cn";
+import type { GlyphName } from "@/lib/ui/glyphs";
+import type { Tint } from "@/lib/ui/tints";
 
-const STEPS = [
+const STEPS: { title: string; body: string; href: string; glyph: GlyphName; tint: Tint }[] = [
   {
-    title: "Plan the promotion",
+    title: "Plan",
     body: "Agree the deal with the distributor: products, units, the allowance per unit and any fixed fee. Record the deal number they will quote.",
     href: "/trade/promotions/new",
-    link: "New promotion",
+    glyph: "calendar",
+    tint: "gray",
   },
   {
-    title: "Accrue it monthly",
+    title: "Accrue",
     body: "Each month of the ship window books its share to contra revenue and 2120 Accrued Trade Spend, so the cost lands with the sales, not months later.",
     href: "/trade/promotions",
-    link: "Promotions",
+    glyph: "hourglass",
+    tint: "cyan",
   },
   {
-    title: "Import the remittance",
+    title: "Import",
     body: "The distributor pays short and sends a remittance. Each payment is split before it posts: cash, AR relieved at full gross, trade spend, and claims to dispute.",
     href: "/trade/remittances",
-    link: "Remittances",
+    glyph: "import",
+    tint: "blue",
   },
   {
-    title: "Work the deductions",
+    title: "Resolve",
     body: "Validate what the distributor was owed, dispute what it was not before the window closes, then record the recovery or write it off.",
     href: "/trade/deductions",
-    link: "Deductions",
+    glyph: "flag",
+    tint: "orange",
   },
-] as const;
+];
 
-/** The four steps a distributor's money goes through, in order. */
+/** The four steps a distributor's money goes through, as four badges joined by arrows. */
 export function TradeWorkflow({ className }: { className?: string }) {
   return (
-    <Card className={className}>
-      <CardHeader>
-        <div className="min-w-0">
-          <CardTitle>How distributor money reaches the books</CardTitle>
-          <CardDescription>Sooz has no distributor yet. When the first one signs, this is the order things happen in.</CardDescription>
-        </div>
-      </CardHeader>
-      <ol className="grid md:grid-cols-2 xl:grid-cols-4">
-        {STEPS.map((step, index) => (
-          <li
-            key={step.title}
-            className={cn(
-              "flex flex-col gap-1.5 border-border px-4 py-3.5",
-              index > 0 && "border-t md:border-t-0",
-              index % 2 === 1 && "md:border-l",
-              index >= 2 && "md:border-t xl:border-t-0",
-              index > 0 && "xl:border-l",
-            )}
-          >
-            <p className="flex items-baseline gap-2">
-              <span className="num text-xs text-primary">{index + 1}</span>
-              <span className="text-sm font-semibold text-foreground">{step.title}</span>
+    <section aria-labelledby="trade-flow" className={cn("rounded-2xl bg-card px-5 pt-[18px] pb-5 shadow-card max-md:rounded-[22px] max-md:p-4", className)}>
+      <h2 id="trade-flow" className="mb-4 flex items-center gap-1 text-lg font-semibold tracking-[-0.01em]">
+        How it flows
+        <InfoButton label="About the trade flow" align="start">
+          <p>Sooz has no distributor yet. When the first one signs, this is the order things happen in.</p>
+          {STEPS.map((s, i) => (
+            <p key={s.title}>
+              <b>
+                {i + 1}. {s.title}.
+              </b>{" "}
+              {s.body}
             </p>
-            <p className="text-xs leading-relaxed text-muted-foreground">{step.body}</p>
-            <Link href={step.href} className="mt-auto pt-1 text-xs font-medium text-primary underline decoration-primary/35 underline-offset-4 hover:decoration-primary max-sm:py-3">
-              {step.link}
-            </Link>
-          </li>
+          ))}
+        </InfoButton>
+      </h2>
+      <ol className="flex items-start justify-between gap-2 max-sm:flex-col max-sm:gap-0">
+        {STEPS.map((step, index) => (
+          <React.Fragment key={step.title}>
+            {index > 0 ? (
+              <li aria-hidden className="mt-4 flex-1 max-sm:mt-0 max-sm:ml-[21px] max-sm:h-4 max-sm:flex-none max-sm:border-l-[1.5px] max-sm:border-label3">
+                <span className="relative block border-t-[1.5px] border-label3 max-sm:hidden">
+                  <span className="absolute -top-[5.5px] right-0 border-y-[4.5px] border-l-8 border-y-transparent border-l-label3" />
+                </span>
+              </li>
+            ) : null}
+            <li>
+              <Link href={step.href} className="flex flex-col items-center gap-1.5 rounded-[12px] px-2 py-1 outline-none focus-ring hover:bg-fill2 focus-visible:bg-fill2 max-sm:min-h-11 max-sm:flex-row max-sm:gap-3 max-sm:px-0">
+                <IconBadge glyph={step.glyph} tint={step.tint} size="xl" />
+                <span className="text-sm font-semibold">
+                  <span className="num mr-1 text-label2">{index + 1}</span>
+                  {step.title}
+                </span>
+                <Glyph name="chevron-right" size={12} weight={2.4} className="text-label3 sm:hidden" />
+              </Link>
+            </li>
+          </React.Fragment>
         ))}
       </ol>
-    </Card>
+    </section>
   );
 }
 
 const COLUMNS: { name: string; note: string }[] = [
-  { name: "payment_number", note: "The ACH or check number. One payment is one entry." },
-  { name: "payment_date · payment_total", note: "The cash that reached the bank, and when." },
+  { name: "payment_number", note: "One payment is one entry." },
+  { name: "payment_date · payment_total", note: "The cash, and when." },
   { name: "line_type", note: "INVOICE, DEDUCTION, CREDIT, DISCOUNT or REPAYMENT." },
-  { name: "reference_invoice_number", note: "Which Sooz invoice the line settles or shorts." },
+  { name: "reference_invoice_number", note: "The Sooz invoice it settles or shorts." },
   { name: "reason_code · description", note: "KeHE prefixes like H or IA, UNFI codes like MCB or 01." },
   { name: "deal_number", note: "Ties a promotion deduction to its accrual." },
-  { name: "line_amount", note: "Signed: negative is money the distributor kept." },
+  { name: "line_amount", note: "Signed: negative is money kept." },
 ];
 
-/** What a remittance file is, and where each distributor keeps it. */
-export function RemittanceFileGuide({ className }: { className?: string }) {
+/**
+ * What a remittance file is and where each distributor keeps it. Sentences, so it lives in the
+ * Import sheet's ⓘ popover.
+ */
+export function RemittanceFileGuide() {
   return (
-    <Card className={className}>
-      <CardHeader>
-        <div className="min-w-0">
-          <CardTitle>What a distributor sends</CardTitle>
-          <CardDescription>
-            A remittance advice: one row per invoice paid and per amount taken off it. The lines must add up to the payment, or it is held for review.
-          </CardDescription>
-        </div>
-      </CardHeader>
-      <div className="grid gap-0 lg:grid-cols-[1.2fr_1fr]">
-        <dl className="flex flex-col px-4 py-3">
-          {COLUMNS.map((c) => (
-            <div key={c.name} className="grid grid-cols-1 gap-x-4 rule-row py-1.5 sm:grid-cols-[13rem_1fr]">
-              <dt className="num text-xs break-words text-foreground">{c.name}</dt>
-              <dd className="text-xs text-muted-foreground">{c.note}</dd>
-            </div>
-          ))}
-        </dl>
-        <div className="flex flex-col gap-3 border-t border-border px-4 py-3 lg:border-t-0 lg:border-l">
-          <div>
-            <p className="eyebrow mb-1">KeHE</p>
-            <p className="text-xs leading-relaxed text-muted-foreground">
-              KeHE CONNECT Supplier → Deductions → export open <em>and</em> closed deductions at the deduction-detail level. A closed one that was won comes back later as a repayment line.
-            </p>
+    <div className="flex max-w-[340px] flex-col gap-2 text-sm">
+      <p>One row per invoice paid and per amount taken off it. The lines must add up to the payment, or it is held for review.</p>
+      <p>
+        <b>KeHE</b> — CONNECT Supplier → Deductions → export open and closed deductions at the deduction-detail level.
+      </p>
+      <p>
+        <b>UNFI</b> — myUNFI → Dispute Center → Advanced Search, status all, one region at a time, overlapping the last export by a week.
+      </p>
+      <p className="text-label2">CSV or XLSX, up to 950 KB. PDFs and EDI 820/812 are not read yet.</p>
+      <dl className="mt-1 flex flex-col">
+        {COLUMNS.map((c) => (
+          <div key={c.name} className="flex flex-col hairline-t py-1">
+            <dt className="num text-xs font-semibold">{c.name}</dt>
+            <dd className="text-xs text-label2">{c.note}</dd>
           </div>
-          <div>
-            <p className="eyebrow mb-1">UNFI</p>
-            <p className="text-xs leading-relaxed text-muted-foreground">
-              myUNFI → Dispute Center → Advanced Search, status all, one region at a time, overlapping the last export by a week. The 30-day Activity Center view misses rows.
-            </p>
-          </div>
-          <div>
-            <p className="eyebrow mb-1">Accepted</p>
-            <p className="text-xs leading-relaxed text-muted-foreground">CSV or XLSX, up to 950 KB. PDFs and EDI 820/812 files are not read yet.</p>
-          </div>
-        </div>
-      </div>
-    </Card>
+        ))}
+      </dl>
+    </div>
   );
 }

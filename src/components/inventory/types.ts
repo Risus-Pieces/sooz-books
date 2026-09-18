@@ -1,3 +1,6 @@
+import type { GlyphName } from "@/lib/ui/glyphs";
+import type { Tint } from "@/lib/ui/tints";
+
 /**
  * The shapes the inventory screens trade in. Plain, serialisable data: the
  * server reads the books into these, the client renders them and sends back
@@ -99,6 +102,30 @@ export const COMPONENT_KEYS: readonly CostComponentKey[] = [
   "other",
 ];
 
+/**
+ * One colour and one glyph per cost component, the same on every chart, legend and row. Ingredients
+ * and packaging use their category's colour (teal, brown) so a run's bar reads like the books.
+ */
+export const COMPONENT_STYLE: Record<CostComponentKey, { tint: Tint; glyph: GlyphName }> = {
+  tolling: { tint: "indigo", glyph: "wrench" },
+  ingredients: { tint: "teal", glyph: "leaf" },
+  packaging: { tint: "brown", glyph: "cube" },
+  freight_in: { tint: "cyan", glyph: "truck" },
+  duty: { tint: "gray", glyph: "shield" },
+  labor: { tint: "mint", glyph: "people" },
+  overhead: { tint: "purple", glyph: "building" },
+  other: { tint: "gray", glyph: "ellipsis" },
+};
+
+/** One colour and one glyph per stage of inventory. */
+export const STAGE_STYLE: Record<StageKey, { tint: Tint; glyph: GlyphName }> = {
+  raw: { tint: "teal", glyph: "leaf" },
+  packaging: { tint: "brown", glyph: "cube" },
+  wip: { tint: "orange", glyph: "hourglass" },
+  finished: { tint: "indigo", glyph: "tag" },
+  in_transit: { tint: "cyan", glyph: "truck" },
+};
+
 export const STAGE_LABELS: Record<StageKey, string> = {
   raw: "Raw ingredients",
   packaging: "Packaging",
@@ -121,6 +148,21 @@ export const REASON_LABELS: Record<AdjustmentReasonKey, string> = {
   rework: "Rework",
   revaluation: "Revaluation",
   opening_balance: "Opening balance",
+};
+
+/** Giveaways pink, losses red, corrections grey, the opening balance indigo (equity). */
+export const REASON_STYLE: Record<AdjustmentReasonKey, { tint: Tint; glyph: GlyphName }> = {
+  samples: { tint: "pink", glyph: "tag" },
+  demo: { tint: "pink", glyph: "megaphone" },
+  donation: { tint: "pink", glyph: "people" },
+  spoilage: { tint: "red", glyph: "trash" },
+  damage: { tint: "red", glyph: "warning" },
+  expiry: { tint: "red", glyph: "clock" },
+  theft: { tint: "red", glyph: "lock" },
+  count_variance: { tint: "gray", glyph: "list" },
+  rework: { tint: "gray", glyph: "refresh" },
+  revaluation: { tint: "gray", glyph: "dollar" },
+  opening_balance: { tint: "indigo", glyph: "book" },
 };
 
 /** The order reasons are offered in: the everyday ones first. */

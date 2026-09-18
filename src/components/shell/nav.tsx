@@ -1,11 +1,5 @@
-import {
-  BookOpen,
-  CalendarCheck,
-  ChartNoAxesColumn,
-  LayoutDashboard,
-  Settings,
-  type LucideIcon,
-} from "lucide-react";
+import type { GlyphName } from "@/lib/ui/glyphs";
+import type { Tint } from "@/lib/ui/tints";
 
 import { bankingNav } from "./modules/banking";
 import { channelsNav } from "./modules/channels";
@@ -14,12 +8,7 @@ import { planNav } from "./modules/plan";
 import { purchasesNav } from "./modules/purchases";
 import { salesNav } from "./modules/sales";
 import { tradeNav } from "./modules/trade";
-import type { NavModule } from "./modules/types";
-
-/** Only the modules whose pages have shipped reach the rail. */
-function shipped(...modules: NavModule[]): NavSection[] {
-  return modules.filter((m) => m.shipped).map((m) => m.section);
-}
+import type { NavGroupKey, NavModule } from "./modules/types";
 
 export interface NavLink {
   label: string;
@@ -27,73 +16,93 @@ export interface NavLink {
 }
 
 export interface NavSection {
+  /** One word, two at most. */
   label: string;
   href: string;
-  icon: LucideIcon;
+  /** The white glyph on the section's coloured rounded-square badge. */
+  glyph: GlyphName;
+  tint: Tint;
+  /** A live count shown at the trailing edge (the review queue). */
+  count?: "review";
+  /** Pages inside the section, listed under it while it is the current section. */
   children?: NavLink[];
 }
 
 export interface NavGroup {
-  /** Quiet heading that says what kind of work the sections below it are. */
+  key: "top" | NavGroupKey | "footer";
+  /** Quiet heading over the group. The first and footer groups have none. */
   label?: string;
   sections: NavSection[];
 }
 
-/** Remembers the rail's width across visits. Read on the server so the shell never resizes on load. */
+/** Remembers whether the desktop sidebar is shown. Read on the server so the shell never jumps. */
 export const NAV_COLLAPSE_COOKIE = "sooz-nav-collapsed";
 
+const MODULES: NavModule[] = [bankingNav, salesNav, purchasesNav, channelsNav, tradeNav, inventoryNav, planNav];
+
+function shipped(group: NavGroupKey): NavSection[] {
+  return MODULES.filter((m) => m.shipped && m.group === group).flatMap((m) => m.sections);
+}
+
+/** Home and Review: the two places the owner goes every day. */
+export const HOME: NavSection = { label: "Home", href: "/dashboard", glyph: "home", tint: "blue" };
+export const REVIEW: NavSection = {
+  label: "Review",
+  href: "/banking/review",
+  glyph: "tray",
+  tint: "orange",
+  count: "review",
+};
+export const REPORTS: NavSection = {
+  label: "Reports",
+  href: "/reports",
+  glyph: "chart",
+  tint: "purple",
+  children: [
+    { label: "P&L", href: "/reports/profit-loss" },
+    { label: "Balance Sheet", href: "/reports/balance-sheet" },
+    { label: "Trial Balance", href: "/reports/trial-balance" },
+    { label: "General Ledger", href: "/reports/general-ledger" },
+    { label: "Cash Flow", href: "/reports/cash-flow" },
+  ],
+};
+export const SETTINGS: NavSection = {
+  label: "Settings",
+  href: "/settings",
+  glyph: "gear",
+  tint: "gray",
+  children: [{ label: "Users", href: "/settings/users" }],
+};
+
 /**
- * Every href here must be a route that exists under `src/app/(app)`: the rail, the breadcrumbs and
- * the command palette all read this list, so a link to a module that has not shipped is a dead end
- * in three places at once. Each operating module owns its entry in ./modules/<module>.ts and flips
- * `shipped` in the same change that adds its pages.
+ * The sidebar, top to bottom: Home · Review · Banking · Business · Books · Settings. Every href must
+ * be a route under `src/app/(app)` — the sidebar, the phone's More list and search all read this list
+ * (nav.test.ts checks). Each operating module owns its rows in ./modules/<module>.ts.
  */
 const ALL_GROUPS: NavGroup[] = [
+  { key: "top", sections: [HOME, REVIEW] },
+  { key: "banking", label: "Banking", sections: shipped("banking") },
+  { key: "business", label: "Business", sections: shipped("business") },
   {
-    sections: [{ label: "Dashboard", href: "/dashboard", icon: LayoutDashboard }],
-  },
-  {
-    label: "Operations",
-    sections: shipped(bankingNav, salesNav, purchasesNav, channelsNav, tradeNav, inventoryNav),
-  },
-  {
+    key: "books",
     label: "Books",
     sections: [
       {
         label: "Ledger",
         href: "/ledger",
-        icon: BookOpen,
+        glyph: "book",
+        tint: "indigo",
         children: [
           { label: "Chart of Accounts", href: "/ledger/accounts" },
           { label: "Audit", href: "/ledger/audit" },
         ],
       },
-      {
-        label: "Reports",
-        href: "/reports",
-        icon: ChartNoAxesColumn,
-        children: [
-          { label: "P&L", href: "/reports/profit-loss" },
-          { label: "Balance Sheet", href: "/reports/balance-sheet" },
-          { label: "Trial Balance", href: "/reports/trial-balance" },
-          { label: "General Ledger", href: "/reports/general-ledger" },
-          { label: "Cash Flow", href: "/reports/cash-flow" },
-        ],
-      },
-      { label: "Close", href: "/close", icon: CalendarCheck },
-      ...shipped(planNav),
+      REPORTS,
+      { label: "Close", href: "/close", glyph: "lock", tint: "gray" },
+      ...shipped("books"),
     ],
   },
-  {
-    sections: [
-      {
-        label: "Settings",
-        href: "/settings",
-        icon: Settings,
-        children: [{ label: "Users", href: "/settings/users" }],
-      },
-    ],
-  },
+  { key: "footer", sections: [SETTINGS] },
 ];
 
 /** A group whose modules have not shipped yet would render as an orphaned heading. */
@@ -105,7 +114,34 @@ export function isRouteActive(pathname: string, href: string): boolean {
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
-/** Label for a path, used by breadcrumbs and search. Falls back to a title-cased segment. */
+/**
+ * The one section the sidebar selects for a path: the longest href that contains it, so
+ * /banking/review selects Review rather than Accounts. Child links count toward their section
+ * (/reports/margin is listed under Inventory).
+ */
+export function activeSectionHref(pathname: string): string | null {
+  let best: { href: string; length: number } | null = null;
+  for (const section of NAV_SECTIONS) {
+    const candidates = [section.href, ...(section.children ?? []).map((c) => c.href)];
+    for (const href of candidates) {
+      if (isRouteActive(pathname, href) && (best === null || href.length > best.length)) {
+        best = { href: section.href, length: href.length };
+      }
+    }
+  }
+  return best?.href ?? null;
+}
+
+/** The child link the path is on, if any: the longest match. */
+export function activeChildHref(pathname: string, section: NavSection): string | null {
+  let best: string | null = null;
+  for (const child of section.children ?? []) {
+    if (isRouteActive(pathname, child.href) && (best === null || child.href.length > best.length)) best = child.href;
+  }
+  return best;
+}
+
+/** Label for a path, used by breadcrumbs and search. */
 export function labelForPath(href: string): string | null {
   for (const section of NAV_SECTIONS) {
     if (section.href === href) return section.label;

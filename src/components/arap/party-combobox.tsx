@@ -1,7 +1,6 @@
 "use client";
 
 import * as React from "react";
-import { Check, ChevronsUpDown } from "lucide-react";
 
 import {
   Command,
@@ -11,6 +10,8 @@ import {
   CommandItem,
   CommandList,
 } from "@/components/ui/command";
+import { Glyph } from "@/components/ui/glyph";
+import { fieldBase, fieldInvalid } from "@/components/ui/menu-styles";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/cn";
 
@@ -54,17 +55,18 @@ export function PartyCombobox({
         disabled={disabled}
         aria-invalid={invalid || undefined}
         className={cn(
-          "flex h-8 w-full items-center justify-between gap-1.5 rounded-sm border max-sm:h-10 border-border-strong bg-surface-raised px-2.5 text-sm text-foreground transition-colors data-[state=open]:border-ring disabled:cursor-not-allowed disabled:bg-muted disabled:text-muted-foreground",
-          invalid && "border-negative",
+          fieldBase,
+          "flex items-center justify-between gap-1.5 pr-1.5 text-left font-medium data-[state=open]:shadow-[0_0_0_3px_color-mix(in_srgb,var(--blue)_45%,transparent),0_0_0_0.5px_var(--blue)]",
+          invalid && fieldInvalid,
           className,
         )}
       >
         {selected ? (
           <span className="truncate">{selected.name}</span>
         ) : (
-          <span className="text-muted-foreground/80">{placeholder}</span>
+          <span className="font-normal text-label2">{placeholder}</span>
         )}
-        <ChevronsUpDown className="size-3 shrink-0 text-muted-foreground" />
+        <Glyph name="chevron-updown" size={13} weight={2.2} className="shrink-0 text-label2" />
       </PopoverTrigger>
       <PopoverContent className="w-[min(24rem,calc(100vw-2rem))] p-0" align="start">
         <Command>
@@ -83,8 +85,8 @@ export function PartyCombobox({
                   className="gap-2"
                 >
                   <span className="min-w-0 flex-1 truncate">{option.name}</span>
-                  {option.note ? <span className="num shrink-0 text-2xs text-muted-foreground">{option.note}</span> : null}
-                  {option.id === value ? <Check className="size-3.5 !text-primary" /> : null}
+                  {option.note ? <span className="num shrink-0 text-2xs opacity-70">{option.note}</span> : null}
+                  {option.id === value ? <Glyph name="check" size={13} weight={2.2} /> : null}
                 </CommandItem>
               ))}
             </CommandGroup>

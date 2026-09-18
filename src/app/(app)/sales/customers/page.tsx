@@ -1,8 +1,6 @@
 import type { Metadata } from 'next';
 
 import { CustomerTable } from '@/components/arap/customer-table';
-import { Badge } from '@/components/ui/badge';
-import { PageHeader } from '@/components/ui/page-header';
 import { can } from '@/lib/auth/roles';
 import { requireUser } from '@/lib/auth/session';
 
@@ -14,17 +12,8 @@ type SearchParams = Record<string, string | string[] | undefined>;
 
 export default async function CustomersPage({ searchParams }: { searchParams: Promise<SearchParams> }) {
   const [user, raw] = await Promise.all([requireUser('/sales/customers'), searchParams]);
-  const [rows, channels] = await Promise.all([customerRows(), salesChannelOptions()]);
+  const rows = await customerRows();
+  const channels = await salesChannelOptions();
 
-  return (
-    <div className="flex flex-col gap-5">
-      <PageHeader
-        eyebrow="Sales"
-        title="Customers"
-        description="Who you invoice, on what terms, and which sales channel their revenue reports under."
-        meta={<Badge tone="neutral">{rows.filter((r) => r.active).length} active</Badge>}
-      />
-      <CustomerTable rows={rows} channels={channels} canManage={can(user.role, 'ar.manage')} openNew={raw.new === '1'} />
-    </div>
-  );
+  return <CustomerTable rows={rows} channels={channels} canManage={can(user.role, 'ar.manage')} openNew={raw.new === '1'} />;
 }

@@ -1,19 +1,23 @@
 import type { Metadata } from "next";
+import type { ReactNode } from "react";
 import Link from "next/link";
-import { CalendarPlus, Upload } from "lucide-react";
 
-import { DeductionTable } from "@/components/trade/deduction-table";
+import { CategoryBars, SplitBar } from "@/components/charts";
 import { longDate, percent } from "@/components/trade/labels";
-import { Table, TableScroll, Td, Th } from "@/components/trade/parts";
-import { RemittanceFileGuide, TradeWorkflow } from "@/components/trade/workflow";
-import { Button } from "@/components/ui/button";
-import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Money, formatCents } from "@/components/ui/money";
-import { PageHeader } from "@/components/ui/page-header";
-import { StatTile } from "@/components/ui/stat-tile";
+import { DeadlineTimeline } from "@/components/trade/parts";
+import { TradeWorkflow } from "@/components/trade/workflow";
+import { PageToolbar } from "@/components/shell/page-toolbar";
+import { Glyph } from "@/components/ui/glyph";
+import { IconBadge, LegendItem } from "@/components/ui/icon-badge";
+import { InfoButton } from "@/components/ui/info-button";
+import { Money } from "@/components/ui/money";
+import { ToolbarGroup, ToolbarLink } from "@/components/ui/toolbar";
 import { can } from "@/lib/auth/roles";
 import { requireUser } from "@/lib/auth/session";
 import { cn } from "@/lib/cn";
+import { dollars } from "@/lib/ui/format";
+import type { GlyphName } from "@/lib/ui/glyphs";
+import type { Tint } from "@/lib/ui/tints";
 
 import { tradeOverview } from "./queries";
 
@@ -21,222 +25,207 @@ export const metadata: Metadata = {
   title: "Trade",
 };
 
+const AGE_TINTS: Tint[] = ["blue", "teal", "orange", "red", "pink"];
+
 /**
- * Trade spend at a glance: what promotions and deductions cost against gross sales, what is
- * still sitting in Deductions Receivable, which disputes are running out of window, and how
- * close each promotion's accrual came to what the distributor actually took.
+ * Trade spend at a glance: what promotions and deductions cost against gross sales, what is still
+ * in Deductions Receivable, which disputes are running out of window, and how close each
+ * promotion's accrual came to what the distributor actually took.
  */
 export default async function TradePage() {
   const user = await requireUser("/trade");
   const data = await tradeOverview(user.id);
   const canManage = can(user.role, "trade.manage");
   const quiet = data.promotionCount === 0 && data.remittanceCount === 0;
-  const maxBucket = Math.max(1, ...data.buckets.map((b) => b.cents));
   const next = data.nearDeadline[0] ?? null;
   const variance = data.accrualVarianceCents;
+  const nothingAccrued = data.accruedCents === 0 && data.actualCents === 0;
 
   return (
-    <div className="flex flex-col gap-5">
-      <PageHeader
-        eyebrow="Trade"
-        title="Trade spend"
-        description={`Promotions, distributor deductions and the accruals behind them, ${longDate(data.from)} to date.`}
+    <div className="flex flex-col gap-3.5 max-md:gap-3">
+      <PageToolbar
+        title="Trade"
+        subtitle={`Since ${longDate(data.from)}`}
+        info={<p>Promotions, distributor deductions and the accruals behind them, {longDate(data.from)} to date.</p>}
         actions={
           canManage ? (
-            <>
-              <Button asChild size="sm" variant="secondary">
-                <Link href="/trade/promotions/new">
-                  <CalendarPlus />
-                  New promotion
-                </Link>
-              </Button>
-              <Button asChild size="sm">
-                <Link href="/trade/remittances">
-                  <Upload />
-                  Import remittance
-                </Link>
-              </Button>
-            </>
-          ) : null
+            <ToolbarGroup>
+              <ToolbarLink href="/trade/promotions/new" glyph="plus" label="New promotion" />
+              <ToolbarLink href="/trade/remittances#import" glyph="import" label="Import remittance" />
+            </ToolbarGroup>
+          ) : undefined
         }
       />
 
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <StatTile
-          label="Trade rate"
-          value={percent(data.tradeSpendRatio)}
-          hint="of gross sales"
-          footer={
-            data.grossSalesCents === 0 ? (
-              "No customer-tagged sales posted this year."
-            ) : (
-              <span>
-                <Money cents={data.tradeSpendCents} currency plain className="text-xs" /> spent on{" "}
-                <Money cents={data.grossSalesCents} currency plain className="text-xs" /> gross.
-              </span>
-            )
-          }
-        />
-        <StatTile
-          label="Open deductions"
-          value={<Money cents={data.openReceivableCents} currency plain />}
-          hint={`${data.openCount} in 1210`}
-          footer={
-            data.openCount === 0 ? (
-              "Nothing waiting in Deductions Receivable."
-            ) : (
-              <span>
-                <Money cents={data.unappliedCents} plain className="text-xs" /> unclassified.{" "}
-                <Link href="/trade/deductions" className="text-primary hover:underline">
-                  Workbench
-                </Link>
-              </span>
-            )
-          }
-        />
-        <StatTile
-          label="Disputes near deadline"
-          value={<span className={cn("num", data.nearDeadline.length > 0 && "text-warning")}>{data.nearDeadline.length}</span>}
-          hint="≥ 60% of window"
-          footer={
-            next === null
-              ? "No dispute window is running short."
-              : `Next: ${next.deductionNo}, ${next.daysToDeadline !== null && next.daysToDeadline < 0 ? "missed" : "due"} ${longDate(next.disputeDeadline)}.`
-          }
-        />
-        <StatTile
-          label="Accrual vs actual"
-          value={data.accruedCents === 0 && data.actualCents === 0 ? "—" : formatCents(variance, { currency: true, signed: true })}
-          delta={data.accrualVarianceRatio === null ? undefined : percent(data.accrualVarianceRatio)}
-          deltaTone={variance > 0 ? "negative" : variance < 0 ? "positive" : "neutral"}
-          deltaLabel={data.accrualVarianceRatio === null ? undefined : variance > 0 ? "under-accrued" : "over-accrued"}
-          footer={
-            data.accruedCents === 0 && data.actualCents === 0 ? (
-              "Nothing accrued or deducted against a promotion yet."
-            ) : (
-              <span>
-                <Money cents={data.accruedCents} plain className="text-xs" /> accrued,{" "}
-                <Money cents={data.actualCents} plain className="text-xs" /> taken.
-              </span>
-            )
-          }
-        />
+      <div className="grid grid-cols-2 gap-3.5 max-md:gap-3 lg:grid-cols-4">
+        <Tile href="/trade/promotions" glyph="percent" tint="cyan" label="Trade rate" cap="of gross">
+          <Figure>{percent(data.tradeSpendRatio)}</Figure>
+          <div className="mt-auto flex flex-col gap-1.5">
+            <SplitBar
+              label={`Trade spend ${dollars(data.tradeSpendCents)} of gross sales ${dollars(data.grossSalesCents)}`}
+              segments={[
+                { label: "Trade spend", value: data.tradeSpendCents, tint: "cyan" },
+                { label: "Gross sales", value: Math.max(0, data.grossSalesCents - data.tradeSpendCents), tint: "green", muted: true },
+              ]}
+            />
+            <p className="truncate text-xs font-medium text-label2">
+              <Money cents={data.tradeSpendCents} currency plain whole /> of <Money cents={data.grossSalesCents} currency plain whole />
+            </p>
+          </div>
+        </Tile>
+        <Tile href="/trade/deductions" glyph="flag" tint="orange" label="Open" cap={`${data.openCount} in 1210`}>
+          <Figure>
+            <Money cents={data.openReceivableCents} currency plain />
+          </Figure>
+          <div className="mt-auto flex flex-col gap-1.5">
+            <SplitBar
+              label={data.buckets.map((b) => `${b.label} days ${dollars(b.cents)}`).join(", ")}
+              segments={data.buckets.map((b, i) => ({ label: b.label, value: b.cents, tint: AGE_TINTS[i % AGE_TINTS.length] }))}
+            />
+            <p className="truncate text-xs font-medium text-label2">
+              <Money cents={data.unappliedCents} currency plain whole /> unclassified
+            </p>
+          </div>
+        </Tile>
+        <Tile href="/trade/deductions" glyph="clock" tint={data.nearDeadline.length > 0 ? "red" : "gray"} label="Deadlines" cap="≥ 60%">
+          <Figure className={data.nearDeadline.length > 0 ? "text-ink-orange" : undefined}>{data.nearDeadline.length}</Figure>
+          <p className="mt-auto truncate text-xs font-medium text-label2">
+            {next === null
+              ? "None running short"
+              : `${next.deductionNo} · ${next.daysToDeadline !== null && next.daysToDeadline < 0 ? "missed" : "due"} ${longDate(next.disputeDeadline)}`}
+          </p>
+        </Tile>
+        <Tile href="/trade/promotions" glyph="split" tint={variance > 0 ? "red" : "green"} label="Accrual" cap="vs taken">
+          <Figure className={variance > 0 ? "text-ink-red" : undefined}>
+            {nothingAccrued ? "—" : <Money cents={variance} currency signed plain />}
+          </Figure>
+          <div className="mt-auto flex flex-col gap-1.5">
+            <SplitBar
+              label={`Accrued ${dollars(data.accruedCents)}, taken ${dollars(data.actualCents)}`}
+              segments={[
+                { label: "Accrued", value: data.accruedCents, tint: "cyan" },
+                { label: "Taken", value: data.actualCents, tint: "orange" },
+              ]}
+            />
+            <p className="truncate text-xs font-medium text-label2">{data.accrualVarianceRatio === null ? "Nothing accrued" : `${percent(data.accrualVarianceRatio)} ${variance > 0 ? "under" : "over"}`}</p>
+          </div>
+        </Tile>
       </div>
 
       {quiet ? (
-        <>
-          <TradeWorkflow />
-          <RemittanceFileGuide />
-        </>
+        <TradeWorkflow />
       ) : (
         <>
-          <Card>
-            <CardHeader>
-              <div className="min-w-0">
-                <CardTitle>Dispute windows running out</CardTitle>
-                <CardDescription>Open deductions past 60% of their window. Past 80% they escalate; past the deadline only a write-off or a recovery is left.</CardDescription>
+          <section aria-labelledby="running-out" className="rounded-2xl bg-card px-5 pt-[18px] pb-4 shadow-card max-md:rounded-[22px] max-md:p-4">
+            <div className="mb-3 flex flex-wrap items-center gap-x-3 gap-y-1">
+              <h2 id="running-out" className="flex flex-1 items-center gap-1 text-lg font-semibold tracking-[-0.01em]">
+                Running out
+                <InfoButton label="About dispute windows" align="start">
+                  <p>Open deductions past 60% of their window. Past 80% they escalate; past the deadline only a write-off or a recovery is left.</p>
+                </InfoButton>
+              </h2>
+              <div className="flex gap-3.5">
+                <LegendItem tint="orange">60%</LegendItem>
+                <LegendItem tint="red">80%</LegendItem>
               </div>
-              <Button asChild size="sm" variant="secondary">
-                <Link href="/trade/deductions">All deductions</Link>
-              </Button>
-            </CardHeader>
-            <DeductionTable rows={data.nearDeadline} compact empty="No open deduction is past 60% of its dispute window." />
-          </Card>
+              <Link href="/trade/deductions" aria-label="All deductions" className="grid size-6 place-items-center rounded-full text-label3 hover:text-label2">
+                <Glyph name="chevron-right" size={14} weight={2.2} />
+              </Link>
+            </div>
+            {data.nearDeadline.length === 0 ? (
+              <p className="py-6 text-center text-sm text-label2">Nothing running short</p>
+            ) : (
+              <DeadlineTimeline
+                items={data.nearDeadline.map((r) => ({ id: r.id, label: r.deductionNo, daysToDeadline: r.daysToDeadline ?? 0, alert: r.alert, cents: r.openCents }))}
+              />
+            )}
+          </section>
 
-          <div className="grid items-start gap-4 lg:grid-cols-[2fr_3fr]">
-            <Card>
-              <CardHeader>
-                <div className="min-w-0">
-                  <CardTitle>Deductions receivable by age</CardTitle>
-                  <CardDescription>Days since the distributor took it, as of {longDate(data.asOf)}.</CardDescription>
-                </div>
-              </CardHeader>
-              <dl className="flex flex-col gap-2 px-4 py-3">
-                {data.buckets.map((b) => (
-                  <div key={b.label} className="grid grid-cols-[4.5rem_1fr_6.5rem] items-center gap-3">
-                    <dt className="num text-xs text-muted-foreground">{b.label}d</dt>
-                    <div className="h-2 rounded-xs bg-muted">
-                      <div className="h-full rounded-xs bg-warning/70" style={{ width: `${(b.cents / maxBucket) * 100}%` }} />
-                    </div>
-                    <dd className="text-right text-sm">
-                      <Money cents={b.cents} plain zeroDash />
-                    </dd>
+          <div className="grid items-start gap-3.5 max-md:gap-3 lg:grid-cols-[2fr_3fr]">
+            <section aria-labelledby="by-age" className="rounded-2xl bg-card px-5 pt-[18px] pb-3 shadow-card max-md:rounded-[22px] max-md:p-4">
+              <h2 id="by-age" className="mb-1 text-lg font-semibold tracking-[-0.01em]">
+                By age
+              </h2>
+              <CategoryBars rows={data.buckets.map((b, i) => ({ key: b.label, label: `${b.label} days`, tint: AGE_TINTS[i % AGE_TINTS.length], cents: b.cents, href: "/trade/deductions" }))} />
+              <dl className="mt-3 grid grid-cols-2 overflow-hidden rounded-[11px] bg-inset">
+                {[
+                  { label: "Deduction rate", value: percent(data.deductionRate) },
+                  { label: "Recovery", value: `${percent(data.recoveryRate)} · ${data.casesClosed}` },
+                  { label: "Days to deduct", value: `${data.daysToDeduction.p50Days ?? "—"} · p90 ${data.daysToDeduction.p90Days ?? "—"}` },
+                  { label: "Win rate", value: percent(data.winRate) },
+                ].map((f, i) => (
+                  <div key={f.label} className={cn("px-3 py-2", i % 2 === 1 && "hairline-l", i >= 2 && "hairline-t")}>
+                    <dt className="text-2xs font-semibold text-label2">{f.label}</dt>
+                    <dd className="num text-sm font-semibold">{f.value}</dd>
                   </div>
                 ))}
               </dl>
-              <dl className="grid grid-cols-2 gap-x-4 gap-y-2 border-t border-border px-4 py-3 text-xs">
-                <div>
-                  <dt className="eyebrow">Deduction rate</dt>
-                  <dd className="num text-sm text-foreground">{percent(data.deductionRate)}</dd>
-                </div>
-                <div>
-                  <dt className="eyebrow">Recovery rate</dt>
-                  <dd className="num text-sm text-foreground">
-                    {percent(data.recoveryRate)} <span className="text-2xs text-muted-foreground">{data.casesClosed} closed</span>
-                  </dd>
-                </div>
-                <div>
-                  <dt className="eyebrow">Days to deduction</dt>
-                  <dd className="num text-sm text-foreground">
-                    {data.daysToDeduction.p50Days ?? "—"}
-                    <span className="text-2xs text-muted-foreground"> median · p90 {data.daysToDeduction.p90Days ?? "—"}</span>
-                  </dd>
-                </div>
-                <div>
-                  <dt className="eyebrow">Dispute win rate</dt>
-                  <dd className="num text-sm text-foreground">{percent(data.winRate)}</dd>
-                </div>
-              </dl>
-            </Card>
+            </section>
 
-            <Card>
-              <CardHeader>
-                <div className="min-w-0">
-                  <CardTitle>Accrual vs actual, by promotion</CardTitle>
-                  <CardDescription>Positive means the distributor took more than was accrued: a margin surprise.</CardDescription>
+            <section aria-labelledby="variance" className="rounded-2xl bg-card px-5 pt-[18px] pb-3 shadow-card max-md:rounded-[22px] max-md:p-4">
+              <div className="mb-2 flex flex-wrap items-center gap-x-3 gap-y-1">
+                <h2 id="variance" className="flex flex-1 items-center gap-1 text-lg font-semibold tracking-[-0.01em]">
+                  Accrued vs taken
+                  <InfoButton label="About the variance" align="start">
+                    <p>Positive means the distributor took more than was accrued: a margin surprise.</p>
+                  </InfoButton>
+                </h2>
+                <div className="flex gap-3.5">
+                  <LegendItem tint="cyan">Accrued</LegendItem>
+                  <LegendItem tint="orange">Taken</LegendItem>
                 </div>
-              </CardHeader>
+              </div>
               {data.variances.length === 0 ? (
-                <p className="px-4 py-8 text-center text-xs text-muted-foreground">No promotion has an accrual or a deduction yet.</p>
+                <p className="py-6 text-center text-sm text-label2">Nothing accrued yet</p>
               ) : (
-                <TableScroll>
-                  <Table caption="Accrual variance by promotion" className="min-w-[30rem]">
-                    <thead>
-                      <tr>
-                        <Th>Promotion</Th>
-                        <Th align="right">Accrued</Th>
-                        <Th align="right">Taken</Th>
-                        <Th align="right">Variance</Th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {data.variances.map((v) => (
-                        <tr key={v.promotionId} className="rule-row">
-                          <Td>
-                            <Link href={`/trade/promotions/${v.promotionId}`} className="text-primary hover:underline">
-                              {v.name}
-                            </Link>
-                          </Td>
-                          <Td align="right">
-                            <Money cents={v.accruedCents} plain />
-                          </Td>
-                          <Td align="right">
-                            <Money cents={v.actualCents} plain />
-                          </Td>
-                          <Td align="right">
-                            <Money cents={v.varianceCents} signed className={v.varianceCents > 0 ? "text-negative" : undefined} plain={v.varianceCents <= 0} />
-                            <span className="num ml-1.5 text-2xs text-muted-foreground">{percent(v.varianceRatio)}</span>
-                          </Td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </Table>
-                </TableScroll>
+                <ul className="flex flex-col">
+                  {data.variances.map((v, index) => {
+                    const max = Math.max(1, v.accruedCents, v.actualCents);
+                    return (
+                      <li key={v.promotionId} className={cn(index > 0 && "hairline-t")}>
+                        <Link href={`/trade/promotions/${v.promotionId}`} className="block rounded-[6px] py-2 outline-none focus-ring hover:opacity-80 focus-visible:bg-fill2">
+                          <span className="flex items-baseline gap-2">
+                            <span className="min-w-0 flex-1 truncate text-sm font-semibold">{v.name}</span>
+                            <Money cents={v.varianceCents} currency signed plain className={cn("text-sm font-semibold", v.varianceCents > 0 && "text-ink-red")} />
+                            <span className="num text-2xs text-label2">{percent(v.varianceRatio)}</span>
+                          </span>
+                          <span aria-hidden className="mt-1.5 flex flex-col gap-1">
+                            <span className="block h-1 rounded-[2px] bg-tint-cyan" style={{ width: `${Math.max(0.6, (v.accruedCents / max) * 100)}%` }} />
+                            <span className="block h-1 rounded-[2px] bg-tint-orange" style={{ width: `${Math.max(0.6, (v.actualCents / max) * 100)}%` }} />
+                          </span>
+                          <span className="sr-only">
+                            Accrued {dollars(v.accruedCents)}, taken {dollars(v.actualCents)}
+                          </span>
+                        </Link>
+                      </li>
+                    );
+                  })}
+                </ul>
               )}
-            </Card>
+            </section>
           </div>
         </>
       )}
     </div>
   );
+}
+
+function Tile({ href, glyph, tint, label, cap, children }: { href: string; glyph: GlyphName; tint: Tint; label: string; cap?: string; children: ReactNode }) {
+  return (
+    <Link
+      href={href}
+      className="flex min-h-[148px] min-w-0 flex-col gap-2 rounded-2xl bg-card px-[18px] py-4 shadow-card transition-shadow outline-none hover:shadow-glass focus-visible:ring-2 focus-visible:ring-tint-blue max-md:min-h-[136px] max-md:rounded-[22px] max-md:p-3.5"
+    >
+      <span className="flex min-w-0 items-center gap-2 text-sm font-semibold">
+        <IconBadge glyph={glyph} tint={tint} />
+        <span className="truncate">{label}</span>
+        {cap ? <span className="ml-auto shrink-0 rounded-[6px] bg-fill2 px-[7px] py-0.5 text-2xs font-semibold text-label2 max-sm:hidden">{cap}</span> : null}
+      </span>
+      {children}
+    </Link>
+  );
+}
+
+function Figure({ children, className }: { children: ReactNode; className?: string }) {
+  return <span className={cn("num block text-3xl leading-[1.1] font-bold tracking-[-0.028em] max-md:text-2xl", className)}>{children}</span>;
 }

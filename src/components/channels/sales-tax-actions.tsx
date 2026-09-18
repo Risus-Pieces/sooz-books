@@ -2,9 +2,10 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { FileCheck2, Landmark } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { Glyph } from "@/components/ui/glyph";
+import { ToolbarButton } from "@/components/ui/toolbar";
 import { DateInput, todayIso } from "@/components/ui/date-input";
 import {
   Dialog,
@@ -42,6 +43,7 @@ export function FileReturnButton({
   owedCents,
   variant = "secondary",
   label = "File return",
+  appearance = "button",
 }: {
   state: string;
   /** First day of the month the return covers, when filing from a row. */
@@ -49,6 +51,8 @@ export function FileReturnButton({
   owedCents: number | null;
   variant?: "default" | "secondary";
   label?: string;
+  /** `toolbar` — an icon button in the page toolbar. */
+  appearance?: "button" | "toolbar";
 }) {
   const router = useRouter();
   const [open, setOpen] = React.useState(false);
@@ -75,10 +79,14 @@ export function FileReturnButton({
 
   return (
     <>
-      <Button variant={variant} size="sm" onClick={() => setOpen(true)}>
-        <FileCheck2 />
-        {label}
-      </Button>
+      {appearance === "toolbar" ? (
+        <ToolbarButton glyph="doc-text" label={label} onClick={() => setOpen(true)} />
+      ) : (
+        <Button variant={variant} size="sm" onClick={() => setOpen(true)}>
+          <Glyph name="doc-text" />
+          {label}
+        </Button>
+      )}
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent size="sm">
           <DialogHeader>
@@ -167,9 +175,9 @@ export function PayReturnButton({ filing, banks }: { filing: FilingView; banks: 
 
   return (
     <>
-      <Button size="sm" variant="secondary" onClick={() => setOpen(true)} disabled={banks.length === 0}>
-        <Landmark />
-        Record payment
+      <Button size="sm" variant="secondary" onClick={() => setOpen(true)} disabled={banks.length === 0} aria-label={`Record payment, ${filing.state} return`}>
+        <Glyph name="bank" />
+        Pay
       </Button>
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent size="sm">

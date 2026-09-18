@@ -1,8 +1,6 @@
-"use client";
-
 import * as React from "react";
-import { ArrowRight } from "lucide-react";
 
+import { Glyph } from "@/components/ui/glyph";
 import { formatCents } from "@/components/ui/money";
 import { cn } from "@/lib/cn";
 
@@ -44,7 +42,7 @@ const LABELS: Readonly<Record<string, string>> = {
   full_name: "Name",
 };
 
-function label(key: string): string {
+export function auditFieldLabel(key: string): string {
   const known = LABELS[key];
   if (known !== undefined) return known;
   const words = key.replace(/_/g, " ");
@@ -121,31 +119,31 @@ export interface AuditDiffProps {
 }
 
 export function AuditDiff({ op, before, after, className }: AuditDiffProps) {
-  const changes = React.useMemo(() => auditChanges(op, before, after), [op, before, after]);
+  const changes = auditChanges(op, before, after);
 
   if (changes.length === 0) {
-    return <p className={cn("text-xs text-muted-foreground", className)}>No field changed.</p>;
+    return <p className={cn("text-xs text-label2", className)}>No field changed.</p>;
   }
 
   return (
     <dl className={cn("grid gap-x-3 gap-y-1 sm:grid-cols-[10rem_1fr]", className)}>
       {changes.map((change) => (
         <React.Fragment key={change.key}>
-          <dt className="text-xs text-muted-foreground">{label(change.key)}</dt>
+          <dt className="text-xs text-label2">{auditFieldLabel(change.key)}</dt>
           <dd className="flex min-w-0 flex-wrap items-center gap-1.5 text-xs">
             {op === "UPDATE" ? (
               <>
-                <span className="num text-muted-foreground line-through decoration-muted-foreground/60">
+                <span className="num text-label2 line-through decoration-label3">
                   {render(change.key, change.before)}
                 </span>
-                <ArrowRight className="size-3 shrink-0 text-muted-foreground" aria-label="becomes" />
-                <span className="num break-all text-foreground">{render(change.key, change.after)}</span>
+                <Glyph name="arrow-right" size={12} className="shrink-0 text-label2" label="becomes" />
+                <span className="num break-all text-label">{render(change.key, change.after)}</span>
               </>
             ) : (
               <span
                 className={cn(
                   "num break-all",
-                  op === "DELETE" ? "text-muted-foreground line-through" : "text-foreground",
+                  op === "DELETE" ? "text-label2 line-through" : "text-label",
                 )}
               >
                 {render(change.key, op === "DELETE" ? change.before : change.after)}

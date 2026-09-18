@@ -1,9 +1,8 @@
-"use client";
-
 import * as React from "react";
-import { Bar, BarChart, CartesianGrid, Cell, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 
-import { formatCents } from "@/components/ui/money";
+import { Money } from "@/components/ui/money";
+import { cn } from "@/lib/cn";
+import { dollars } from "@/lib/ui/format";
 import { formatBasisPoints } from "@/lib/reports/types";
 
 export interface MarginPoint {
@@ -13,70 +12,55 @@ export interface MarginPoint {
   grossMarginBps: number;
 }
 
-interface TipProps {
-  active?: boolean;
-  payload?: ReadonlyArray<{ payload: MarginPoint }>;
-}
-
-function Tip({ active, payload }: TipProps) {
-  const point = active ? payload?.[0]?.payload : undefined;
-  if (!point) return null;
-  return (
-    <div className="rounded-sm border border-border-strong bg-surface-raised px-2.5 py-1.5 text-xs shadow-overlay">
-      <p className="mb-1 font-semibold text-foreground">{point.label}</p>
-      <p className="flex justify-between gap-4 text-muted-foreground">
-        Net sales <span className="num text-foreground">{formatCents(point.netSalesCents, { currency: true })}</span>
-      </p>
-      <p className="flex justify-between gap-4 text-muted-foreground">
-        Gross margin <span className="num text-foreground">{formatCents(point.grossMarginCents, { currency: true })}</span>
-      </p>
-      <p className="flex justify-between gap-4 text-muted-foreground">
-        GM % <span className="num text-foreground">{formatBasisPoints(point.grossMarginBps)}</span>
-      </p>
-    </div>
-  );
-}
-
 /**
- * Gross margin dollars by row, largest sellers first, as horizontal bars so long
- * SKU and channel names stay legible on a phone. One series, so no legend: a
- * bar in the negative colour is a row that lost money on every sale.
+ * Gross margin by row, largest sellers first: each row's net sales as a bar on one scale, split
+ * into what it kept (green, the margin) and what the goods cost (grey, COGS). A row that lost money
+ * draws its margin in red. The margin percentage sits at the end of the row.
  */
 export function MarginChart({ data }: { data: readonly MarginPoint[] }) {
-  const points = React.useMemo(() => [...data], [data]);
-  const height = Math.max(120, points.length * 30 + 36);
-
+  const max = Math.max(1, ...data.map((p) => Math.abs(p.netSalesCents)));
   return (
-    <div className="w-full" style={{ height }}>
-      <ResponsiveContainer width="100%" height="100%">
-        <BarChart data={points} layout="vertical" margin={{ top: 4, right: 16, bottom: 4, left: 4 }} barCategoryGap={8}>
-          <CartesianGrid strokeDasharray="2 4" stroke="var(--border)" horizontal={false} />
-          <XAxis
-            type="number"
-            tickLine={false}
-            axisLine={{ stroke: "var(--border-strong)" }}
-            tick={{ fontSize: 11, fill: "var(--muted-foreground)" }}
-            tickFormatter={(cents: number) => formatCents(cents).replace(/\.00$/, "")}
-            allowDecimals={false}
-          />
-          <YAxis
-            type="category"
-            dataKey="label"
-            width={132}
-            tickLine={false}
-            axisLine={false}
-            tick={{ fontSize: 11, fill: "var(--muted-foreground)" }}
-            tickFormatter={(label: string) => (label.length > 20 ? `${label.slice(0, 19)}…` : label)}
-          />
-          <Tooltip cursor={{ fill: "var(--muted)" }} content={<Tip />} />
-          <ReferenceLine x={0} stroke="var(--border-strong)" />
-          <Bar dataKey="grossMarginCents" radius={[0, 3, 3, 0]} maxBarSize={18} isAnimationActive={false}>
-            {points.map((point) => (
-              <Cell key={point.label} fill={point.grossMarginCents < 0 ? "var(--negative)" : "var(--primary)"} />
-            ))}
-          </Bar>
-        </BarChart>
-      </ResponsiveContainer>
-    </div>
+    <ul className="flex flex-col">
+      {data.map((p, i) => {
+        const sales = Math.max(0, p.netSalesCents);
+        const cogs = Math.max(0, p.netSalesCents - p.grossMarginCents);
+        const kept = Math.max(0, p.grossMarginCents);
+        const loss = p.grossMarginCents < 0;
+        const width = Math.max(1.5, (Math.max(sales, cogs) / max) * 100);
+        return (
+          <li
+            key={p.label}
+            className={cn("grid grid-cols-[minmax(0,9rem)_minmax(0,1fr)_auto] items-center gap-x-4 gap-y-1 py-2 max-sm:grid-cols-[minmax(0,1fr)_auto]", i > 0 && "hairline-t")}
+          >
+            <span className="truncate text-sm font-medium" title={p.label}>
+              {p.label}
+            </span>
+            <span
+              role="img"
+              aria-label={`${p.label}: net sales ${dollars(p.netSalesCents)}, gross margin ${dollars(p.grossMarginCents)}`}
+              className="block h-2.5 max-sm:order-last max-sm:col-span-2"
+            >
+              <span className="flex h-full gap-[2px]" style={{ width: `${width}%` }}>
+                {kept > 0 ? <i className="block h-full min-w-[3px] rounded-l-full bg-tint-green" style={{ flex: `${kept} 1 0%` }} /> : null}
+                {cogs > 0 ? (
+                  <i
+                    className={cn("block h-full min-w-[3px] rounded-r-full", loss ? "rounded-l-full bg-tint-red" : "bg-label3", kept === 0 && "rounded-l-full")}
+                    style={{ flex: `${cogs} 1 0%` }}
+                  />
+                ) : kept > 0 ? null : (
+                  <i className="block h-full w-full rounded-full bg-fill2" />
+                )}
+              </span>
+            </span>
+            <span className="flex items-baseline gap-2 text-right">
+              <Money cents={p.grossMarginCents} currency plain className={cn("text-sm font-semibold", loss && "text-ink-red")} />
+              <span className={cn("num w-14 text-xs font-medium", loss ? "text-ink-red" : "text-label2")}>
+                {p.netSalesCents === 0 ? "—" : formatBasisPoints(p.grossMarginBps)}
+              </span>
+            </span>
+          </li>
+        );
+      })}
+    </ul>
   );
 }

@@ -1,13 +1,13 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
-import { HandCoins } from 'lucide-react';
 
 import { ReceiptRegister } from '@/components/arap/registers';
-import { Badge } from '@/components/ui/badge';
+import { PageToolbar } from '@/components/shell/page-toolbar';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { EmptyState } from '@/components/ui/empty-state';
-import { PageHeader } from '@/components/ui/page-header';
+import { Money } from '@/components/ui/money';
+import { ToolbarGroup, ToolbarLink } from '@/components/ui/toolbar';
 import { can } from '@/lib/auth/roles';
 import { requireUser } from '@/lib/auth/session';
 
@@ -18,43 +18,62 @@ export const metadata: Metadata = { title: 'Receipts' };
 export default async function ReceiptsPage() {
   const [user, rows] = await Promise.all([requireUser('/sales/receipts'), receiptList()]);
   const canManage = can(user.role, 'ar.manage');
+  const live = rows.filter((r) => !r.void);
+  const receivedCents = live.reduce((s, r) => s + r.amountCents, 0);
+  const creditCents = live.reduce((s, r) => s + r.amountCents - r.appliedCents, 0);
 
   return (
-    <div className="flex flex-col gap-5">
-      <PageHeader
-        eyebrow="Sales"
+    <div className="flex flex-col gap-3.5 max-md:gap-3">
+      <PageToolbar
         title="Receipts"
-        description="Money customers sent, and which invoices it paid. Anything not applied stays on their account as a credit."
-        meta={<Badge tone="neutral">{rows.length}</Badge>}
+        subtitle={
+          rows.length > 0 ? (
+            <>
+              {rows.length} · <Money cents={receivedCents} currency plain />
+            </>
+          ) : undefined
+        }
+        info={
+          <p>
+            Money customers sent, and which invoices it paid. Anything not applied stays on their account as a credit.
+            A deposit that shows up in the bank review can be matched to its invoice there instead.
+          </p>
+        }
         actions={
           canManage ? (
-            <Button asChild size="sm">
-              <Link href="/sales/receipts/new">
-                <HandCoins />
-                Record receipt
-              </Link>
-            </Button>
-          ) : null
+            <ToolbarGroup>
+              <ToolbarLink href="/sales/receipts/new" glyph="plus" label="Record receipt" />
+            </ToolbarGroup>
+          ) : undefined
         }
       />
-      <Card>
-        {rows.length === 0 ? (
+      {rows.length === 0 ? (
+        <Card>
           <EmptyState
-            icon={<HandCoins />}
-            title="No customer payments recorded"
-            description="When a restaurant or shop pays an invoice by check, ACH or wire, record it here and tick the invoices it covers — an early-payment discount their terms allow is taken automatically. A deposit that shows up in the bank review can be matched to its invoice there instead."
+            glyph="arrow-in"
+            title="No payments yet"
+            description="When a restaurant or shop pays an invoice by check, ACH or wire, record it here and tick the invoices it covers; an early-payment discount their terms allow is taken automatically."
             action={
               canManage ? (
-                <Button asChild size="sm">
-                  <Link href="/sales/receipts/new">Record a receipt</Link>
+                <Button asChild>
+                  <Link href="/sales/receipts/new">Record receipt</Link>
                 </Button>
               ) : undefined
             }
           />
-        ) : (
-          <ReceiptRegister rows={rows} />
-        )}
-      </Card>
+        </Card>
+      ) : (
+        <ReceiptRegister
+          rows={rows}
+          footer={
+            creditCents > 0 ? (
+              <>
+                <Money cents={creditCents} currency plain /> held as customer credit
+              </>
+            ) : undefined
+          }
+        />
+      )}
     </div>
   );
 }

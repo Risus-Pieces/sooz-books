@@ -2,26 +2,22 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { CheckCheck, Printer, Send } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { Glyph } from "@/components/ui/glyph";
 import { toast } from "@/components/ui/toast";
+import { ToolbarButton } from "@/components/ui/toolbar";
 
 import type { ActionResult, DocRef } from "./types";
 
 /** Opens the browser's print dialog; the invoice sheet's print stylesheet does the rest. */
-export function PrintButton({ label = "Print / PDF" }: { label?: string }) {
-  return (
-    <Button variant="secondary" size="sm" onClick={() => window.print()}>
-      <Printer />
-      {label}
-    </Button>
-  );
+export function PrintButton({ label = "Print or save PDF" }: { label?: string }) {
+  return <ToolbarButton glyph="printer" label={label} shortcut="⌘P" onClick={() => window.print()} />;
 }
 
 /**
- * The one-click step that takes a draft into the ledger: issuing an invoice or
- * approving a bill. It posts, so it says so before it does.
+ * The one-click step that takes a draft into the ledger: issuing an invoice or approving a bill.
+ * It posts, so it says so before it does.
  */
 export function PostDocButton({
   label,
@@ -41,7 +37,6 @@ export function PostDocButton({
   const [pending, start] = React.useTransition();
   return (
     <Button
-      size="sm"
       disabled={pending}
       onClick={() => {
         if (!window.confirm(confirmText)) return;
@@ -56,7 +51,7 @@ export function PostDocButton({
         });
       }}
     >
-      {icon === "send" ? <Send /> : <CheckCheck />}
+      <Glyph name={icon === "send" ? "arrow-out" : "check"} size={15} weight={2} />
       {label}
     </Button>
   );

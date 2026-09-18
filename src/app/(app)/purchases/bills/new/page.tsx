@@ -1,9 +1,6 @@
 import type { Metadata } from 'next';
-import Link from 'next/link';
 
 import { BillFormView } from '@/components/arap/bill-form';
-import { Button } from '@/components/ui/button';
-import { PageHeader } from '@/components/ui/page-header';
 import { can } from '@/lib/auth/roles';
 import { requireUser } from '@/lib/auth/session';
 import { today } from '@/lib/dates';
@@ -24,18 +21,12 @@ export default async function NewBillPage({ searchParams }: { searchParams: Prom
   const canManage = can(user.role, 'ap.manage');
 
   return (
-    <div className="flex flex-col gap-5">
-      <PageHeader
-        eyebrow="Purchases"
-        title="New bill"
-        description="Copy the vendor's invoice: their number, date and lines. Save a draft to check later, or approve it to post."
-        actions={
-          <Button asChild variant="ghost" size="sm">
-            <Link href="/purchases/bills">Back to bills</Link>
-          </Button>
-        }
-      />
-      <BillFormView
+    <BillFormView
+        toolbar={{
+          title: 'New bill',
+          back: { href: '/purchases/bills', label: 'Bills' },
+          info: <p>Copy the vendor&rsquo;s invoice: their number, date and lines. Save a draft to check later, or approve it to post.</p>,
+        }}
         billId={null}
         vendors={vendors}
         accounts={billLineAccounts(accounts)}
@@ -54,6 +45,5 @@ export default async function NewBillPage({ searchParams }: { searchParams: Prom
         canManage={canManage}
         canApprove={canManage}
       />
-    </div>
   );
 }

@@ -2,7 +2,6 @@ import type { Metadata } from 'next';
 import { redirect } from 'next/navigation';
 import { asc } from 'drizzle-orm';
 import { formatDistanceToNowStrict } from 'date-fns';
-import { AlertCircle, CheckCircle2, ShieldOff, UserPlus } from 'lucide-react';
 
 import { db, sql } from '@/db/client';
 import { appUsers } from '@/db/schema';
@@ -17,14 +16,19 @@ import { ROLE_DESCRIPTIONS, ROLE_LABELS, can } from '@/lib/auth/roles';
 import { requireUser } from '@/lib/auth/session';
 import { hasAdminAccess, createAdminClient } from '@/lib/supabase/server';
 import { APP_ROLES, type AppRole, type Result } from '@/lib/types';
-import { Badge } from '@/components/ui/badge';
+import { PageToolbar } from '@/components/shell/page-toolbar';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { EmptyState } from '@/components/ui/empty-state';
-import { Input, inputBase } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { PageHeader } from '@/components/ui/page-header';
+import { Glyph } from '@/components/ui/glyph';
+import { InfoButton } from '@/components/ui/info-button';
+import { InsetGroup, ListRow } from '@/components/ui/inset-group';
+import { Monogram } from '@/components/ui/monogram';
+import { Pill } from '@/components/ui/pill';
+import { ToolbarGroup } from '@/components/ui/toolbar';
 import { cn } from '@/lib/cn';
+
+import { PaneBody, ROLE_TONE, SettingsSplit, paneFor } from '../_components/settings-split';
+import { InviteSheet, PersonRow, type PersonView } from '../_components/users-ui';
 
 export const metadata: Metadata = {
   title: 'Users',
@@ -32,24 +36,28 @@ export const metadata: Metadata = {
 
 type SearchParams = Record<string, string | string[] | undefined>;
 
+const ROLE_OPTIONS = APP_ROLES.map((role) => ({ value: role, label: ROLE_LABELS[role] }));
+
 export default async function UsersSettingsPage({
   searchParams,
 }: {
   searchParams: Promise<SearchParams>;
 }) {
   const [viewer, params] = await Promise.all([requireUser(), searchParams]);
+  const pane = paneFor('users');
 
   if (!can(viewer.role, 'users.manage')) {
     return (
-      <div className="flex flex-col gap-5">
-        <PageHeader eyebrow="Settings" title="Users" />
-        <Card>
+      <div className="flex flex-col gap-3.5 max-md:gap-3">
+        <PageToolbar title={pane.label} back={{ href: '/settings', label: 'Settings' }} phoneTitleRow />
+        <SettingsSplit current="users" paneOpen companyName={await companyName()}>
           <EmptyState
-            icon={<ShieldOff />}
-            title="Only an owner can manage access"
-            description="Ask an owner of these books to invite someone or change a role."
+            glyph="lock"
+            title="Owners only"
+            description="Only an owner can invite someone or change a role. Ask an owner of these books."
+            className="py-24"
           />
-        </Card>
+        </SettingsSplit>
       </div>
     );
   }
@@ -69,182 +77,116 @@ export default async function UsersSettingsPage({
     pendingInvites(),
     lastSignInByUser(),
   ]);
+  const company = await companyName();
 
   const activeOwners = people.filter((p) => p.role === 'owner' && p.active).length;
+  const activeCount = people.filter((p) => p.active).length;
+  const ok = first(params.ok);
+  const error = first(params.error);
+  // A new answer remounts the rows and the invite sheet, which closes whichever sheet sent it.
+  const noticeKey = ok ?? error ?? '';
+
+  const views: PersonView[] = people.map((person) => ({
+    id: person.id,
+    name: person.fullName ?? person.email,
+    email: person.email,
+    role: person.role,
+    roleLabel: ROLE_LABELS[person.role],
+    active: person.active,
+    isYou: person.id === viewer.id,
+    isLastOwner: person.role === 'owner' && person.active && activeOwners === 1,
+    lastSignIn: lastSignIn === null ? '—' : since(lastSignIn.get(person.id) ?? null),
+    added: person.createdAt.toISOString().slice(0, 10),
+  }));
 
   return (
-    <div className="flex flex-col gap-5">
-      <PageHeader
-        eyebrow="Settings"
-        title="Users"
-        description="Who can open these books, and what each of them may do."
-        meta={
-          <Badge tone="neutral">
-            {people.length} {people.length === 1 ? 'account' : 'accounts'}
-          </Badge>
+    <div className="flex flex-col gap-3.5 max-md:gap-3">
+      <PageToolbar
+        title={pane.label}
+        subtitle={`${people.length} ${people.length === 1 ? 'account' : 'accounts'}`}
+        back={{ href: '/settings', label: 'Settings' }}
+        phoneTitleRow
+        info="Who can open these books, and what each of them may do. A role takes effect on the next request; nobody has to sign in again."
+        actions={
+          <ToolbarGroup>
+            <InviteSheet key={`invite-${noticeKey}`} invite={invite} roleOptions={ROLE_OPTIONS} emailSent={hasAdminAccess()} />
+          </ToolbarGroup>
         }
       />
 
-      <Notice ok={first(params.ok)} error={first(params.error)} />
+      <SettingsSplit current="users" paneOpen companyName={company} extras={{ users: String(activeCount) }}>
+        <PaneBody>
+          <Notice ok={ok} error={error} />
 
-      <InviteCard />
+          <RoleBar people={views} />
 
-      <Card>
-        <CardHeader>
-          <div>
-            <CardTitle>Accounts</CardTitle>
-            <CardDescription>
-              A role takes effect on the next request — nobody has to sign in again.
-            </CardDescription>
-          </div>
-        </CardHeader>
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-3xl border-collapse text-sm">
-            <thead>
-              <tr className="rule-head text-left">
-                <Th>Person</Th>
-                <Th>Role</Th>
-                <Th>Last sign-in</Th>
-                <Th>Added</Th>
-                <Th className="text-right">Access</Th>
-              </tr>
-            </thead>
-            <tbody>
-              {people.map((person) => {
-                const isLastOwner = person.role === 'owner' && person.active && activeOwners === 1;
-                return (
-                  <tr key={person.id} className="rule-row align-middle">
-                    <Td>
-                      <div className="flex flex-col leading-tight">
-                        <span className="font-medium text-foreground">
-                          {person.fullName ?? person.email}
-                          {person.id === viewer.id ? (
-                            <span className="ml-1.5 text-2xs font-normal text-muted-foreground">
-                              (you)
-                            </span>
-                          ) : null}
-                        </span>
-                        <span className="text-xs text-muted-foreground">{person.email}</span>
-                      </div>
-                    </Td>
-                    <Td>
-                      <form action={changeRole} className="flex items-center gap-1.5">
-                        <input type="hidden" name="userId" value={person.id} />
-                        <RoleSelect name="role" defaultValue={person.role} />
-                        <Button type="submit" variant="secondary" size="sm">
-                          Save
-                        </Button>
-                      </form>
-                      {isLastOwner ? (
-                        <p className="mt-1 text-2xs text-muted-foreground">
-                          The only owner — promote someone else first.
-                        </p>
-                      ) : null}
-                    </Td>
-                    <Td className="num text-xs text-muted-foreground">
-                      {lastSignIn === null ? (
-                        <span title="Requires SUPABASE_SERVICE_ROLE_KEY">—</span>
-                      ) : (
-                        since(lastSignIn.get(person.id) ?? null)
-                      )}
-                    </Td>
-                    <Td className="num text-xs text-muted-foreground">
-                      {person.createdAt.toISOString().slice(0, 10)}
-                    </Td>
-                    <Td className="text-right">
-                      {person.active ? (
-                        <form action={switchOff} className="inline-flex items-center gap-2">
-                          <input type="hidden" name="userId" value={person.id} />
-                          <Badge tone="positive">Active</Badge>
-                          <Button
-                            type="submit"
-                            variant="danger-quiet"
-                            size="sm"
-                            disabled={person.id === viewer.id || isLastOwner}
-                          >
-                            Switch off
-                          </Button>
-                        </form>
-                      ) : (
-                        <form action={switchOn} className="inline-flex items-center gap-2">
-                          <input type="hidden" name="userId" value={person.id} />
-                          <Badge tone="neutral">Off</Badge>
-                          <Button type="submit" variant="secondary" size="sm">
-                            Switch on
-                          </Button>
-                        </form>
-                      )}
-                    </Td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      </Card>
+          <InsetGroup
+            header="People"
+            separatorInset={63}
+            headerAccessory={
+              <InfoButton label="About roles" title="Roles">
+                {APP_ROLES.map((role) => (
+                  <p key={role}>
+                    <span className="font-semibold">{ROLE_LABELS[role]}</span> · {ROLE_DESCRIPTIONS[role]}
+                  </p>
+                ))}
+              </InfoButton>
+            }
+          >
+            {views.map((person) => (
+              <PersonRow
+                key={`${person.id}-${noticeKey}`}
+                person={person}
+                roleOptions={ROLE_OPTIONS}
+                changeRole={changeRole}
+                switchOff={switchOff}
+                switchOn={switchOn}
+              />
+            ))}
+          </InsetGroup>
 
-      {invites.length > 0 ? (
-        <Card>
-          <CardHeader>
-            <div>
-              <CardTitle>Invitations not yet accepted</CardTitle>
-              <CardDescription>
-                The role is applied the moment that address signs up.
-              </CardDescription>
-            </div>
-          </CardHeader>
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-xl border-collapse text-sm">
-              <thead>
-                <tr className="rule-head text-left">
-                  <Th>Email</Th>
-                  <Th>Role</Th>
-                  <Th>Invited</Th>
-                  <Th className="text-right" />
-                </tr>
-              </thead>
-              <tbody>
-                {invites.map((invite) => (
-                  <tr key={invite.id} className="rule-row align-middle">
-                    <Td className="font-medium text-foreground">{invite.email}</Td>
-                    <Td>
-                      <Badge tone="outline">{ROLE_LABELS[invite.role]}</Badge>
-                    </Td>
-                    <Td className="num text-xs text-muted-foreground">
-                      {since(invite.invitedAt)}
-                      {invite.invitedByEmail ? ` · by ${invite.invitedByEmail}` : ''}
-                    </Td>
-                    <Td className="text-right">
+          <InsetGroup
+            header="Invites"
+            separatorInset={63}
+            headerAccessory={
+              <InfoButton label="About invites">The role is applied the moment that address signs up.</InfoButton>
+            }
+          >
+            {invites.length === 0 ? (
+              <div className="flex min-h-[64px] items-center justify-center gap-2 px-4 text-sm text-label2">
+                <Glyph name="mail" size={16} className="text-label3" />
+                No open invites
+              </div>
+            ) : (
+              invites.map((pending) => (
+                <ListRow
+                  key={pending.id}
+                  leading={<Monogram name={pending.email} className="opacity-70" />}
+                  title={pending.email}
+                  subtitle={
+                    <>
+                      <Glyph name="clock" size={12} />
+                      {since(pending.invitedAt)}
+                      {pending.invitedByEmail ? ` · ${pending.invitedByEmail}` : ''}
+                    </>
+                  }
+                  trailing={
+                    <span className="flex items-center gap-2">
+                      <Pill tone={ROLE_TONE[pending.role]}>{ROLE_LABELS[pending.role]}</Pill>
                       <form action={withdrawInvite}>
-                        <input type="hidden" name="inviteId" value={invite.id} />
-                        <Button type="submit" variant="ghost" size="sm">
+                        <input type="hidden" name="inviteId" value={pending.id} />
+                        <Button type="submit" variant="ghost" size="sm" aria-label={`Withdraw invite for ${pending.email}`}>
                           Withdraw
                         </Button>
                       </form>
-                    </Td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </Card>
-      ) : null}
-
-      <Card>
-        <CardHeader>
-          <CardTitle>What each role may do</CardTitle>
-        </CardHeader>
-        <CardContent className="grid gap-3 sm:grid-cols-2">
-          {APP_ROLES.map((role) => (
-            <div key={role} className="flex flex-col gap-0.5">
-              <span className="text-sm font-semibold text-foreground">{ROLE_LABELS[role]}</span>
-              <span className="text-xs leading-relaxed text-muted-foreground">
-                {ROLE_DESCRIPTIONS[role]}
-              </span>
-            </div>
-          ))}
-        </CardContent>
-      </Card>
+                    </span>
+                  }
+                />
+              ))
+            )}
+          </InsetGroup>
+        </PaneBody>
+      </SettingsSplit>
     </div>
   );
 }
@@ -306,6 +248,11 @@ interface PendingInvite {
   invitedByEmail: string | null;
 }
 
+async function companyName(): Promise<string> {
+  const rows = await sql<Array<{ companyName: string }>>`select company_name as "companyName" from app_settings limit 1`;
+  return rows[0]?.companyName ?? 'Sooz Beverage LLC';
+}
+
 async function pendingInvites(): Promise<PendingInvite[]> {
   const rows = await sql<PendingInvite[]>`
     select i.id,
@@ -341,101 +288,57 @@ async function lastSignInByUser(): Promise<Map<string, string | null> | null> {
 // Pieces
 // ---------------------------------------------------------------------------
 
-function InviteCard() {
+/** The team at a glance: one segment per active person, coloured by role. */
+function RoleBar({ people }: { people: PersonView[] }) {
+  const active = people.filter((p) => p.active);
+  const counts = APP_ROLES.map((role) => ({ role, count: active.filter((p) => p.role === role).length })).filter(
+    (r) => r.count > 0,
+  );
+  if (active.length === 0) return null;
   return (
-    <Card>
-      <CardHeader>
-        <div>
-          <CardTitle>Invite someone</CardTitle>
-          <CardDescription>
-            {hasAdminAccess()
-              ? 'They receive an email, set a password, and arrive with the role you choose.'
-              : 'No SUPABASE_SERVICE_ROLE_KEY is set, so no email goes out — they sign up with this address and the role is applied for them.'}
-          </CardDescription>
-        </div>
-      </CardHeader>
-      <CardContent>
-        <form action={invite} className="flex flex-wrap items-end gap-3">
-          <div className="flex min-w-56 flex-1 flex-col gap-1.5">
-            <Label htmlFor="invite-email" required>
-              Email
-            </Label>
-            <Input
-              id="invite-email"
-              name="email"
-              type="email"
-              required
-              placeholder="name@example.com"
-            />
-          </div>
-          <div className="flex w-44 flex-col gap-1.5">
-            <Label htmlFor="invite-role">Role</Label>
-            <RoleSelect id="invite-role" name="role" defaultValue="viewer" />
-          </div>
-          <Button type="submit">
-            <UserPlus />
-            Send invitation
-          </Button>
-        </form>
-      </CardContent>
-    </Card>
+    <div className="flex flex-col gap-2 rounded-[14px] bg-card px-4 py-3.5 shadow-card">
+      <div className="flex h-2 gap-[3px] overflow-hidden rounded-full" role="img" aria-label={counts.map((r) => `${r.count} ${ROLE_LABELS[r.role]}`).join(', ')}>
+        {counts.map((r) => (
+          <span key={r.role} className={cn('h-full rounded-full', ROLE_BAR[r.role])} style={{ flexGrow: r.count }} />
+        ))}
+      </div>
+      <div className="flex flex-wrap gap-x-4 gap-y-1">
+        {counts.map((r) => (
+          <span key={r.role} className="inline-flex items-center gap-1.5 text-xs font-medium text-label2">
+            <span aria-hidden className={cn('size-2 rounded-[2.5px]', ROLE_BAR[r.role])} />
+            {ROLE_LABELS[r.role]}
+            <span className="num font-semibold text-label">{r.count}</span>
+          </span>
+        ))}
+      </div>
+    </div>
   );
 }
 
-function RoleSelect({
-  id,
-  name,
-  defaultValue,
-}: {
-  id?: string;
-  name: string;
-  defaultValue: AppRole;
-}) {
-  // A native select, so the page needs no client JavaScript at all.
-  return (
-    <select id={id} name={name} defaultValue={defaultValue} className={cn(inputBase, 'pr-1.5')}>
-      {APP_ROLES.map((role) => (
-        <option key={role} value={role}>
-          {ROLE_LABELS[role]}
-        </option>
-      ))}
-    </select>
-  );
-}
+const ROLE_BAR: Record<AppRole, string> = {
+  owner: 'bg-tint-purple',
+  bookkeeper: 'bg-tint-blue',
+  approver: 'bg-tint-orange',
+  viewer: 'bg-tint-gray',
+};
 
 function Notice({ ok, error }: { ok?: string; error?: string }) {
   const message = ok ?? error;
   if (!message) return null;
-
   const positive = Boolean(ok);
-  const Icon = positive ? CheckCircle2 : AlertCircle;
-
   return (
     <p
       role="status"
-      className={cn(
-        'flex items-start gap-2 rounded-sm border px-3 py-2 text-xs leading-relaxed',
-        positive
-          ? 'border-positive/35 bg-positive/8 text-foreground'
-          : 'border-negative/35 bg-negative/8 text-foreground',
-      )}
+      className="flex items-center gap-2.5 rounded-[12px] bg-card px-4 py-3 text-sm font-medium shadow-card"
     >
-      <Icon className={cn('mt-px size-3.5 shrink-0', positive ? 'text-positive' : 'text-negative')} />
+      <Glyph
+        name={positive ? 'check-circle' : 'warning'}
+        size={18}
+        className={cn('shrink-0', positive ? 'text-tint-green' : 'text-tint-red')}
+      />
       {message}
     </p>
   );
-}
-
-function Th({ className, children }: { className?: string; children?: React.ReactNode }) {
-  return (
-    <th scope="col" className={cn('px-4 py-2 text-2xs font-semibold tracking-wide text-muted-foreground uppercase', className)}>
-      {children}
-    </th>
-  );
-}
-
-function Td({ className, children }: { className?: string; children?: React.ReactNode }) {
-  return <td className={cn('px-4 py-3', className)}>{children}</td>;
 }
 
 function since(iso: string | null): string {

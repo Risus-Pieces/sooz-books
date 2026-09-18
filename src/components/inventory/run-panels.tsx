@@ -3,11 +3,10 @@
 import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Calculator, FileText, Layers, PackageOpen, Trash2, Undo2 } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card } from "@/components/ui/card";
 import { DateInput } from "@/components/ui/date-input";
 import {
   Dialog,
@@ -19,6 +18,10 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { EmptyState } from "@/components/ui/empty-state";
+import { Glyph } from "@/components/ui/glyph";
+import { Dot, IconBadge } from "@/components/ui/icon-badge";
+import { InfoButton } from "@/components/ui/info-button";
+import { ToolbarButton } from "@/components/ui/toolbar";
 import { Input } from "@/components/ui/input";
 import { formatCents, Money } from "@/components/ui/money";
 import { toast } from "@/components/ui/toast";
@@ -35,9 +38,10 @@ import {
 import type { OpenBillLine, OpenRunOption, RunDetail } from "@/app/(app)/inventory/queries";
 
 import { EntryPreview } from "./entry-preview";
+import { StackBar } from "./stack-bar";
 import { Field, NativeSelect, Segmented } from "./fields";
 import { Table, TableScroll, Td, Th } from "./table";
-import { COMPONENT_KEYS, COMPONENT_LABELS, formatUnits, type CostComponentKey } from "./types";
+import { COMPONENT_KEYS, COMPONENT_LABELS, COMPONENT_STYLE, formatUnits, type CostComponentKey } from "./types";
 
 function unitsText(hundredths: number): string {
   return hundredths === 0 ? "" : formatUnits(hundredths).replaceAll(",", "");
@@ -77,25 +81,25 @@ export function RecordOutputButton({ run }: { run: RunDetail }) {
 
   return (
     <>
-      <Button size="sm" variant={run.goodUnits === 0 ? "default" : "secondary"} onClick={() => setOpen(true)}>
-        <PackageOpen />
-        {run.goodUnits === 0 ? "Record output" : "Edit output"}
-      </Button>
+      <ToolbarButton
+        glyph={run.goodUnits === 0 ? "check" : "pencil"}
+        label={run.goodUnits === 0 ? "Record output" : "Edit output"}
+        showLabel={run.goodUnits === 0}
+        tone={run.goodUnits === 0 ? "accent" : "default"}
+        onClick={() => setOpen(true)}
+      />
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent size="sm">
           <form onSubmit={submit} className="flex min-h-0 flex-col">
             <DialogHeader>
               <DialogTitle>Output of {run.runNo}</DialogTitle>
-              <DialogDescription>
-                From the co-packer’s yield report. Rejected units carry no cost of their own: their share is spread over
-                the good units.
-              </DialogDescription>
+              <DialogDescription>From the co-packer’s yield report.</DialogDescription>
             </DialogHeader>
             <DialogBody className="grid grid-cols-2 gap-3">
-              <Field id="out-produced" label="Units produced" required hint={run.product.unit}>
+              <Field id="out-produced" label="Produced" required hint={run.product.unit}>
                 <Input id="out-produced" value={produced} onChange={(e) => setProduced(e.target.value)} numeric inputMode="decimal" autoFocus />
               </Field>
-              <Field id="out-rejected" label="Units rejected" hint={run.product.unit}>
+              <Field id="out-rejected" label="Rejected" hint={run.product.unit} note="Their cost spreads over the good units.">
                 <Input id="out-rejected" value={rejected} onChange={(e) => setRejected(e.target.value)} numeric inputMode="decimal" placeholder="0" />
               </Field>
             </DialogBody>
@@ -117,8 +121,8 @@ export function RecordOutputButton({ run }: { run: RunDetail }) {
 /* ----------------------------------------------------------------- costing */
 
 /**
- * The unit cost the run will strike and the entry that moves its value into
- * Finished Goods, shown in full before the button that posts it.
+ * The unit cost the run will strike, split by component, and the entry that moves its value into
+ * Finished Goods — drawn as a flow before the button that posts it.
  */
 export function CostingCard({ run, canManage }: { run: RunDetail; canManage: boolean }) {
   const router = useRouter();
@@ -142,54 +146,59 @@ export function CostingCard({ run, canManage }: { run: RunDetail; canManage: boo
 
   return (
     <Card className="min-w-0 overflow-hidden">
-      <CardHeader>
-        <CardTitle>Unit cost</CardTitle>
-        {preview ? (
-          <span className="text-xs text-muted-foreground">
-            <Money cents={preview.totalCents} currency plain /> over {formatUnits(preview.goodUnits)} good units
-          </span>
-        ) : null}
-      </CardHeader>
+      <div className="flex items-center gap-2 px-5 pt-[18px] max-sm:px-4 max-sm:pt-4">
+        <h2 className="flex-1 text-lg font-semibold tracking-[-0.01em]">Costing</h2>
+        <InfoButton label="About costing">
+          <p>Costing strikes the unit cost — landed cost over good units — and posts one entry that moves the run’s value out of the accounts it sits in and into Finished Goods (1310).</p>
+          <p>Any rounding goes to 5050 Co-Man Variance, so Finished Goods holds exactly the unit cost times the good units.</p>
+        </InfoButton>
+      </div>
       {preview === null ? (
-        <p className="px-4 py-6 text-sm text-muted-foreground">{run.previewBlocker}</p>
+        <p className="flex items-center gap-2 px-5 pt-3 pb-6 text-sm font-medium text-label2 max-sm:px-4">
+          <Glyph name="hourglass" size={16} />
+          {run.previewBlocker}
+        </p>
       ) : (
         <>
-          <div className="grid lg:grid-cols-[2fr_3fr]">
-            <div className="flex min-w-0 flex-col">
-              <ComponentBreakdown
-                unitCostCents={preview.unitCostCents}
-                rows={preview.components.map((c) => ({ component: c.component, perUnitCents: c.perUnitCents, totalCents: c.totalCents }))}
-              />
-              {preview.roundingVarianceCents !== 0 ? (
-                <p className="border-t border-border px-4 py-2 text-2xs leading-relaxed text-muted-foreground">
-                  <Money cents={preview.roundingVarianceCents} signed plain /> of rounding goes to 5050 Co-Man Variance, so
-                  Finished Goods holds exactly the unit cost times the good units and empties to the cent as they ship.
-                </p>
-              ) : null}
-            </div>
-            <div className="min-w-0 border-t border-border lg:border-t-0 lg:border-l">
-              <p className="eyebrow px-3 pt-3">Entry costing will post</p>
-              <EntryPreview entry={{ ...preview.entry, date }} caption="Costing entry" />
-            </div>
+          <div className="px-5 pt-3 pb-4 max-sm:px-4">
+            <ComponentBreakdown
+              unitCostCents={preview.unitCostCents}
+              caption={
+                <>
+                  <Money cents={preview.totalCents} currency plain /> ÷ <span className="num">{formatUnits(preview.goodUnits)}</span> good
+                  units
+                  {preview.roundingVarianceCents !== 0 ? (
+                    <>
+                      {" · "}
+                      <Money cents={preview.roundingVarianceCents} signed plain /> rounding
+                    </>
+                  ) : null}
+                </>
+              }
+              rows={preview.components.map((c) => ({ component: c.component, perUnitCents: c.perUnitCents, totalCents: c.totalCents }))}
+            />
+          </div>
+          <div className="hairline-t">
+            <EntryPreview entry={{ ...preview.entry, date }} caption="Costing entry" className="pt-1" />
           </div>
           {canManage ? (
-            <div className="flex flex-wrap items-end justify-between gap-3 border-t border-border bg-surface-sunken/40 px-4 py-3">
-              <Field id="cost-date" label="Costing date" note="The unit cost takes effect on this date.">
+            <div className="flex flex-wrap items-center justify-between gap-3 hairline-t bg-inset px-5 py-3 max-sm:px-4">
+              <label htmlFor="cost-date" className="flex items-center gap-3 text-sm font-medium">
+                Effective
                 <DateInput id="cost-date" value={date} onValueChange={setDate} />
-              </Field>
+              </label>
               {confirming ? (
                 <div className="flex flex-wrap items-center gap-2">
-                  <span className="text-xs text-muted-foreground">Post this entry?</span>
-                  <Button size="sm" variant="ghost" disabled={pending} onClick={() => setConfirming(false)}>
+                  <Button variant="ghost" disabled={pending} onClick={() => setConfirming(false)}>
                     Cancel
                   </Button>
-                  <Button size="sm" disabled={pending} onClick={cost}>
+                  <Button disabled={pending} onClick={cost}>
                     Post and cost {run.runNo}
                   </Button>
                 </div>
               ) : (
-                <Button size="sm" onClick={() => setConfirming(true)}>
-                  <Calculator />
+                <Button onClick={() => setConfirming(true)}>
+                  <Glyph name="check" />
                   Cost this run
                 </Button>
               )}
@@ -201,77 +210,56 @@ export function CostingCard({ run, canManage }: { run: RunDetail; canManage: boo
   );
 }
 
+/**
+ * The unit cost as one stacked bar by component, then the components as rows: dot, name, run total,
+ * per unit and share. The bar is the chart; the rows are its legend.
+ */
 export function ComponentBreakdown({
   unitCostCents,
   rows,
+  caption,
 }: {
   unitCostCents: number;
   rows: ReadonlyArray<{ component: CostComponentKey; perUnitCents: number; totalCents?: number }>;
+  caption?: React.ReactNode;
 }) {
   const showTotals = rows.some((r) => r.totalCents !== undefined);
   return (
     <div className="flex flex-col">
-      <div className="flex h-2 w-full overflow-hidden bg-muted" role="img" aria-label="Unit cost by component">
-        {rows.map((r, index) => (
-          <span
-            key={r.component}
-            className={cn("h-full", ["bg-primary/80", "bg-info/70", "bg-warning/70", "bg-positive/60", "bg-border-strong"][index % 5])}
-            style={{ width: unitCostCents > 0 ? `${(r.perUnitCents / unitCostCents) * 100}%` : "0%" }}
-          />
-        ))}
+      <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+        <Money cents={unitCostCents} currency plain className="text-3xl leading-tight font-bold tracking-[-0.028em]" />
+        <span className="text-sm font-medium text-label2">a unit</span>
+        {caption ? <span className="ml-auto text-xs font-medium text-label2">{caption}</span> : null}
       </div>
-      <TableScroll>
-        <Table caption="Unit cost by component" className="min-w-[22rem]">
-          <thead>
-            <tr>
-              <Th>Component</Th>
-              {showTotals ? <Th align="right">Run total</Th> : null}
-              <Th align="right">Per unit</Th>
-              <Th align="right" className="w-20">
-                Share
-              </Th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((r, index) => (
-              <tr key={r.component} className="rule-row">
-                <Td>
-                  <span className="flex items-center gap-2">
-                    <span
-                      aria-hidden
-                      className={cn("size-2 rounded-[1px]", ["bg-primary/80", "bg-info/70", "bg-warning/70", "bg-positive/60", "bg-border-strong"][index % 5])}
-                    />
-                    {COMPONENT_LABELS[r.component]}
-                  </span>
-                </Td>
-                {showTotals ? (
-                  <Td align="right">
-                    <Money cents={r.totalCents ?? 0} plain />
-                  </Td>
-                ) : null}
-                <Td align="right">
-                  <Money cents={r.perUnitCents} plain />
-                </Td>
-                <Td align="right" className="num text-muted-foreground">
-                  {unitCostCents > 0 ? `${((r.perUnitCents / unitCostCents) * 100).toFixed(1)}%` : "—"}
-                </Td>
-              </tr>
-            ))}
-            <tr className="font-semibold">
-              <Td className="rule-subtotal">Unit cost</Td>
-              {showTotals ? (
-                <Td align="right" className="rule-subtotal">
-                  <Money cents={rows.reduce((s, r) => s + (r.totalCents ?? 0), 0)} plain />
-                </Td>
-              ) : null}
-              <Td align="right" className="rule-subtotal rule-total text-base">
-                <Money cents={unitCostCents} currency plain />
-              </Td>
-              <Td className="rule-subtotal" />
-            </tr>
-          </tbody>
-        </Table>
-      </TableScroll>
+      <StackBar
+        className="mt-3"
+        height={12}
+        label="Unit cost by component"
+        segments={rows.map((r) => ({
+          key: r.component,
+          label: COMPONENT_LABELS[r.component],
+          cents: r.perUnitCents,
+          tint: COMPONENT_STYLE[r.component].tint,
+        }))}
+      />
+      <ul className="mt-3 flex flex-col">
+        {rows.map((r, index) => (
+          <li
+            key={r.component}
+            className={cn("grid grid-cols-[minmax(0,1fr)_auto_auto_3.25rem] items-center gap-x-4 py-1.5 text-sm", index > 0 && "hairline-t")}
+          >
+            <span className="flex min-w-0 items-center gap-2 font-medium">
+              <Dot tint={COMPONENT_STYLE[r.component].tint} />
+              <span className="truncate">{COMPONENT_LABELS[r.component]}</span>
+            </span>
+            <span className="text-right text-label2">{showTotals ? <Money cents={r.totalCents ?? 0} currency plain /> : null}</span>
+            <Money cents={r.perUnitCents} currency plain className="text-right font-semibold" />
+            <span className="num text-right text-xs text-label2">
+              {unitCostCents > 0 ? `${((r.perUnitCents / unitCostCents) * 100).toFixed(0)}%` : "—"}
+            </span>
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }
@@ -296,10 +284,7 @@ export function ReopenRunButton({ run }: { run: RunDetail }) {
 
   return (
     <>
-      <Button size="sm" variant="secondary" onClick={() => setOpen(true)}>
-        <Undo2 />
-        Reopen
-      </Button>
+      <ToolbarButton glyph="undo" label="Reopen run" tone="danger" onClick={() => setOpen(true)} />
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent size="sm">
           <DialogHeader>
@@ -334,82 +319,84 @@ export interface LandedCostsCardProps {
   stock: ReadonlyArray<{ code: string; name: string; cents: number }>;
 }
 
-export function LandedCostsCard({ run, canManage, billLines, openRuns, stock }: LandedCostsCardProps) {
+/** The toolbar items that attach cost to an open run: materials from stock, a line of a posted bill. */
+export function LandedCostActions({ run, billLines, openRuns, stock }: Omit<LandedCostsCardProps, "canManage">) {
+  return (
+    <>
+      <BillLineDialog run={run} billLines={billLines} openRuns={openRuns} />
+      <StockCostDialog run={run} stock={stock} />
+    </>
+  );
+}
+
+/**
+ * What went into the batch: one stacked bar by component, then each cost as a row — its component
+ * badge, what it was, where it is relieved from, and the amount.
+ */
+export function LandedCostsCard({ run, canManage }: Pick<LandedCostsCardProps, "run" | "canManage">) {
   const editable = canManage && run.status === "open";
   const total = run.landedCosts.reduce((s, c) => s + c.amountCents, 0);
+  const byComponent = COMPONENT_KEYS.map((k) => ({
+    key: k,
+    label: COMPONENT_LABELS[k],
+    cents: run.landedCosts.filter((c) => c.component === k).reduce((s, c) => s + c.amountCents, 0),
+    tint: COMPONENT_STYLE[k].tint,
+  }));
 
   return (
     <Card className="min-w-0 overflow-hidden">
-      <CardHeader>
-        <CardTitle>Landed costs</CardTitle>
-        {editable ? (
-          <div className="flex flex-wrap gap-2">
-            <StockCostDialog run={run} stock={stock} />
-            <BillLineDialog run={run} billLines={billLines} openRuns={openRuns} />
-          </div>
-        ) : null}
-      </CardHeader>
+      <div className="flex items-center gap-2 px-5 pt-[18px] max-sm:px-4 max-sm:pt-4">
+        <h2 className="flex-1 text-lg font-semibold tracking-[-0.01em]">Landed cost</h2>
+        <Money cents={total} currency plain className="text-lg font-semibold" />
+      </div>
       {run.landedCosts.length === 0 ? (
         <EmptyState
-          icon={<Layers />}
+          glyph="paperclip"
           title="No costs attached"
-          description="Attach what went into this batch: the co-packer’s tolling invoice and freight from posted bills, and the ingredients and packaging it consumed from Sooz’s own stock in 1320 and 1330."
+          description="Attach what went into this batch: the co-packer’s tolling invoice and freight from posted bills, and the ingredients and packaging it consumed from stock in 1320 and 1330."
           className="py-8"
         />
       ) : (
-        <TableScroll>
-          <Table caption="Landed costs" className="min-w-[40rem]">
-            <thead>
-              <tr>
-                <Th className="w-28">Component</Th>
-                <Th>Description</Th>
-                <Th>Relieved from</Th>
-                <Th align="right" className="w-32">
-                  Amount
-                </Th>
-                {editable ? <Th className="w-10" /> : null}
-              </tr>
-            </thead>
-            <tbody>
-              {run.landedCosts.map((c) => (
-                <tr key={c.id} className="rule-row">
-                  <Td className="whitespace-nowrap">{COMPONENT_LABELS[c.component]}</Td>
-                  <Td className="text-muted-foreground">
-                    {c.description ?? "—"}
+        <>
+          <div className="px-5 pt-3 pb-2 max-sm:px-4">
+            <StackBar label="Landed cost by component" height={12} segments={byComponent} />
+          </div>
+          <ul className="flex flex-col pb-1.5">
+            {run.landedCosts.map((c, index) => (
+              <li
+                key={c.id}
+                className={cn(
+                  "relative flex min-h-14 items-center gap-3 px-5 py-2 max-sm:px-4",
+                  index > 0 && "before:absolute before:top-0 before:right-0 before:left-[60px] before:border-t-[0.5px] before:border-sep",
+                )}
+              >
+                <IconBadge glyph={COMPONENT_STYLE[c.component].glyph} tint={COMPONENT_STYLE[c.component].tint} size="lg" />
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-sm font-semibold max-sm:text-lg max-sm:font-medium">
+                    {c.description ?? COMPONENT_LABELS[c.component]}
+                  </span>
+                  <span className="mt-0.5 flex items-center gap-1.5 truncate text-xs text-label2 max-sm:text-sm">
+                    {COMPONENT_LABELS[c.component]}
+                    <span aria-hidden className="size-[3px] shrink-0 rounded-full bg-label3" />
                     {c.billNo ? (
-                      <span className="ml-2 inline-flex items-center gap-1 text-xs">
-                        <FileText className="size-3" aria-hidden />
+                      <span className="inline-flex min-w-0 items-center gap-1 truncate">
+                        <Glyph name="doc" size={12} />
                         {c.billVendor} {c.billNo}
                         {c.basis && c.basis !== "manual" ? ` · by ${c.basis}` : ""}
                       </span>
-                    ) : null}
-                  </Td>
-                  <Td className="whitespace-nowrap">
-                    <span className="num mr-1.5 text-muted-foreground">{c.sourceCode}</span>
-                    {c.sourceName}
-                  </Td>
-                  <Td align="right">
-                    <Money cents={c.amountCents} plain />
-                  </Td>
-                  {editable ? (
-                    <Td align="right">
-                      <RemoveCostButton runId={run.id} costId={c.id} />
-                    </Td>
-                  ) : null}
-                </tr>
-              ))}
-              <tr className="font-semibold">
-                <Td className="rule-subtotal" colSpan={3}>
-                  Total landed cost
-                </Td>
-                <Td align="right" className="rule-subtotal rule-total">
-                  <Money cents={total} currency plain />
-                </Td>
-                {editable ? <Td className="rule-subtotal" /> : null}
-              </tr>
-            </tbody>
-          </Table>
-        </TableScroll>
+                    ) : (
+                      <span className="truncate">
+                        <span className="num">{c.sourceCode}</span> {c.sourceName}
+                      </span>
+                    )}
+                  </span>
+                </span>
+                <Money cents={c.amountCents} currency plain className="shrink-0 text-sm font-semibold max-sm:text-lg" />
+                {editable ? <RemoveCostButton runId={run.id} costId={c.id} /> : null}
+              </li>
+            ))}
+          </ul>
+        </>
       )}
     </Card>
   );
@@ -436,7 +423,7 @@ function RemoveCostButton({ runId, costId }: { runId: string; costId: string }) 
         })
       }
     >
-      <Trash2 />
+      <Glyph name="trash" />
     </Button>
   );
 }
@@ -469,17 +456,14 @@ function StockCostDialog({ run, stock }: { run: RunDetail; stock: LandedCostsCar
 
   return (
     <>
-      <Button size="sm" variant="secondary" onClick={() => setOpen(true)}>
-        Materials from stock
-      </Button>
+      <ToolbarButton glyph="leaf" label="Materials from stock" onClick={() => setOpen(true)} />
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent size="md">
           <form onSubmit={submit} className="flex min-h-0 flex-col">
             <DialogHeader>
               <DialogTitle>Materials from stock</DialogTitle>
               <DialogDescription>
-                Ingredients or packaging Sooz already owns that went into {run.runNo}. Costing moves this amount out of
-                the inventory account it sits in and into Finished Goods.
+                Costing moves this amount out of the inventory account it sits in and into Finished Goods.
               </DialogDescription>
             </DialogHeader>
             <DialogBody className="flex flex-col gap-3">
@@ -493,10 +477,15 @@ function StockCostDialog({ run, stock }: { run: RunDetail; stock: LandedCostsCar
                 ]}
               />
               {source ? (
-                <p className="text-xs text-muted-foreground">
-                  {source.name} holds <Money cents={source.cents} currency plain className="text-foreground" /> today.
+                <p className="flex items-center gap-1.5 text-sm text-label2">
+                  <Dot tint={kind === "ingredients" ? "teal" : "brown"} />
+                  {source.name}
+                  <Money cents={source.cents} currency plain className="ml-auto font-semibold text-label" />
                   {cents !== null && cents > source.cents ? (
-                    <span className="text-warning"> This is more than the account holds.</span>
+                    <span className="inline-flex items-center gap-1 font-semibold text-ink-orange">
+                      <Glyph name="warning" size={13} />
+                      More than held
+                    </span>
                   ) : null}
                 </p>
               ) : null}
@@ -593,25 +582,21 @@ function BillLineDialog({
 
   return (
     <>
-      <Button size="sm" variant="secondary" onClick={() => setOpen(true)}>
-        <FileText />
-        Attach a bill line
-      </Button>
+      <ToolbarButton glyph="paperclip" label="Attach bill line" onClick={() => setOpen(true)} />
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent size="lg">
           <form onSubmit={submit} className="flex min-h-0 flex-col">
             <DialogHeader>
               <DialogTitle>Attach a bill line</DialogTitle>
               <DialogDescription>
-                A tolling, freight or material invoice line from a posted bill. One line can be spread over several open
-                runs; the shares always add up to the line to the cent.
+                A line from a posted bill, spread over one or more open runs. The shares add up to the line to the cent.
               </DialogDescription>
             </DialogHeader>
             {billLines.length === 0 ? (
               <DialogBody>
                 <EmptyState
-                  icon={<FileText />}
-                  title="No posted bill has anything left to allocate"
+                  glyph="paperclip"
+                  title="No bill lines to attach"
                   description="Enter the co-packer’s invoice under Purchases as a bill and post it; its lines then appear here. Materials Sooz bought through the bank are attached with Materials from stock instead."
                   className="py-6"
                 />
@@ -649,7 +634,7 @@ function BillLineDialog({
                     />
                   </Field>
                   <div className="flex flex-col gap-1.5">
-                    <span className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">Split by</span>
+                    <span className="text-sm font-medium">Split by</span>
                     <Segmented
                       label="Split by"
                       value={basis}
@@ -663,7 +648,7 @@ function BillLineDialog({
                   </div>
                 </div>
 
-                <div className="overflow-hidden rounded-sm border border-border">
+                <div className="overflow-hidden rounded-[12px] bg-inset">
                   <TableScroll>
                     <Table caption="Allocation preview" className="min-w-[30rem]">
                       <thead>
@@ -679,19 +664,19 @@ function BillLineDialog({
                           const index = runs.findIndex((x) => x.id === r.id);
                           const on = index !== -1;
                           return (
-                            <tr key={r.id} className={cn("rule-row", !on && "text-muted-foreground")}>
+                            <tr key={r.id} className={cn("[&>td]:rule-row", !on && "text-label2")}>
                               <Td>
                                 <input
                                   type="checkbox"
                                   aria-label={`Include ${r.runNo}`}
                                   checked={on}
                                   onChange={() => toggle(r.id)}
-                                  className="size-3.5 accent-[var(--color-primary)]"
+                                  className="size-4 accent-[var(--blue)]"
                                 />
                               </Td>
                               <Td>
                                 <span className="num font-medium">{r.runNo}</span>
-                                <span className="num ml-2 text-xs text-muted-foreground">{r.sku}</span>
+                                <span className="num ml-2 text-xs text-label2">{r.sku}</span>
                                 {r.id === run.id ? <Badge tone="primary" size="sm" className="ml-2">This run</Badge> : null}
                               </Td>
                               <Td align="right">
@@ -711,7 +696,7 @@ function BillLineDialog({
                                 )}
                               </Td>
                               <Td align="right">
-                                {on && shares ? <Money cents={shares[index] ?? 0} plain /> : <span className="text-muted-foreground">—</span>}
+                                {on && shares ? <Money cents={shares[index] ?? 0} plain /> : <span className="text-label2">—</span>}
                               </Td>
                             </tr>
                           );
@@ -728,7 +713,12 @@ function BillLineDialog({
                     </Table>
                   </TableScroll>
                 </div>
-                {problem ? <p className="text-xs text-warning">{problem}</p> : null}
+                {problem ? (
+                  <p className="flex items-center gap-1.5 text-sm font-medium text-ink-orange">
+                    <Glyph name="warning" size={14} />
+                    {problem}
+                  </p>
+                ) : null}
               </DialogBody>
             )}
             <DialogFooter>
@@ -749,32 +739,39 @@ function BillLineDialog({
 export function CostedSummary({ run }: { run: RunDetail }) {
   return (
     <Card className="min-w-0 overflow-hidden">
-      <CardHeader>
-        <CardTitle>Unit cost</CardTitle>
-        <span className="text-xs text-muted-foreground">
-          Effective <span className="num">{run.costDate ?? "—"}</span>
+      <div className="flex flex-wrap items-center gap-2 px-5 pt-[18px] max-sm:px-4 max-sm:pt-4">
+        <h2 className="flex-1 text-lg font-semibold tracking-[-0.01em]">Unit cost</h2>
+        <span className="text-xs font-medium text-label2">
+          {run.costDate ? <span className="num">{run.costDate}</span> : null}
           {run.costEntry ? (
             <>
               {" · "}
-              <Link href={`/ledger/${run.costEntry.id}`} className="text-primary hover:underline">
-                entry #{run.costEntry.entryNo}
+              <Link href={`/ledger/${run.costEntry.id}`} className="text-ink-blue hover:underline">
+                Entry #{run.costEntry.entryNo}
               </Link>
             </>
           ) : null}
         </span>
-      </CardHeader>
-      {run.costedBreakdown.length > 0 && run.unitCostCents !== null ? (
-        <ComponentBreakdown unitCostCents={run.unitCostCents} rows={run.costedBreakdown} />
-      ) : (
-        <p className="px-4 py-6 text-sm">
-          <Money cents={run.unitCostCents ?? 0} currency plain /> a unit, with no component split recorded.
-        </p>
-      )}
-      {run.roundingVarianceCents !== 0 ? (
-        <p className="border-t border-border px-4 py-2 text-2xs text-muted-foreground">
-          <Money cents={run.roundingVarianceCents} signed plain /> of rounding was booked to 5050 at costing.
-        </p>
-      ) : null}
+      </div>
+      <div className="px-5 pt-3 pb-4 max-sm:px-4">
+        {run.costedBreakdown.length > 0 && run.unitCostCents !== null ? (
+          <ComponentBreakdown
+            unitCostCents={run.unitCostCents}
+            rows={run.costedBreakdown}
+            caption={
+              run.roundingVarianceCents !== 0 ? (
+                <>
+                  <Money cents={run.roundingVarianceCents} signed plain /> rounding to 5050
+                </>
+              ) : undefined
+            }
+          />
+        ) : (
+          <p className="text-sm">
+            <Money cents={run.unitCostCents ?? 0} currency plain className="text-3xl font-bold" /> a unit
+          </p>
+        )}
+      </div>
     </Card>
   );
 }

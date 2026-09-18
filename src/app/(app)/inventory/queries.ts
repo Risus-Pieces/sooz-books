@@ -224,7 +224,12 @@ export interface OverviewData {
   snapshot: { date: CalendarDate; varianceCents: number; snapshotCents: number; ledgerCents: number } | null;
   bankQueue: BankQueueInventory;
   runs: { open: number; costed: number; latest: RunSummary | null };
-  cogs: { lastPosted: { year: number; month: number; cogsCents: number } | null; drafts: number };
+  cogs: {
+    lastPosted: { year: number; month: number; cogsCents: number } | null;
+    drafts: number;
+    /** The newest draft batch: what is waiting to relieve Finished Goods. */
+    latestDraft: { id: string; year: number; month: number; units: string; cogsCents: number } | null;
+  };
   shipmentsMonths: number;
   adjustments: number;
   productCount: number;
@@ -335,6 +340,10 @@ export async function overviewData(): Promise<OverviewData> {
         ? { year: lastPosted.periodYear, month: lastPosted.periodMonth, cogsCents: lastPosted.totalCogsCents }
         : null,
       drafts: batches.filter((b) => b.status === 'draft').length,
+      latestDraft: ((draft) =>
+        draft
+          ? { id: draft.id, year: draft.periodYear, month: draft.periodMonth, units: draft.totalUnits, cogsCents: draft.totalCogsCents }
+          : null)(batches.find((b) => b.status === 'draft')),
     },
     shipmentsMonths: shipmentMonths.length,
     adjustments: adjustments.length,
@@ -358,6 +367,28 @@ export async function productionRunRows(): Promise<RunListRow[]> {
   ]);
   const names = new Map(coMen.map((r) => [r.id, r.name]));
   return runs.map((r) => ({ ...r, coManName: names.get(r.id) ?? null }));
+}
+
+/**
+ * Each run's landed cost split by component, for the stacked bar on the runs list. A read of the
+ * same `landed_costs` rows `listProductionRuns` sums, grouped one level finer.
+ */
+export async function runComponentTotals(): Promise<Map<string, Partial<Record<CostComponentKey, number>>>> {
+  const rows = await db
+    .select({
+      runId: landedCosts.productionRunId,
+      component: landedCosts.component,
+      total: sql<string>`sum(${landedCosts.amountCents})`,
+    })
+    .from(landedCosts)
+    .groupBy(landedCosts.productionRunId, landedCosts.component);
+  const byRun = new Map<string, Partial<Record<CostComponentKey, number>>>();
+  for (const r of rows) {
+    const split = byRun.get(r.runId) ?? {};
+    split[r.component] = cents(r.total);
+    byRun.set(r.runId, split);
+  }
+  return byRun;
 }
 
 export interface LandedCostRow {

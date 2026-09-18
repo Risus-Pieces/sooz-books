@@ -1,11 +1,17 @@
 import * as React from "react";
 import Link from "next/link";
 
-import { Badge } from "@/components/ui/badge";
+import { Glyph } from "@/components/ui/glyph";
+import { IconBadge, LegendItem } from "@/components/ui/icon-badge";
+import { InsetGroup } from "@/components/ui/inset-group";
 import { Money } from "@/components/ui/money";
+import { Pill } from "@/components/ui/pill";
+import { cn } from "@/lib/cn";
+import { monthLong, shortDate } from "@/lib/ui/format";
+import type { Tint } from "@/lib/ui/tints";
 
-import { Table, TableScroll, Td, Th } from "./table";
-import { formatUnits } from "./types";
+import { StackBar } from "./stack-bar";
+import { COMPONENT_KEYS, COMPONENT_LABELS, COMPONENT_STYLE, formatUnits, type CostComponentKey } from "./types";
 
 export interface RunsTableRow {
   id: string;
@@ -18,77 +24,121 @@ export interface RunsTableRow {
   landedCostCents: number;
   unitCostCents: number | null;
   coManName: string | null;
+  /** Landed cost by component. */
+  components: Partial<Record<CostComponentKey, number>>;
 }
+
+const STATUS: Record<RunsTableRow["status"], { label: string; tint: Tint; pill: "blue" | "green" | "neutral" }> = {
+  open: { label: "Open", tint: "orange", pill: "blue" },
+  costed: { label: "Costed", tint: "green", pill: "green" },
+  closed: { label: "Closed", tint: "gray", pill: "neutral" },
+};
 
 export function RunStatusBadge({ status }: { status: RunsTableRow["status"] }) {
-  if (status === "open") return <Badge tone="info">Open</Badge>;
-  if (status === "costed") return <Badge tone="positive">Costed</Badge>;
-  return <Badge tone="neutral">Closed</Badge>;
+  const s = STATUS[status];
+  return (
+    <Pill tone={s.pill} glyph={status === "open" ? "hourglass" : status === "costed" ? "check" : "lock"}>
+      {s.label}
+    </Pill>
+  );
 }
 
-/** Every run, newest first; the run number opens the run. */
+/** The components any of these runs carry, in the chart of cost's order. */
+export function usedComponents(rows: ReadonlyArray<{ components: Partial<Record<CostComponentKey, number>> }>): CostComponentKey[] {
+  return COMPONENT_KEYS.filter((k) => rows.some((r) => (r.components[k] ?? 0) !== 0));
+}
+
+/**
+ * Every run, newest first, grouped by month: the run and its product, and its landed cost as a
+ * stacked bar by component on one scale, so the runs compare at a glance. A row opens the run.
+ */
 export function RunsTable({ rows }: { rows: readonly RunsTableRow[] }) {
-  const landed = rows.reduce((sum, r) => sum + r.landedCostCents, 0);
+  const scale = Math.max(1, ...rows.map((r) => r.landedCostCents));
+  const months = new Map<string, RunsTableRow[]>();
+  for (const r of rows) {
+    const key = r.runDate.slice(0, 7);
+    months.set(key, [...(months.get(key) ?? []), r]);
+  }
+
   return (
-    <TableScroll>
-      <Table caption="Production runs" className="min-w-[52rem]">
-        <thead>
-          <tr>
-            <Th className="w-28">Run</Th>
-            <Th className="w-28">Date</Th>
-            <Th>Product</Th>
-            <Th>Co-packer</Th>
-            <Th className="w-24">Status</Th>
-            <Th align="right" className="w-28">
-              Good units
-            </Th>
-            <Th align="right" className="w-32">
-              Landed cost
-            </Th>
-            <Th align="right" className="w-28">
-              Unit cost
-            </Th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((r) => (
-            <tr key={r.id} className="rule-row hover:bg-muted/50">
-              <Td>
-                <Link href={`/inventory/production/${r.id}`} className="num font-medium whitespace-nowrap text-primary hover:underline">
-                  {r.runNo}
-                </Link>
-              </Td>
-              <Td className="num whitespace-nowrap text-muted-foreground">{r.runDate}</Td>
-              <Td className="whitespace-nowrap">
-                <span className="num mr-2 text-xs text-muted-foreground">{r.sku}</span>
-                {r.productName}
-              </Td>
-              <Td className="text-muted-foreground">{r.coManName ?? "—"}</Td>
-              <Td>
-                <RunStatusBadge status={r.status} />
-              </Td>
-              <Td align="right" className="num">
-                {r.goodUnits === 0 ? <span className="text-muted-foreground">—</span> : formatUnits(r.goodUnits)}
-              </Td>
-              <Td align="right">
-                <Money cents={r.landedCostCents} zeroDash plain />
-              </Td>
-              <Td align="right">
-                {r.unitCostCents === null ? <span className="text-muted-foreground">—</span> : <Money cents={r.unitCostCents} plain />}
-              </Td>
-            </tr>
+    <div className="flex flex-col">
+      {[...months.entries()].map(([key, list]) => (
+        <InsetGroup key={key} header={`${monthLong(Number(key.slice(5, 7)))} ${key.slice(0, 4)}`} separatorInset={56}>
+          {list.map((r) => (
+            <RunRow key={r.id} run={r} scale={scale} />
           ))}
-          <tr className="font-semibold">
-            <Td className="rule-subtotal" colSpan={6}>
-              {rows.length} {rows.length === 1 ? "run" : "runs"}
-            </Td>
-            <Td align="right" className="rule-subtotal rule-total">
-              <Money cents={landed} plain />
-            </Td>
-            <Td className="rule-subtotal" />
-          </tr>
-        </tbody>
-      </Table>
-    </TableScroll>
+        </InsetGroup>
+      ))}
+    </div>
+  );
+}
+
+function RunRow({ run, scale }: { run: RunsTableRow; scale: number }) {
+  const status = STATUS[run.status];
+  return (
+    <Link
+      href={`/inventory/production/${run.id}`}
+      className={cn(
+        "relative flex items-center gap-3 px-4 py-3 outline-none focus-ring-inset transition-colors hover:bg-fill2 focus-visible:bg-fill2",
+        "before:pointer-events-none before:absolute before:top-0 before:right-0 before:left-[var(--sep-inset)] before:border-t-[0.5px] before:border-sep first:before:hidden",
+      )}
+    >
+      <IconBadge glyph="wrench" tint={status.tint} size="xl" />
+      <span className="flex min-w-0 flex-1 flex-col gap-1.5">
+        <span className="flex items-baseline gap-2">
+          <span className="num shrink-0 text-sm font-semibold max-sm:text-lg">{run.runNo}</span>
+          <span className="min-w-0 flex-1 truncate text-sm text-label2 max-sm:text-base">{run.productName}</span>
+          <Money cents={run.landedCostCents} currency plain className="shrink-0 text-sm font-semibold max-sm:text-lg" />
+        </span>
+        <StackBar
+          label={`${run.runNo} landed cost`}
+          scale={scale}
+          height={8}
+          segments={COMPONENT_KEYS.map((k) => ({
+            key: k,
+            label: COMPONENT_LABELS[k],
+            cents: run.components[k] ?? 0,
+            tint: COMPONENT_STYLE[k].tint,
+          }))}
+        />
+        <span className="flex items-center gap-1.5 text-xs text-label2 max-sm:text-sm">
+          <span className="num">{shortDate(run.runDate)}</span>
+          {run.coManName ? (
+            <>
+              <span aria-hidden className="size-[3px] rounded-full bg-label3" />
+              <span className="truncate">{run.coManName}</span>
+            </>
+          ) : null}
+          <span aria-hidden className="size-[3px] rounded-full bg-label3" />
+          <span className={cn("font-medium", run.status === "costed" && "text-ink-green")}>{status.label}</span>
+          <span className="ml-auto shrink-0 whitespace-nowrap">
+            {run.goodUnits > 0 ? <span className="num">{formatUnits(run.goodUnits)} units</span> : null}
+            {run.unitCostCents !== null ? (
+              <>
+                {run.goodUnits > 0 ? " · " : null}
+                <Money cents={run.unitCostCents} currency plain className="font-semibold text-label" />
+                /unit
+              </>
+            ) : null}
+          </span>
+        </span>
+      </span>
+      <Glyph name="chevron-right" size={12} weight={2.4} className="shrink-0 text-label3" />
+    </Link>
+  );
+}
+
+/** The legend for the runs' bars, with each component's total across the runs shown. */
+export function ComponentLegend({ totals }: { totals: Partial<Record<CostComponentKey, number>> }) {
+  const keys = COMPONENT_KEYS.filter((k) => (totals[k] ?? 0) !== 0);
+  return (
+    <ul className="flex flex-wrap gap-x-4 gap-y-1.5">
+      {keys.map((k) => (
+        <li key={k} className="inline-flex items-center gap-1.5">
+          <LegendItem tint={COMPONENT_STYLE[k].tint}>{COMPONENT_LABELS[k]}</LegendItem>
+          <Money cents={totals[k] ?? 0} currency plain whole className="text-xs font-semibold" />
+        </li>
+      ))}
+    </ul>
   );
 }

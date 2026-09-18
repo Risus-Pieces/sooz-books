@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 
-import { LinkTabs } from "@/components/banking/link-tabs";
+import { accountLabel } from "@/components/banking/queue-format";
 import {
   MonthPicker,
   ReconHistory,
@@ -9,9 +9,10 @@ import {
 } from "@/components/banking/reconcile-workspace";
 import { monthLabel } from "@/components/banking/review-logic";
 import type { ReconLineView, ReconSummaryView, StatementProposalView } from "@/components/banking/types";
-import { Badge } from "@/components/ui/badge";
+import { PageToolbar } from "@/components/shell/page-toolbar";
 import { EmptyState } from "@/components/ui/empty-state";
-import { PageHeader } from "@/components/ui/page-header";
+import { Pill } from "@/components/ui/pill";
+import { SegmentedNav } from "@/components/ui/segmented-control";
 import { can } from "@/lib/auth/roles";
 import { requireUser } from "@/lib/auth/session";
 import { clearedBalance, proposeStatement, reconciliationLines } from "@/lib/banking/reconcile";
@@ -29,6 +30,8 @@ function one(value: string | string[] | undefined): string {
   return (Array.isArray(value) ? value[0] : value) ?? "";
 }
 
+const BACK = { href: "/banking", label: "Accounts" };
+
 /** The month after `YYYY-MM-DD`, as `YYYY-MM`. */
 function monthAfter(date: string): string {
   const [y, m] = date.split("-").map(Number);
@@ -45,9 +48,9 @@ export default async function ReconcilePage({ searchParams }: { searchParams: Pr
   const tabs = await bankAccountTabs();
   if (tabs.length === 0) {
     return (
-      <div className="flex flex-col gap-4">
-        <PageHeader eyebrow="Banking" title="Reconcile" />
-        <EmptyState title="No bank accounts yet" description="Add a bank account before reconciling it." />
+      <div className="flex flex-col gap-3.5 max-md:gap-3">
+        <PageToolbar title="Reconcile" back={BACK} />
+        <EmptyState glyph="bank" title="No bank accounts yet" description="Add a bank account before reconciling it." />
       </div>
     );
   }
@@ -106,33 +109,50 @@ export default async function ReconcilePage({ searchParams }: { searchParams: Pr
   }
 
   return (
-    <div className="flex flex-col gap-4">
-      <PageHeader
-        eyebrow="Banking"
+    <div className="flex flex-col gap-3.5 max-md:gap-3">
+      <PageToolbar
         title="Reconcile"
-        description="Tick off what the statement shows until the books and the bank agree to the cent."
-        meta={
+        back={BACK}
+        subtitle={
           lastCompleted === undefined ? (
-            <Badge>Never reconciled</Badge>
+            <Pill glyph="lock">Never reconciled</Pill>
           ) : (
-            <Badge tone="positive">Reconciled through {lastCompleted.statementDate}</Badge>
+            <Pill tone="green" glyph="lock">
+              Reconciled through {lastCompleted.statementDate}
+            </Pill>
           )
         }
+        info="Tick off what the statement shows until the books and the bank agree to the cent. A completed month is locked: its bank lines can no longer be changed until the reconciliation is undone."
         actions={workspace === null && monthChoices.length > 0 ? <MonthPicker months={monthChoices} value={month} /> : null}
-        tabs={
-          <LinkTabs
-            label="Bank account"
-            tabs={tabs.map((t) => ({ href: `/banking/reconcile?account=${t.id}`, label: t.name, active: t.id === tab.id }))}
-          />
-        }
       />
+
+      {tabs.length > 1 ? (
+        <>
+          <SegmentedNav
+            aria-label="Bank account"
+            className="self-start max-md:hidden"
+            current={tab.id}
+            items={tabs.map((t) => ({ value: t.id, href: `/banking/reconcile?account=${t.id}`, label: accountLabel(t), glyph: "bank" }))}
+          />
+          <SegmentedNav
+            aria-label="Bank account"
+            className="md:hidden"
+            fill
+            current={tab.id}
+            items={tabs.map((t) => ({
+              value: t.id,
+              href: `/banking/reconcile?account=${t.id}`,
+              label: t.mask === null ? accountLabel(t) : `••${t.mask}`,
+            }))}
+          />
+        </>
+      ) : null}
 
       {workspace !== null ? (
         <>
-          <p className="text-sm text-muted-foreground">
-            In progress: statement {workspace.summary.statementStartDate} to {workspace.summary.statementDate}. Finish or
-            abandon it before starting another.
-          </p>
+          <Pill tone="orange" glyph="clock">
+            In progress · {workspace.summary.statementStartDate} – {workspace.summary.statementDate}
+          </Pill>
           <ReconcileWorkspace
             key={workspace.summary.id}
             summary={workspace.summary}
@@ -150,8 +170,9 @@ export default async function ReconcilePage({ searchParams }: { searchParams: Pr
         />
       ) : (
         <EmptyState
-          title={`Nothing to reconcile on ${tab.name}`}
-          description={month === "" ? "Import a statement for this account first." : `No data for ${monthLabel(month)}.`}
+          glyph="reconcile"
+          title="Nothing to reconcile"
+          description={month === "" ? `Import a statement for ${tab.name} first.` : `No data for ${monthLabel(month)} on ${tab.name}.`}
         />
       )}
 

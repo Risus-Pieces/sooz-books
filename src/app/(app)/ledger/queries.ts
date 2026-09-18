@@ -42,7 +42,6 @@ import type {
   PeriodRow,
   ProductOption,
 } from '@/components/ledger/types';
-import type { NetIncomePoint } from '@/components/ledger/net-income-chart';
 
 export const JOURNAL_PAGE_SIZE = 50;
 export const AUDIT_PAGE_SIZE = 40;
@@ -95,10 +94,12 @@ function stamp(input: unknown): string | null {
   if (value === null) return null;
   const parts = new Map(STAMP_FORMAT.formatToParts(value).map((part) => [part.type, part.value]));
   const month = MONTH_ABBR[Number(parts.get('month')) - 1];
-  const day = (parts.get('day') ?? '').padStart(2, '0');
-  const hours = (parts.get('hour') ?? '').padStart(2, '0');
+  const day = Number(parts.get('day') ?? '0');
+  const hour24 = Number(parts.get('hour') ?? '0') % 24;
+  const hour12 = hour24 % 12 === 0 ? 12 : hour24 % 12;
   const minutes = (parts.get('minute') ?? '').padStart(2, '0');
-  return `${day} ${month} ${parts.get('year') ?? ''}, ${hours}:${minutes}`;
+  // "Sep 18, 2026, 3:30 PM": the same day and time format as the rest of the app.
+  return `${month} ${day}, ${parts.get('year') ?? ''}, ${hour12}:${minutes} ${hour24 < 12 ? 'AM' : 'PM'}`;
 }
 
 function personLabel(fullName: string | null, email: string | null): string | null {
@@ -888,6 +889,13 @@ async function currentPeriodStatus(
  * `current_date`, which is on the database's UTC clock and turns the month over
  * hours before the books do.
  */
+/** One month's net income, for the summary chart. */
+export interface NetIncomePoint {
+  /** Short month label, e.g. "Sep". */
+  label: string;
+  netCents: number;
+}
+
 async function monthlyNetIncome(asOf: CalendarDate, months: number): Promise<NetIncomePoint[]> {
   const rows = await db.execute<{ period: string; net_cents: string | number }>(sql`
     with months as (

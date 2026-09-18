@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 
+import { BalanceSummary } from '@/components/reports/report-charts';
 import { ReportSurface } from '@/components/reports/report-surface';
 import { requireCapability } from '@/lib/auth/session';
 import { monthStart, today } from '@/lib/dates';
@@ -29,8 +30,20 @@ export default async function BalanceSheetPage({
 
   const report = await balanceSheetReport(request);
 
+  // The end date's position: the "current" balance column, else the last period before any comparison.
+  const amountColumns = report.columns.filter((column) => column.kind === 'amount');
+  const currentIndex = amountColumns.findIndex((column) => column.key === 'current');
+  const at = Math.max(0, currentIndex !== -1 ? currentIndex : amountColumns.filter((c) => c.group !== 'compare').length - 1);
+
   return (
     <ReportSurface
+      summary={
+        <BalanceSummary
+          assetsCents={report.totals.assets[at] ?? 0}
+          liabilitiesCents={report.totals.liabilities[at] ?? 0}
+          equityCents={report.totals.equity[at] ?? 0}
+        />
+      }
       report={report}
       request={request}
       path={PATH}

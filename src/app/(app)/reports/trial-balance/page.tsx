@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 
+import { TrialBalanceSummary, trialBalanceTotals } from '@/components/reports/report-charts';
 import { ReportSurface } from '@/components/reports/report-surface';
 import { requireCapability } from '@/lib/auth/session';
 import { monthStart, today } from '@/lib/dates';
@@ -29,8 +30,11 @@ export default async function TrialBalancePage({
 
   const report = await trialBalanceReport(request);
 
+  const totals = trialBalanceTotals(report);
+
   return (
     <ReportSurface
+      summary={<TrialBalanceSummary debitCents={totals.debitCents} creditCents={totals.creditCents} />}
       report={report}
       request={request}
       path={PATH}

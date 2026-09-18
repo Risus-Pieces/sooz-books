@@ -2,19 +2,18 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { Link2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import { Card, CardHeader, CardTitle } from "@/components/ui/card";
 import { DateInput } from "@/components/ui/date-input";
-import { Label } from "@/components/ui/label";
+import { Glyph } from "@/components/ui/glyph";
 import { Money } from "@/components/ui/money";
 import { toast } from "@/components/ui/toast";
 import { isCalendarDate } from "@/lib/dates";
+import { shortDate } from "@/lib/ui/format";
 
-import { Td, Th } from "./doc-status";
 import { applyOldestFirst, readMoney } from "./math";
 import { MoneyInput, centsOf, textOf } from "./money-input";
+import { FormSection, Grid, GridFigure, GridTd, GridTh, cellField } from "./sheet-grid";
 import type { ActionResult, ApplicationForm, DocRef, OpenDoc } from "./types";
 
 /**
@@ -77,59 +76,59 @@ export function ApplyCredit({
     });
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Apply the unapplied {side === "ar" ? "credit" : "prepayment"}</CardTitle>
-        <Money cents={unappliedCents} currency className="text-sm font-semibold" />
-      </CardHeader>
-      <div className="relative overflow-x-auto">
-        <table className="w-full min-w-[32rem] border-separate border-spacing-0 text-sm">
-          <thead>
-            <tr>
-              <Th>{side === "ar" ? "Invoice" : "Bill"}</Th>
-              <Th>Due</Th>
-              <Th align="right">Open</Th>
-              <Th align="right" className="w-36">
-                Apply
-              </Th>
-            </tr>
-          </thead>
-          <tbody>
-            {docs.map((d) => (
-              <tr key={d.id}>
-                <Td className="num">{d.docNo}</Td>
-                <Td className="num">{d.dueDate}</Td>
-                <Td align="right">
-                  <Money cents={d.balanceCents} />
-                </Td>
-                <Td>
-                  <MoneyInput
-                    className="h-7"
-                    aria-label={`Apply to ${d.docNo}`}
-                    value={amounts[d.id] ?? ""}
-                    onValueChange={(v) => setAmounts((a) => ({ ...a, [d.id]: v }))}
-                  />
-                </Td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+    <FormSection
+      title={side === "ar" ? "Apply the credit" : "Apply the prepayment"}
+      accessory={
+        <span className="text-sm font-semibold">
+          <Money cents={unappliedCents} currency plain />
+        </span>
+      }
+    >
+      <Grid
+        caption="Open documents"
+        minWidth="min-w-[30rem]"
+        head={
+          <>
+            <GridTh>{side === "ar" ? "Invoice" : "Bill"}</GridTh>
+            <GridTh>Due</GridTh>
+            <GridTh align="right">Open</GridTh>
+            <GridTh className="w-36" align="right">
+              Apply
+            </GridTh>
+          </>
+        }
+      >
+        {docs.map((d) => (
+          <tr key={d.id}>
+            <GridTd className="num px-2.5 font-medium">{d.docNo}</GridTd>
+            <GridTd className="num px-2.5 text-label2">{shortDate(d.dueDate)}</GridTd>
+            <GridTd>
+              <GridFigure>
+                <Money cents={d.balanceCents} plain />
+              </GridFigure>
+            </GridTd>
+            <GridTd>
+              <MoneyInput
+                className={cellField}
+                aria-label={`Apply to ${d.docNo}`}
+                value={amounts[d.id] ?? ""}
+                onValueChange={(v) => setAmounts((a) => ({ ...a, [d.id]: v }))}
+              />
+            </GridTd>
+          </tr>
+        ))}
+      </Grid>
+      <div className="mt-4 flex flex-wrap items-center justify-end gap-3">
+        <label htmlFor="apply-date" className="text-sm font-medium">
+          Applied on
+        </label>
+        <DateInput id="apply-date" value={date} min={minDate} onValueChange={setDate} />
+        {problem ? <span className="text-xs font-medium text-label2">{problem}</span> : null}
+        <Button onClick={submit} disabled={pending || problem !== null}>
+          <Glyph name="link" size={15} />
+          Apply <Money cents={total} currency plain />
+        </Button>
       </div>
-      <div className="flex flex-wrap items-end justify-between gap-3 border-t border-border px-4 py-3">
-        <div className="flex flex-col gap-1.5">
-          <Label htmlFor="apply-date" hint="the aging moves on this date">
-            Applied on
-          </Label>
-          <DateInput id="apply-date" value={date} min={minDate} onValueChange={setDate} />
-        </div>
-        <div className="flex items-center gap-2">
-          {problem ? <span className="text-xs text-muted-foreground">{problem}</span> : null}
-          <Button size="sm" onClick={submit} disabled={pending || problem !== null}>
-            <Link2 />
-            Apply <Money cents={total} currency plain />
-          </Button>
-        </div>
-      </div>
-    </Card>
+    </FormSection>
   );
 }

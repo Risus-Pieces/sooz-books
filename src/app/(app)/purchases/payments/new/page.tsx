@@ -1,10 +1,7 @@
 import type { Metadata } from 'next';
-import Link from 'next/link';
 
 import { MoneyDocForm } from '@/components/arap/money-doc-form';
-import { Button } from '@/components/ui/button';
 import { formatCents } from '@/components/ui/money';
-import { PageHeader } from '@/components/ui/page-header';
 import { can } from '@/lib/auth/roles';
 import { requireUser } from '@/lib/auth/session';
 import { today } from '@/lib/dates';
@@ -36,18 +33,17 @@ export default async function PayBillsPage({ searchParams }: { searchParams: Pro
   const operating = accounts.find((a) => a.label.includes('9726')) ?? accounts[0] ?? null;
 
   return (
-    <div className="flex flex-col gap-5">
-      <PageHeader
-        eyebrow="Purchases"
-        title="Pay bills"
-        description="One payment to one vendor can settle several of their bills. Paying from a card account marks it card-paid, which keeps it off the 1099."
-        actions={
-          <Button asChild variant="ghost" size="sm">
-            <Link href="/purchases/payments">Back to payments</Link>
-          </Button>
-        }
-      />
-      <MoneyDocForm
+    <MoneyDocForm
+        toolbar={{
+          title: 'Pay bills',
+          back: { href: '/purchases/payments', label: 'Payments' },
+          info: (
+            <p>
+              One payment to one vendor can settle several of their bills. Paying from a card account marks it
+              card-paid, which keeps it off the 1099.
+            </p>
+          ),
+        }}
         side="ap"
         parties={ordered.map((v) => {
           const o = owedById.get(v.id);
@@ -61,6 +57,5 @@ export default async function PayBillsPage({ searchParams }: { searchParams: Pro
         preselect={billId === null ? [] : [billId]}
         canSubmit={can(user.role, 'ap.pay')}
       />
-    </div>
   );
 }

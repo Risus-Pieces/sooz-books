@@ -55,7 +55,8 @@ test('flow 3: customer, invoice, partial receipt, aging, paid off', async ({ pag
   await dialog.getByRole('button', { name: 'Net 30', exact: true }).click();
   await dialog.getByRole('button', { name: 'Add customer' }).click();
   await toast(page, `${customer} added`);
-  await expect(page.getByText(customer)).toBeVisible();
+  // The new customer's row in the list (a button that selects them; its name leads its label).
+  await expect(page.locator('main').getByRole('button', { name: new RegExp(`^${customer}`) })).toBeVisible();
 
   // --- An invoice: drafted first, then issued --------------------------------------------
   await page.goto('/sales/invoices/new', { waitUntil: 'networkidle' });

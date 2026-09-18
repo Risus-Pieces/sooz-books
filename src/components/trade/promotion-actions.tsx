@@ -2,10 +2,11 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { CalendarCheck, CircleSlash, Lock } from "lucide-react";
 
 import { accruePromotionAction, closePromotionAction } from "@/app/(app)/trade/actions";
 import { Button } from "@/components/ui/button";
+import { Glyph } from "@/components/ui/glyph";
+import { ToolbarButton } from "@/components/ui/toolbar";
 import { DateInput } from "@/components/ui/date-input";
 import {
   Dialog,
@@ -19,7 +20,7 @@ import {
 import { Money } from "@/components/ui/money";
 import { toast } from "@/components/ui/toast";
 
-import { EntryTable, Field } from "./parts";
+import { EntryPreview, Field } from "./parts";
 import type { EntryView } from "./types";
 
 /** Posts the accrual for every month of the window that has ended and is not yet accrued. */
@@ -43,8 +44,8 @@ export function AccrueButton({ promotionId, due, through }: { promotionId: strin
 
   return (
     <>
-      <Button size="sm" onClick={() => setOpen(true)} disabled={due.length === 0}>
-        <CalendarCheck />
+      <Button onClick={() => setOpen(true)} disabled={due.length === 0}>
+        <Glyph name="hourglass" />
         {due.length === 0 ? "Nothing to accrue" : `Accrue ${due.length} ${due.length === 1 ? "month" : "months"}`}
       </Button>
       <Dialog open={open} onOpenChange={setOpen}>
@@ -52,14 +53,12 @@ export function AccrueButton({ promotionId, due, through }: { promotionId: strin
           <DialogHeader>
             <DialogTitle>Accrue through {through}</DialogTitle>
             <DialogDescription>
-              One entry per month that has ended, dated its last day: <Money cents={total} currency plain className="text-xs" /> in all. A month already accrued is never accrued twice.
+              One entry per month that has ended, dated its last day: <Money cents={total} currency plain /> in all. A month already accrued is never accrued twice.
             </DialogDescription>
           </DialogHeader>
           <DialogBody className="flex max-h-[60vh] flex-col gap-3 overflow-y-auto">
             {due.map((entry) => (
-              <div key={entry.date} className="rounded-md border border-border bg-surface">
-                <EntryTable entry={entry} />
-              </div>
+              <EntryPreview key={entry.date} entry={entry} caption={`Accrual dated ${entry.date}`} />
             ))}
           </DialogBody>
           <DialogFooter>
@@ -108,10 +107,12 @@ export function ClosePromotionButton({
 
   return (
     <>
-      <Button size="sm" variant={cancel ? "danger-quiet" : "secondary"} onClick={() => setOpen(true)}>
-        {cancel ? <CircleSlash /> : <Lock />}
-        {verb} promotion
-      </Button>
+      <ToolbarButton
+        glyph={cancel ? "exclude" : "lock"}
+        label={`${verb} promotion`}
+        tone={cancel ? "danger" : "default"}
+        onClick={() => setOpen(true)}
+      />
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent size="md">
           <DialogHeader>
@@ -126,11 +127,7 @@ export function ClosePromotionButton({
             <Field label="Date" htmlFor="close-date" className="max-w-44">
               <DateInput id="close-date" value={date} onValueChange={setDate} disabled={pending} />
             </Field>
-            {release !== null ? (
-              <div className="rounded-md border border-border bg-surface">
-                <EntryTable entry={{ ...release, date }} />
-              </div>
-            ) : null}
+            {release !== null ? <EntryPreview entry={{ ...release, date }} caption="Release entry" /> : null}
           </DialogBody>
           <DialogFooter>
             <Button variant="ghost" size="sm" onClick={() => setOpen(false)} disabled={pending}>

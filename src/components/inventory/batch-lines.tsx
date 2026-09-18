@@ -44,12 +44,12 @@ export function BatchLines({ lines, components }: BatchLinesProps) {
         </thead>
         <tbody>
           {lines.map((l) => (
-            <tr key={`${l.sku}-${l.channelCode ?? "none"}`} className="rule-row">
+            <tr key={`${l.sku}-${l.channelCode ?? "none"}`} className="[&>td]:rule-row">
               <Td className="whitespace-nowrap">
                 <span className="num font-medium">{l.sku}</span>
-                <span className="ml-2 text-xs text-muted-foreground">{l.productName}</span>
+                <span className="ml-2 text-xs text-label2">{l.productName}</span>
               </Td>
-              <Td className="whitespace-nowrap text-muted-foreground">{l.channelName ?? "Unassigned"}</Td>
+              <Td className="whitespace-nowrap text-label2">{l.channelName ?? "Unassigned"}</Td>
               <Td align="right" className="num">
                 {formatUnits(l.units)}
               </Td>
@@ -57,30 +57,30 @@ export function BatchLines({ lines, components }: BatchLinesProps) {
                 <Money cents={l.unitCostCents} plain />
               </Td>
               {components.map((c) => (
-                <Td key={c} align="right" className="rule-gutter text-muted-foreground">
+                <Td key={c} align="right" className="rule-gutter text-label2">
                   <Money cents={l.components[c] ?? 0} zeroDash plain />
                 </Td>
               ))}
               <Td align="right" className="rule-gutter font-medium">
-                <Money cents={l.cogsCents} />
+                <Money cents={l.cogsCents} plain />
               </Td>
             </tr>
           ))}
           <tr className="font-semibold">
-            <Td className="rule-subtotal" colSpan={2}>
+            <Td colSpan={2}>
               {lines.length} {lines.length === 1 ? "line" : "lines"}
             </Td>
-            <Td align="right" className="rule-subtotal num">
+            <Td align="right" className="num">
               {formatUnits(units)}
             </Td>
-            <Td className="rule-subtotal" />
+            <Td />
             {components.map((c) => (
-              <Td key={c} align="right" className="rule-subtotal rule-gutter">
+              <Td key={c} align="right" className="rule-gutter">
                 <Money cents={lines.reduce((s, l) => s + (l.components[c] ?? 0), 0)} zeroDash plain />
               </Td>
             ))}
-            <Td align="right" className="rule-subtotal rule-total rule-gutter">
-              <Money cents={total} currency />
+            <Td align="right" className="rule-total rule-gutter">
+              <Money cents={total} currency plain />
             </Td>
           </tr>
         </tbody>

@@ -1,7 +1,6 @@
 "use client";
 
 import * as React from "react";
-import { Check, ChevronsUpDown } from "lucide-react";
 
 import {
   Command,
@@ -11,7 +10,11 @@ import {
   CommandItem,
   CommandList,
 } from "@/components/ui/command";
+import { Glyph } from "@/components/ui/glyph";
+import { Dot } from "@/components/ui/icon-badge";
+import { fieldBase, fieldInvalid } from "@/components/ui/menu-styles";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { categoryFor } from "@/lib/ui/categories";
 import { cn } from "@/lib/cn";
 
 import type { AccountOption } from "./types";
@@ -156,20 +159,22 @@ export function AccountCombobox({
         disabled={disabled}
         aria-invalid={invalid || undefined}
         className={cn(
-          "flex h-7 w-full items-center justify-between gap-1.5 rounded-sm border border-border-strong bg-surface-raised px-2 text-sm max-sm:h-10 text-foreground transition-colors data-[state=open]:border-ring disabled:cursor-not-allowed disabled:bg-muted disabled:text-muted-foreground",
-          invalid && "border-negative",
+          fieldBase,
+          "flex items-center justify-between gap-1.5 pr-1.5 text-left data-[state=open]:shadow-[0_0_0_3px_color-mix(in_srgb,var(--blue)_45%,transparent),0_0_0_0.5px_var(--blue)]",
           className,
+          invalid && fieldInvalid,
         )}
       >
         {selected ? (
-          <span className="flex min-w-0 items-baseline gap-1.5">
-            <span className="num shrink-0 text-xs text-muted-foreground">{selected.code}</span>
-            <span className="truncate">{selected.name}</span>
+          <span className="flex min-w-0 items-center gap-1.5">
+            <Dot tint={categoryFor(selected).tint} size={7} />
+            <span className="truncate font-medium">{selected.name}</span>
+            <span className="num shrink-0 text-xs text-label2">{selected.code}</span>
           </span>
         ) : (
-          <span className="text-muted-foreground/80">{placeholder}</span>
+          <span className="text-label2">{placeholder}</span>
         )}
-        <ChevronsUpDown className="size-3 shrink-0 text-muted-foreground" />
+        <Glyph name="chevron-updown" size={13} weight={2.2} className="shrink-0 text-label2" />
       </PopoverTrigger>
 
       <PopoverContent className="w-[min(28rem,calc(100vw-2rem))] p-0" align="start">
@@ -244,15 +249,12 @@ function AccountRow({
       onSelect={onPick}
       className="gap-2"
     >
-      <span className="num w-10 shrink-0 text-xs text-muted-foreground">{account.code}</span>
+      <Dot tint={categoryFor(account).tint} size={7} />
       <span className="min-w-0 flex-1 truncate">{account.name}</span>
-      {account.isControl ? (
-        <span className="text-2xs tracking-wide text-muted-foreground uppercase">Control</span>
-      ) : null}
-      {account.active ? null : (
-        <span className="text-2xs tracking-wide text-muted-foreground uppercase">Inactive</span>
-      )}
-      {selected ? <Check className="size-3.5 !text-primary" /> : null}
+      {account.isControl ? <span className="text-2xs font-medium text-label2">Control</span> : null}
+      {account.active ? null : <span className="text-2xs font-medium text-label2">Inactive</span>}
+      <span className="num shrink-0 text-xs text-label2">{account.code}</span>
+      {selected ? <Glyph name="check" size={13} weight={2.2} className="text-ink-blue" /> : null}
     </CommandItem>
   );
 }

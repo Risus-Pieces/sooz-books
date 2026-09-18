@@ -2,27 +2,25 @@
 
 import * as React from "react";
 import Link from "next/link";
-import {
-  CircleCheck,
-  CircleX,
-  FileSpreadsheet,
-  ListChecks,
-  RotateCcw,
-  Save,
-  TriangleAlert,
-  Upload,
-} from "lucide-react";
-
-import { Badge } from "@/components/ui/badge";
+import { SplitBar } from "@/components/charts";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Glyph, type GlyphName } from "@/components/ui/glyph";
+import { Dot, IconBadge, LegendItem } from "@/components/ui/icon-badge";
+import { InfoButton } from "@/components/ui/info-button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { GroupRow, InsetGroup, ListRow } from "@/components/ui/inset-group";
+import { Monogram } from "@/components/ui/monogram";
 import { Money } from "@/components/ui/money";
+import { Pill } from "@/components/ui/pill";
+import { SegmentedControl } from "@/components/ui/segmented-control";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "@/components/ui/toast";
 import { cn } from "@/lib/cn";
+import { categoryForCode } from "@/lib/ui/categories";
+import { dollars } from "@/lib/ui/format";
+import { TINT_TEXT, type Tint } from "@/lib/ui/tints";
 import {
   cancelStatement,
   commitStatement,
@@ -30,7 +28,6 @@ import {
   saveStatementMapping,
 } from "@/app/(app)/banking/actions";
 
-import { Figure, InCell, OutCell, Th } from "./parts";
 import { shortDate } from "./review-logic";
 import type {
   BankAccountTab,
@@ -155,87 +152,97 @@ export function ImportWizard({ accounts }: { accounts: readonly BankAccountTab[]
   }
 
   return (
-    <Card>
-      <CardContent className="flex flex-col gap-4">
-        <div
-          role="button"
-          tabIndex={0}
-          aria-label="Choose a statement file, or drop one here"
-          onClick={() => inputRef.current?.click()}
-          onKeyDown={(event) => {
-            if (event.key === "Enter" || event.key === " ") {
-              event.preventDefault();
-              inputRef.current?.click();
-            }
-          }}
-          onDragOver={(event) => {
+    <div className="flex flex-col gap-3.5 max-md:gap-3">
+      <div
+        role="button"
+        tabIndex={0}
+        aria-label="Choose a statement file, or drop one here"
+        onClick={() => inputRef.current?.click()}
+        onKeyDown={(event) => {
+          if (event.key === "Enter" || event.key === " ") {
             event.preventDefault();
-            setDragging(true);
-          }}
-          onDragLeave={() => setDragging(false)}
-          onDrop={(event) => {
-            event.preventDefault();
-            setDragging(false);
-            pick(event.dataTransfer.files.item(0));
-          }}
-          className={cn(
-            "flex cursor-pointer flex-col items-center justify-center gap-2 rounded-md border border-dashed border-border-strong bg-surface-sunken/40 px-4 py-10 text-center transition-colors hover:bg-muted",
-            dragging && "border-primary bg-primary/6",
-          )}
-        >
-          {file === null ? (
-            <>
-              <Upload className="size-5 text-muted-foreground" aria-hidden />
-              <p className="text-sm font-medium">Drop a bank statement here, or choose a file</p>
-              <p className="text-xs text-muted-foreground">CSV or Excel, up to 950 KB. Relay exports are recognised by name.</p>
-            </>
-          ) : (
-            <>
-              <FileSpreadsheet className="size-5 text-primary" aria-hidden />
-              <p className="text-sm font-medium break-all">{file.name}</p>
-              <p className="num text-xs text-muted-foreground">
-                {(file.size / 1024).toFixed(1)} KB · choose a different file
-              </p>
-            </>
-          )}
-          <input
-            ref={inputRef}
-            type="file"
-            accept={ACCEPT}
-            className="sr-only"
-            tabIndex={-1}
-            onChange={(event) => pick(event.target.files?.item(0) ?? null)}
-          />
-        </div>
+            inputRef.current?.click();
+          }
+        }}
+        onDragOver={(event) => {
+          event.preventDefault();
+          setDragging(true);
+        }}
+        onDragLeave={() => setDragging(false)}
+        onDrop={(event) => {
+          event.preventDefault();
+          setDragging(false);
+          pick(event.dataTransfer.files.item(0));
+        }}
+        className={cn(
+          "flex min-h-[220px] cursor-default flex-col items-center justify-center gap-2.5 rounded-2xl border-[1.5px] border-dashed border-sep px-4 py-10 text-center transition-colors outline-none focus-ring hover:border-tint-blue hover:text-ink-blue focus-visible:border-tint-blue max-md:min-h-[180px] max-md:rounded-[22px]",
+          dragging ? "border-tint-blue bg-tint-blue/8 text-ink-blue" : "text-label2",
+          file !== null && "border-solid border-transparent bg-card shadow-card",
+        )}
+      >
+        {file === null ? (
+          <>
+            <Glyph name="import" size={44} weight={1.4} />
+            <p className="text-lg font-semibold text-label">Drop a statement</p>
+            <p className="text-xs font-medium">CSV or Excel · 950 KB</p>
+          </>
+        ) : (
+          <>
+            <IconBadge glyph="doc-text" tint="green" size="xl" />
+            <p className="text-lg font-semibold break-all text-label">{file.name}</p>
+            <p className="num text-xs font-medium">{(file.size / 1024).toFixed(1)} KB</p>
+          </>
+        )}
+        <input
+          ref={inputRef}
+          type="file"
+          accept={ACCEPT}
+          className="sr-only"
+          tabIndex={-1}
+          onChange={(event) => pick(event.target.files?.item(0) ?? null)}
+        />
+      </div>
 
-        <div className="flex flex-wrap items-end gap-3">
-          <div className="flex min-w-60 flex-1 flex-col gap-1.5">
-            <Label htmlFor="import-account" hint={guessed ? "read from the filename" : undefined}>
-              Bank account
-            </Label>
-            <Select value={bankAccountId} onValueChange={setBankAccountId}>
-              <SelectTrigger id="import-account">
-                <SelectValue placeholder="Which account is this statement for?" />
-              </SelectTrigger>
-              <SelectContent>
-                {accounts.map((account) => (
-                  <SelectItem key={account.id} value={account.id}>
-                    {account.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <Button disabled={file === null || bankAccountId === "" || pending} onClick={() => runPreview(null, null)}>
-            {pending ? "Reading…" : "Preview import"}
-          </Button>
-        </div>
-        <p className="text-xs text-muted-foreground">
-          The preview writes nothing to the books. Imported transactions land in the review queue; only rows an
-          owner-marked auto-post rule codes can post without review.
-        </p>
-      </CardContent>
-    </Card>
+      <InsetGroup>
+        <GroupRow label="Account" htmlFor="import-account">
+          {guessed ? (
+            <Pill tone="blue" glyph="check" className="max-sm:hidden">
+              From name
+            </Pill>
+          ) : null}
+          <Select value={bankAccountId} onValueChange={setBankAccountId}>
+            <SelectTrigger id="import-account" className="h-[26px] w-auto min-w-44 max-sm:h-11">
+              <SelectValue placeholder="Choose" />
+            </SelectTrigger>
+            <SelectContent>
+              {accounts.map((account) => (
+                <SelectItem key={account.id} value={account.id}>
+                  {account.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </GroupRow>
+      </InsetGroup>
+
+      <div className="flex items-center gap-2">
+        <Button
+          className="max-md:flex-1"
+          disabled={file === null || bankAccountId === "" || pending}
+          onClick={() => runPreview(null, null)}
+        >
+          <Glyph name="doc-text" />
+          {pending ? "Reading…" : "Preview import"}
+        </Button>
+        <InfoButton label="About importing" align="start">
+          <p>The preview writes nothing to the books. You see every row first.</p>
+          <p>
+            Imported transactions land in the review queue; only rows an owner-marked auto-post rule codes can post
+            without review. Relay exports name their account in the filename.
+          </p>
+        </InfoButton>
+      </div>
+    </div>
   );
 }
 
@@ -244,8 +251,26 @@ export function ImportWizard({ accounts }: { accounts: readonly BankAccountTab[]
 // ---------------------------------------------------------------------------
 
 const SEVERITY_ORDER: ImportIssueView["severity"][] = ["fatal", "error", "warn", "info"];
-const SEVERITY_TONE = { fatal: "negative", error: "negative", warn: "warning", info: "neutral" } as const;
 const SEVERITY_LABEL = { fatal: "Blocks import", error: "Needs a decision", warn: "Warning", info: "Note" } as const;
+const SEVERITY_BADGE: Record<ImportIssueView["severity"], { glyph: GlyphName; tint: Tint }> = {
+  fatal: { glyph: "xmark-circle", tint: "red" },
+  error: { glyph: "warning", tint: "red" },
+  warn: { glyph: "warning", tint: "orange" },
+  info: { glyph: "info", tint: "gray" },
+};
+
+/** A small figure: a quiet label over the number. The label and the number share a parent. */
+function Stat({ label, children, glyph, className }: { label: string; children: React.ReactNode; glyph?: React.ReactNode; className?: string }) {
+  return (
+    <div className={cn("flex min-w-0 flex-col gap-1 px-4", className)}>
+      <span className="flex items-center gap-1 text-xs font-semibold text-label2">
+        {glyph}
+        {label}
+      </span>
+      <span className="text-[1.1875rem] font-bold tracking-[-0.02em]">{children}</span>
+    </div>
+  );
+}
 
 function PreviewPanel({
   preview,
@@ -273,294 +298,348 @@ function PreviewPanel({
   );
 
   const blocker = preview.blocked
-    ? "This file cannot be imported as it is. The problems marked “Blocks import” say why."
+    ? "Blocked — see problems"
     : preview.profileConfirmationRequired
-      ? "Confirm the column mapping below before importing: this bank's format has not been seen before."
+      ? "Confirm the mapping"
       : undecided.length > 0
-        ? `Decide the ${undecided.length} row${undecided.length === 1 ? "" : "s"} marked below before importing.`
+        ? `Decide ${undecided.length} row${undecided.length === 1 ? "" : "s"}`
         : preview.counts.new === 0
-          ? "Every row in this file is already in the books. There is nothing new to import."
+          ? "Nothing new"
           : null;
+  const bank = preview.bankAccountMask === null ? preview.bankAccountName : `••${preview.bankAccountMask} ${preview.bankAccountName}`;
+  const { counts, totals } = preview;
 
   return (
-    <div className="flex flex-col gap-4">
-      <Card>
-        <CardHeader>
-          <div className="min-w-0">
-            <CardTitle className="break-all">{preview.filename}</CardTitle>
-            <CardDescription>
-              {preview.importerLabel} · {Math.round(preview.detectionConfidence * 100)}% sure ·{" "}
-              {preview.bankAccountMask === null ? preview.bankAccountName : `••${preview.bankAccountMask} ${preview.bankAccountName}`}
-              {preview.partial ? " · partial month" : ""}
-            </CardDescription>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <Button variant="ghost" size="sm" onClick={onCancel} disabled={pending}>
-              Cancel
-            </Button>
-            <Button size="sm" onClick={onCommit} disabled={!canCommit || pending}>
-              <Upload />
-              {pending ? "Importing…" : `Import ${preview.counts.new} new`}
-            </Button>
-          </div>
-        </CardHeader>
-        {blocker !== null ? (
-          <p className="flex gap-2 border-b border-border bg-warning/8 px-4 py-2 text-xs text-warning">
-            <TriangleAlert className="mt-0.5 size-3.5 shrink-0" aria-hidden />
-            {blocker}
-          </p>
-        ) : null}
-        {preview.priorImport !== null ? (
-          <p className="border-b border-border px-4 py-2 text-xs text-muted-foreground">
-            This exact file was imported before ({preview.priorImport.importedCount} rows). Re-importing is safe:
-            duplicates are counted and skipped.
-          </p>
-        ) : null}
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6">
-          <Figure label="New">
-            <span className="num">{preview.counts.new}</span>
-          </Figure>
-          <Figure label="Already imported" className="border-l">
-            <span className="num text-muted-foreground">{preview.counts.duplicate}</span>
-          </Figure>
-          <Figure label="Skipped" className="border-t sm:border-t-0 sm:border-l">
-            <span className="num text-muted-foreground">{preview.counts.skipped}</span>
-          </Figure>
-          <Figure label="Dates" className="border-t border-l lg:border-t-0">
-            <span className="num text-sm">
-              {preview.dateRange === null ? "—" : `${shortDate(preview.dateRange.min)} – ${shortDate(preview.dateRange.max)}`}
+    <div className="flex flex-col gap-3.5 max-md:gap-3">
+      {/* The file */}
+      <Card className="flex flex-wrap items-center gap-3 px-5 py-4 max-sm:px-4">
+        <IconBadge glyph="doc-text" tint="green" size="xl" />
+        <div className="min-w-0 flex-1">
+          <h2 className="text-lg font-semibold break-all">{preview.filename}</h2>
+          <p className="mt-0.5 flex flex-wrap items-center gap-1.5 text-sm font-medium text-label2">
+            <span>{preview.importerLabel}</span>
+            <span aria-hidden className="size-[3px] rounded-full bg-label3" />
+            <span className="num">{Math.round(preview.detectionConfidence * 100)}%</span>
+            <span aria-hidden className="size-[3px] rounded-full bg-label3" />
+            <span className="inline-flex items-center gap-1">
+              <Glyph name="bank" size={14} />
+              {bank}
             </span>
-          </Figure>
-          <Figure label="Money in" className="border-t sm:border-l lg:border-t-0">
-            <Money cents={preview.totals.inflowCents} currency colorPositive />
-          </Figure>
-          <Figure label="Money out" className="border-t border-l lg:border-t-0">
-            <Money cents={-Math.abs(preview.totals.outflowCents)} currency />
-          </Figure>
+            {preview.dateRange === null ? null : (
+              <>
+                <span aria-hidden className="size-[3px] rounded-full bg-label3" />
+                <span className="num">
+                  {shortDate(preview.dateRange.min)} – {shortDate(preview.dateRange.max)}
+                </span>
+              </>
+            )}
+          </p>
         </div>
-        <div className="flex flex-wrap gap-x-6 gap-y-1 border-t border-border px-4 py-2 text-xs text-muted-foreground">
-          <span>
-            <span className="num text-foreground">{preview.counts.needsReview}</span> will need review
-          </span>
-          <span>
-            <span className="num text-foreground">{preview.counts.autoPost}</span> coded by an auto-post rule
-          </span>
-          <span>
-            <span className="num text-foreground">{preview.counts.excluded}</span> excluded (money never moved)
-          </span>
+        <div className="flex flex-wrap items-center gap-2 max-sm:w-full">
+          <Button variant="secondary" onClick={onCancel} disabled={pending} className="max-sm:flex-1">
+            Cancel
+          </Button>
+          <Button onClick={onCommit} disabled={!canCommit || pending} className="max-sm:flex-1">
+            <Glyph name="import" />
+            {pending ? "Importing…" : `Import ${counts.new} new`}
+          </Button>
         </div>
+        {blocker !== null || preview.partial || preview.priorImport !== null ? (
+          <div className="flex w-full flex-wrap gap-2">
+            {blocker !== null ? (
+              <Pill tone="orange" glyph="warning">
+                {blocker}
+              </Pill>
+            ) : null}
+            {preview.partial ? <Pill glyph="calendar">Partial month</Pill> : null}
+            {preview.priorImport !== null ? (
+              <span className="inline-flex items-center gap-1">
+                <Pill tone="blue" glyph="refresh">
+                  Imported before
+                </Pill>
+                <InfoButton label="About the earlier import">
+                  <p>
+                    This exact file was imported before ({preview.priorImport.importedCount} rows). Re-importing is safe:
+                    duplicates are counted and skipped.
+                  </p>
+                </InfoButton>
+              </span>
+            ) : null}
+          </div>
+        ) : null}
       </Card>
 
-      <div className="grid gap-4 lg:grid-cols-2">
+      <div className="grid gap-3.5 max-md:gap-3 lg:grid-cols-3">
+        {/* New, duplicate, skipped */}
+        <Card className="flex flex-col gap-3 px-5 py-4 max-sm:px-4">
+          <h3 className="text-sm font-semibold text-label2">Rows</h3>
+          <p className="num text-3xl font-bold tracking-[-0.028em]">{counts.total}</p>
+          <SplitBar
+            label={`${counts.new} new, ${counts.duplicate} already imported, ${counts.skipped} skipped`}
+            segments={[
+              { label: "new", value: counts.new, tint: "blue" },
+              { label: "duplicate", value: counts.duplicate, tint: "gray" },
+              { label: "skipped", value: counts.skipped, tint: "orange" },
+            ]}
+          />
+          <div className="flex flex-wrap gap-x-3.5 gap-y-1">
+            <LegendItem tint="blue">
+              New <b className="num text-label">{counts.new}</b>
+            </LegendItem>
+            <LegendItem tint="gray">
+              Duplicate <b className="num text-label">{counts.duplicate}</b>
+            </LegendItem>
+            <LegendItem tint="orange">
+              Skipped <b className="num text-label">{counts.skipped}</b>
+            </LegendItem>
+          </div>
+          <div className="mt-auto flex flex-wrap gap-x-3.5 gap-y-1 hairline-t pt-2.5 text-xs font-medium text-label2">
+            <span className="inline-flex items-center gap-1">
+              <Glyph name="tray" size={13} className="text-tint-orange" />
+              Review <b className="num text-label">{counts.needsReview}</b>
+            </span>
+            <span className="inline-flex items-center gap-1">
+              <Glyph name="wand" size={13} className="text-tint-purple" />
+              Auto-post <b className="num text-label">{counts.autoPost}</b>
+            </span>
+            <span className="inline-flex items-center gap-1">
+              <Glyph name="exclude" size={13} />
+              Excluded <b className="num text-label">{counts.excluded}</b>
+            </span>
+          </div>
+        </Card>
+
         <BalanceChainCard preview={preview} />
-        <Card>
-          <CardHeader>
-            <CardTitle>Problems and notes</CardTitle>
-            <div className="flex gap-1">
-              {SEVERITY_ORDER.map((severity) =>
-                preview.issueCounts[severity] > 0 ? (
-                  <Badge key={severity} tone={SEVERITY_TONE[severity]}>
-                    {preview.issueCounts[severity]} {severity}
-                  </Badge>
-                ) : null,
-              )}
-            </div>
-          </CardHeader>
-          {issues.length === 0 ? (
-            <p className="px-4 py-3 text-xs text-muted-foreground">Nothing to report: every row read cleanly.</p>
-          ) : (
-            <ul className="relative max-h-72 divide-y divide-border overflow-y-auto">
-              {issues.map((issue, index) => (
-                <li key={`${issue.code}-${index}`} className="flex flex-col gap-0.5 px-4 py-2 text-xs">
-                  <span className="flex items-center gap-2">
-                    <Badge tone={SEVERITY_TONE[issue.severity]} size="sm">
-                      {SEVERITY_LABEL[issue.severity]}
-                    </Badge>
-                    {issue.rowIndex === null ? null : <span className="num text-muted-foreground">row {issue.rowIndex + 1}</span>}
-                  </span>
-                  <span className="text-foreground">{issue.message}</span>
-                  {issue.remedy === null ? null : <span className="text-muted-foreground">{issue.remedy}</span>}
-                </li>
-              ))}
-            </ul>
-          )}
+
+        {/* In and out */}
+        <Card className="flex flex-col gap-3 px-5 py-4 max-sm:px-4">
+          <h3 className="text-sm font-semibold text-label2">In & out</h3>
+          <Money cents={totals.netCents} currency signed colorPositive plain={totals.netCents < 0} className="text-3xl font-bold tracking-[-0.028em]" />
+          <SplitBar
+            label={`In ${dollars(totals.inflowCents)}, out ${dollars(Math.abs(totals.outflowCents))}`}
+            segments={[
+              { label: "in", value: totals.inflowCents, tint: "green" },
+              { label: "out", value: Math.abs(totals.outflowCents), tint: "red", muted: true },
+            ]}
+          />
+          <div className="flex justify-between text-xs font-medium text-label2">
+            <span className="inline-flex items-center gap-1">
+              <Glyph name="arrow-in" size={12} weight={2.2} className="text-ink-green" />
+              <Money cents={totals.inflowCents} currency plain />
+            </span>
+            <span className="inline-flex items-center gap-1">
+              <Glyph name="arrow-out" size={12} weight={2.2} />
+              <Money cents={Math.abs(totals.outflowCents)} currency plain />
+            </span>
+          </div>
         </Card>
       </div>
+
+      {issues.length > 0 ? (
+        <InsetGroup
+          header="Problems"
+          separatorInset={52}
+          headerAccessory={
+            <span className="flex gap-1.5 text-xs font-semibold text-label2">
+              {SEVERITY_ORDER.map((severity) =>
+                preview.issueCounts[severity] > 0 ? (
+                  <span key={severity} className="inline-flex items-center gap-0.5">
+                    <Glyph name={SEVERITY_BADGE[severity].glyph} size={13} className={TINT_TEXT[SEVERITY_BADGE[severity].tint]} />
+                    <span className="num">{preview.issueCounts[severity]}</span>
+                    <span className="sr-only">{severity}</span>
+                  </span>
+                ) : null,
+              )}
+            </span>
+          }
+        >
+          <div className="max-h-80 overflow-y-auto">
+            {issues.map((issue, index) => (
+              <ListRow
+                key={`${issue.code}-${index}`}
+                leading={<IconBadge glyph={SEVERITY_BADGE[issue.severity].glyph} tint={SEVERITY_BADGE[issue.severity].tint} size="lg" />}
+                title={<span className="whitespace-normal">{issue.message}</span>}
+                subtitle={issue.remedy === null ? SEVERITY_LABEL[issue.severity] : <span className="whitespace-normal">{issue.remedy}</span>}
+                detail={issue.rowIndex === null ? undefined : <span className="num">Row {issue.rowIndex + 1}</span>}
+              />
+            ))}
+          </div>
+        </InsetGroup>
+      ) : null}
 
       {preview.profileConfirmationRequired || preview.mappingEditable ? (
         <MappingEditor preview={preview} pending={pending} onSaved={onRemap} />
       ) : null}
 
       {preview.decisionsRequired.length > 0 ? (
-        <Card>
-          <CardHeader>
-            <CardTitle>Rows that need your decision</CardTitle>
-            <CardDescription>The file alone cannot say what these are.</CardDescription>
-          </CardHeader>
-          <ul className="divide-y divide-border">
-            {preview.decisionsRequired.map((rowIndex) => {
-              const row = preview.rows.find((r) => r.rowIndex === rowIndex);
-              if (row === undefined) return null;
-              return (
-                <li key={rowIndex} className="flex flex-wrap items-center gap-3 px-4 py-2">
-                  <span className="num text-xs text-muted-foreground">{row.txnDate === "" ? "—" : shortDate(row.txnDate)}</span>
-                  <span className="min-w-0 flex-1 text-sm">
-                    <span className="block truncate font-medium">{row.payee}</span>
-                    <span className="block text-xs text-muted-foreground">{row.decisionRequired}</span>
+        <InsetGroup header="Decide" separatorInset={16}>
+          {preview.decisionsRequired.map((rowIndex) => {
+            const row = preview.rows.find((r) => r.rowIndex === rowIndex);
+            if (row === undefined) return null;
+            return (
+              <div key={rowIndex} className="relative flex flex-wrap items-center gap-3 px-4 py-2.5 before:absolute before:top-0 before:right-0 before:left-4 before:border-t-[0.5px] before:border-sep first:before:hidden">
+                <span className="min-w-0 flex-1 text-sm">
+                  <span className="block truncate font-semibold">{row.payee}</span>
+                  <span className="block text-xs text-label2">
+                    {row.txnDate === "" ? "—" : shortDate(row.txnDate)} · {row.decisionRequired}
                   </span>
-                  <Money cents={row.amountCents} signed colorPositive />
-                  <Select
-                    value={decisions[rowIndex] ?? undefined}
-                    onValueChange={(value) => onDecide(rowIndex, value as ImportDecisionView["choice"])}
-                  >
-                    <SelectTrigger className="w-44" aria-label={`Decision for row ${rowIndex + 1}`}>
-                      <SelectValue placeholder="Decide…" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="exclude">Exclude — money never moved</SelectItem>
-                      <SelectItem value="review">Import for review</SelectItem>
-                      <SelectItem value="skip">Leave out of the import</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </li>
-              );
-            })}
-          </ul>
-        </Card>
+                </span>
+                <Money cents={row.amountCents} currency signed colorPositive plain={row.amountCents < 0} className="font-semibold" />
+                <Select
+                  value={decisions[rowIndex] ?? undefined}
+                  onValueChange={(value) => onDecide(rowIndex, value as ImportDecisionView["choice"])}
+                >
+                  <SelectTrigger className="h-[26px] w-40 max-sm:h-11" aria-label={`Decision for row ${rowIndex + 1}`}>
+                    <SelectValue placeholder="Decide" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="exclude">Exclude — money never moved</SelectItem>
+                    <SelectItem value="review">Import for review</SelectItem>
+                    <SelectItem value="skip">Leave out of the import</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            );
+          })}
+        </InsetGroup>
       ) : null}
 
-      <Card>
-        <CardHeader>
-          <CardTitle>{showAll ? "Every row in the file" : "New rows"}</CardTitle>
-          <label className="flex items-center gap-2 text-xs text-muted-foreground">
-            <Checkbox checked={showAll} onCheckedChange={(value) => setShowAll(value === true)} />
-            Show already-imported and skipped rows
-          </label>
-        </CardHeader>
-        <div className="relative max-h-[32rem] overflow-auto">
-          <table className="w-full min-w-[50rem] border-separate border-spacing-0 text-sm">
-            <thead className="sticky top-0 z-10">
-              <tr>
-                <Th className="w-16">Date</Th>
-                <Th>Payee</Th>
-                <Th className="w-[30%]">Proposed</Th>
-                <Th className="w-24">Row</Th>
-                <Th className="w-28 text-right">Money in</Th>
-                <Th className="rule-gutter w-28 text-right">Money out</Th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.length === 0 ? (
-                <tr>
-                  <td colSpan={6} className="px-3 py-8 text-center text-xs text-muted-foreground">
-                    No new rows in this file.
-                  </td>
-                </tr>
-              ) : (
-                rows.map((row) => (
-                  <tr key={row.rowIndex} className={cn("align-top", row.class !== "new" && "text-muted-foreground")}>
-                    <td className="rule-row num px-3 py-1.5 text-xs whitespace-nowrap">
-                      {row.txnDate === "" ? "—" : shortDate(row.txnDate)}
-                    </td>
-                    <td className="rule-row max-w-0 px-3 py-1.5">
-                      <p className="truncate">{row.payee}</p>
-                      {row.reference ? <p className="truncate text-2xs text-muted-foreground">{row.reference}</p> : null}
-                    </td>
-                    <td className="rule-row max-w-0 px-3 py-1.5 text-xs">
-                      {row.suggestion?.accountLabel ? (
-                        <p className="truncate">
-                          {row.suggestion.accountLabel}{" "}
-                          <span className="text-muted-foreground">
-                            · {row.suggestion.source} {Math.round(row.suggestion.confidence * 100)}%
-                          </span>
-                          {row.suggestion.autoPost ? (
-                            <Badge tone="primary" size="sm" className="ml-1">
-                              Auto-post
-                            </Badge>
-                          ) : null}
-                        </p>
+      <InsetGroup
+        header={showAll ? "Every row" : "New rows"}
+        separatorInset={57}
+        headerAccessory={
+          <SegmentedControl
+            aria-label="Rows shown"
+            value={showAll ? "all" : "new"}
+            onValueChange={(v) => setShowAll(v === "all")}
+            options={[
+              { value: "new", label: "New" },
+              { value: "all", label: "All" },
+            ]}
+          />
+        }
+      >
+        <div className="max-h-[32rem] overflow-y-auto">
+          {rows.length === 0 ? (
+            <p className="px-4 py-8 text-center text-sm font-medium text-label2">No new rows</p>
+          ) : (
+            rows.map((row) => (
+              <ListRow
+                key={row.rowIndex}
+                className={row.class !== "new" ? "opacity-60" : undefined}
+                leading={<Monogram name={row.payee || "?"} />}
+                title={row.payee}
+                trailing={<Money cents={row.amountCents} currency signed colorPositive plain={row.amountCents < 0} />}
+                subtitle={
+                  row.suggestion?.accountLabel ? (
+                    <>
+                      <Dot tint={categoryForCode(row.suggestion.accountLabel.slice(0, 4)).tint} size={7} />
+                      <span className="truncate">{row.suggestion.accountLabel}</span>
+                      {row.suggestion.source === "ai" ? (
+                        <Glyph name="sparkle" size={12} label={`AI ${Math.round(row.suggestion.confidence * 100)}%`} className="shrink-0 text-tint-purple" />
                       ) : (
-                        <span className="text-muted-foreground">{row.proposedStatus === "excluded" ? "Excluded" : "For review"}</span>
+                        <span className="sr-only">
+                          {row.suggestion.source} {Math.round(row.suggestion.confidence * 100)}%
+                        </span>
                       )}
-                    </td>
-                    <td className="rule-row px-3 py-1.5">
-                      <Badge tone={row.class === "new" ? "info" : "neutral"} size="sm">
-                        {row.class === "duplicate" ? "Imported" : row.class}
-                      </Badge>
-                    </td>
-                    <InCell cents={row.amountCents} className="rule-row" />
-                    <OutCell cents={row.amountCents} className="rule-row" />
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
+                      {row.suggestion.autoPost ? <Glyph name="wand" size={12} label="Auto-post" className="shrink-0 text-tint-purple" /> : null}
+                    </>
+                  ) : (
+                    <>
+                      <Dot tint="quiet" size={7} />
+                      <span className="italic">{row.proposedStatus === "excluded" ? "Excluded" : "For review"}</span>
+                    </>
+                  )
+                }
+                detail={
+                  <span className="inline-flex items-center gap-1.5">
+                    {row.class === "new" ? null : (
+                      <span className="rounded-[5px] bg-fill2 px-1.5 text-2xs font-semibold">{row.class === "duplicate" ? "Imported" : "Skipped"}</span>
+                    )}
+                    {row.txnDate === "" ? "—" : shortDate(row.txnDate)}
+                  </span>
+                }
+              />
+            ))
+          )}
         </div>
-      </Card>
+      </InsetGroup>
     </div>
   );
 }
 
+/** The file's own arithmetic, as one tick: the running balance ties, or it breaks. */
 function BalanceChainCard({ preview }: { preview: ImportPreviewView }) {
   const chain = preview.balanceChain;
+  const state = chain === null ? "none" : chain.ok ? "ok" : "broken";
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Running balance</CardTitle>
-        {chain === null ? (
-          <Badge>Not in file</Badge>
-        ) : chain.ok ? (
-          <Badge tone="positive">
-            <CircleCheck />
-            Ties
-          </Badge>
-        ) : (
-          <Badge tone="negative">
-            <CircleX />
-            {chain.breaks.length} break{chain.breaks.length === 1 ? "" : "s"}
-          </Badge>
-        )}
-      </CardHeader>
-      <CardContent className="flex flex-col gap-2 text-xs">
-        {chain === null ? (
-          <p className="text-muted-foreground">
-            This file has no balance column, so its arithmetic cannot be checked row by row.
-          </p>
-        ) : (
-          <>
-            <p className="text-muted-foreground">
-              {chain.checked} rows checked. Opens at{" "}
-              {chain.openingBalanceCents === null ? "—" : <Money cents={chain.openingBalanceCents} currency plain />}, closes at{" "}
-              {chain.closingBalanceCents === null ? "—" : <Money cents={chain.closingBalanceCents} currency plain />}.
+    <Card className="flex flex-col gap-3 px-5 py-4 max-sm:px-4">
+      <div className="flex items-center gap-2">
+        <h3 className="flex-1 text-sm font-semibold text-label2">Balance</h3>
+        <InfoButton label="About the balance check">
+          {chain === null ? (
+            <p>This file has no balance column, so its arithmetic cannot be checked row by row.</p>
+          ) : (
+            <p>
+              Each row&apos;s amount is added to the previous balance and compared with the balance the bank printed.{" "}
+              {chain.checked} rows checked.
             </p>
-            {chain.breaks.slice(0, 6).map((b) => (
-              <p key={b.rowIndex} className="text-negative">
-                Row {b.rowIndex + 1}: expected <Money cents={b.expectedCents} currency plain />, the bank printed{" "}
-                <Money cents={b.actualCents} currency plain /> (off by <Money cents={b.deltaCents} currency signed plain />).
-              </p>
-            ))}
-          </>
-        )}
-        {preview.assertions.length > 0 ? (
-          <ul className="flex flex-col gap-1 border-t border-border pt-2">
-            {preview.assertions.map((assertion) => (
-              <li key={assertion.id} className="flex items-start gap-1.5">
-                {assertion.passed ? (
-                  <CircleCheck className="mt-px size-3.5 shrink-0 text-positive" aria-label="Passed" />
-                ) : (
-                  <CircleX className="mt-px size-3.5 shrink-0 text-negative" aria-label="Failed" />
-                )}
-                <span>
-                  {assertion.label}
-                  {assertion.detail !== null && !assertion.passed ? (
-                    <span className="block text-muted-foreground">{assertion.detail}</span>
-                  ) : null}
-                </span>
-              </li>
-            ))}
-          </ul>
-        ) : null}
-      </CardContent>
+          )}
+        </InfoButton>
+      </div>
+      <div className="flex items-center gap-3">
+        <span
+          className={cn(
+            "grid size-12 shrink-0 place-items-center rounded-full text-white",
+            state === "ok" ? "bg-tint-green" : state === "broken" ? "bg-tint-red" : "bg-tint-gray",
+          )}
+        >
+          <Glyph name={state === "ok" ? "check" : state === "broken" ? "xmark" : "minus"} size={24} weight={2.4} />
+        </span>
+        <span className="text-xl font-bold tracking-[-0.02em]">
+          {state === "ok" ? "Ties" : state === "broken" && chain !== null ? `${chain.breaks.length} break${chain.breaks.length === 1 ? "" : "s"}` : "Not in file"}
+        </span>
+      </div>
+      {chain !== null ? (
+        <div className="flex justify-between text-xs font-medium text-label2">
+          <span>
+            Open {chain.openingBalanceCents === null ? "—" : <Money cents={chain.openingBalanceCents} currency plain className="text-label" />}
+          </span>
+          <span>
+            Close {chain.closingBalanceCents === null ? "—" : <Money cents={chain.closingBalanceCents} currency plain className="text-label" />}
+          </span>
+        </div>
+      ) : null}
+      {chain !== null && chain.breaks.length > 0 ? (
+        <ul className="flex flex-col gap-1 text-xs text-ink-red">
+          {chain.breaks.slice(0, 6).map((b) => (
+            <li key={b.rowIndex}>
+              Row {b.rowIndex + 1}: expected <Money cents={b.expectedCents} currency plain />, bank <Money cents={b.actualCents} currency plain /> (
+              <Money cents={b.deltaCents} currency signed plain />)
+            </li>
+          ))}
+        </ul>
+      ) : null}
+      {preview.assertions.length > 0 ? (
+        <ul className="mt-auto flex flex-col gap-1 hairline-t pt-2.5 text-xs font-medium">
+          {preview.assertions.map((assertion) => (
+            <li key={assertion.id} className="flex items-start gap-1.5">
+              <Glyph
+                name={assertion.passed ? "check-circle" : "xmark-circle"}
+                size={14}
+                label={assertion.passed ? "Passed" : "Failed"}
+                className={cn("mt-px shrink-0", assertion.passed ? "text-ink-green" : "text-ink-red")}
+              />
+              <span>
+                {assertion.label}
+                {assertion.detail !== null && !assertion.passed ? (
+                  <span className="block text-label2">{assertion.detail}</span>
+                ) : null}
+              </span>
+            </li>
+          ))}
+        </ul>
+      ) : null}
     </Card>
   );
 }
@@ -583,14 +662,13 @@ function ColumnSelect({
   onChange: (value: string | null) => void;
 }) {
   return (
-    <div className="flex flex-col gap-1.5">
-      <Label hint={optional ? "optional" : undefined}>{label}</Label>
+    <GroupRow label={label}>
       <Select value={value ?? NONE} onValueChange={(v) => onChange(v === NONE ? null : v)}>
-        <SelectTrigger aria-label={label}>
+        <SelectTrigger aria-label={label} className="h-[26px] w-auto min-w-36 max-w-56 max-sm:h-11">
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
-          <SelectItem value={NONE}>{optional ? "Not in this file" : "Choose a column"}</SelectItem>
+          <SelectItem value={NONE}>{optional ? "Not in file" : "Choose"}</SelectItem>
           {headers.map((header) => (
             <SelectItem key={header} value={header}>
               {header}
@@ -598,7 +676,7 @@ function ColumnSelect({
           ))}
         </SelectContent>
       </Select>
-    </div>
+    </GroupRow>
   );
 }
 
@@ -616,18 +694,19 @@ function MappingEditor({
   const set = <K extends keyof MappingView>(key: K, value: MappingView[K]) =>
     setMapping((current) => ({ ...current, [key]: value }));
   const headers = preview.headers;
+  const field = "h-[26px] w-40 text-right max-sm:h-11";
 
   return (
-    <Card>
-      <CardHeader>
-        <div>
-          <CardTitle>Column mapping</CardTitle>
-          <CardDescription>
+    <section className="flex flex-col gap-2">
+      <div className="flex items-center gap-2 px-4 pt-3">
+        <h3 className="flex-1 text-sm font-semibold text-label2">
+          Columns
+          <InfoButton label="About the column mapping" className="ml-1 inline-grid align-middle">
             {preview.profileConfirmationRequired
               ? "Proposed from the file's headers. Correct anything wrong, then save it for this account."
               : `Using “${preview.profileName ?? "saved mapping"}”. Change it and save to re-read the file.`}
-          </CardDescription>
-        </div>
+          </InfoButton>
+        </h3>
         <Button
           size="sm"
           disabled={pending || saving}
@@ -643,97 +722,101 @@ function MappingEditor({
             })
           }
         >
-          <Save />
+          <Glyph name="refresh" />
           Save and re-read
         </Button>
-      </CardHeader>
-      <CardContent className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <ColumnSelect label="Date" value={mapping.date_column} headers={headers} onChange={(v) => set("date_column", v ?? "")} />
-        <div className="flex flex-col gap-1.5">
-          <Label hint="blank to detect">Date format</Label>
-          <Input
-            className="num"
-            placeholder="M/D/YYYY"
-            value={mapping.date_format ?? ""}
-            onChange={(e) => set("date_format", e.target.value === "" ? null : e.target.value)}
+      </div>
+      <div className="grid gap-3.5 lg:grid-cols-2">
+        <InsetGroup>
+          <ColumnSelect label="Date" value={mapping.date_column} headers={headers} onChange={(v) => set("date_column", v ?? "")} />
+          <GroupRow label="Date format" htmlFor="mapping-date-format">
+            <Input
+              id="mapping-date-format"
+              className={cn("num", field)}
+              placeholder="Detect"
+              value={mapping.date_format ?? ""}
+              onChange={(e) => set("date_format", e.target.value === "" ? null : e.target.value)}
+            />
+          </GroupRow>
+          <ColumnSelect
+            label="Payee"
+            optional
+            value={mapping.counterparty_column}
+            headers={headers}
+            onChange={(v) => set("counterparty_column", v)}
           />
-        </div>
-        <ColumnSelect
-          label="Payee"
-          optional
-          value={mapping.counterparty_column}
-          headers={headers}
-          onChange={(v) => set("counterparty_column", v)}
-        />
-        <ColumnSelect
-          label="Description"
-          optional
-          value={mapping.description_columns[0] ?? null}
-          headers={headers}
-          onChange={(v) => set("description_columns", v === null ? [] : [v, ...mapping.description_columns.slice(1)])}
-        />
-        <div className="flex flex-col gap-1.5">
-          <Label>Amounts are</Label>
-          <Select value={mapping.mode} onValueChange={(v) => set("mode", v as MappingView["mode"])}>
-            <SelectTrigger aria-label="Amount layout">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="signed">One signed column</SelectItem>
-              <SelectItem value="debit_credit">Separate out and in columns</SelectItem>
-              <SelectItem value="amount_with_type">An amount and a type column</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-        {mapping.mode === "debit_credit" ? (
-          <>
-            <ColumnSelect label="Money out" value={mapping.debit_column} headers={headers} onChange={(v) => set("debit_column", v)} />
-            <ColumnSelect label="Money in" value={mapping.credit_column} headers={headers} onChange={(v) => set("credit_column", v)} />
-          </>
-        ) : (
-          <ColumnSelect label="Amount" value={mapping.amount_column} headers={headers} onChange={(v) => set("amount_column", v)} />
-        )}
-        {mapping.mode === "amount_with_type" ? (
-          <>
-            <ColumnSelect label="Type" value={mapping.type_column} headers={headers} onChange={(v) => set("type_column", v)} />
-            <div className="flex flex-col gap-1.5">
-              <Label hint="comma separated">Type means out</Label>
-              <Input
-                value={mapping.debit_type_values.join(", ")}
-                placeholder="DEBIT, DR"
-                onChange={(e) => set("debit_type_values", e.target.value.split(",").map((v) => v.trim()))}
-              />
-            </div>
-            <div className="flex flex-col gap-1.5">
-              <Label hint="comma separated">Type means in</Label>
-              <Input
-                value={mapping.credit_type_values.join(", ")}
-                placeholder="CREDIT, CR"
-                onChange={(e) => set("credit_type_values", e.target.value.split(",").map((v) => v.trim()))}
-              />
-            </div>
-          </>
-        ) : null}
-        <ColumnSelect
-          label="Running balance"
-          optional
-          value={mapping.balance_column}
-          headers={headers}
-          onChange={(v) => set("balance_column", v)}
-        />
-        <ColumnSelect
-          label="Reference"
-          optional
-          value={mapping.reference_column}
-          headers={headers}
-          onChange={(v) => set("reference_column", v)}
-        />
-        <label className="flex items-center gap-2 self-end pb-2 text-sm">
-          <Checkbox checked={mapping.invert_sign} onCheckedChange={(v) => set("invert_sign", v === true)} />
-          Flip every sign (card statements)
-        </label>
-      </CardContent>
-    </Card>
+          <ColumnSelect
+            label="Description"
+            optional
+            value={mapping.description_columns[0] ?? null}
+            headers={headers}
+            onChange={(v) => set("description_columns", v === null ? [] : [v, ...mapping.description_columns.slice(1)])}
+          />
+          <ColumnSelect
+            label="Reference"
+            optional
+            value={mapping.reference_column}
+            headers={headers}
+            onChange={(v) => set("reference_column", v)}
+          />
+        </InsetGroup>
+        <InsetGroup>
+          <GroupRow label="Amounts">
+            <Select value={mapping.mode} onValueChange={(v) => set("mode", v as MappingView["mode"])}>
+              <SelectTrigger aria-label="Amount layout" className="h-[26px] w-auto min-w-36 max-sm:h-11">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="signed">One signed column</SelectItem>
+                <SelectItem value="debit_credit">Separate out and in columns</SelectItem>
+                <SelectItem value="amount_with_type">An amount and a type column</SelectItem>
+              </SelectContent>
+            </Select>
+          </GroupRow>
+          {mapping.mode === "debit_credit" ? (
+            <>
+              <ColumnSelect label="Money out" value={mapping.debit_column} headers={headers} onChange={(v) => set("debit_column", v)} />
+              <ColumnSelect label="Money in" value={mapping.credit_column} headers={headers} onChange={(v) => set("credit_column", v)} />
+            </>
+          ) : (
+            <ColumnSelect label="Amount" value={mapping.amount_column} headers={headers} onChange={(v) => set("amount_column", v)} />
+          )}
+          {mapping.mode === "amount_with_type" ? (
+            <>
+              <ColumnSelect label="Type" value={mapping.type_column} headers={headers} onChange={(v) => set("type_column", v)} />
+              <GroupRow label="Means out" htmlFor="mapping-debit-types">
+                <Input
+                  id="mapping-debit-types"
+                  className={field}
+                  value={mapping.debit_type_values.join(", ")}
+                  placeholder="DEBIT, DR"
+                  onChange={(e) => set("debit_type_values", e.target.value.split(",").map((v) => v.trim()))}
+                />
+              </GroupRow>
+              <GroupRow label="Means in" htmlFor="mapping-credit-types">
+                <Input
+                  id="mapping-credit-types"
+                  className={field}
+                  value={mapping.credit_type_values.join(", ")}
+                  placeholder="CREDIT, CR"
+                  onChange={(e) => set("credit_type_values", e.target.value.split(",").map((v) => v.trim()))}
+                />
+              </GroupRow>
+            </>
+          ) : null}
+          <ColumnSelect
+            label="Balance"
+            optional
+            value={mapping.balance_column}
+            headers={headers}
+            onChange={(v) => set("balance_column", v)}
+          />
+          <GroupRow label="Flip signs" htmlFor="mapping-invert">
+            <Checkbox id="mapping-invert" checked={mapping.invert_sign} onCheckedChange={(v) => set("invert_sign", v === true)} />
+          </GroupRow>
+        </InsetGroup>
+      </div>
+    </section>
   );
 }
 
@@ -754,74 +837,88 @@ function ImportResult({
 }) {
   const ai = result.ai;
   return (
-    <Card>
-      <CardHeader>
-        <div className="min-w-0">
-          <CardTitle className="break-all">Imported {filename}</CardTitle>
-          <CardDescription>Into {bank}. Nothing has posted; the new rows are waiting in the review queue.</CardDescription>
+    <div className="flex flex-col gap-3.5 max-md:gap-3">
+      <Card className="flex flex-col items-center gap-2 px-5 pt-8 pb-6 text-center">
+        <span className="grid size-16 place-items-center rounded-full bg-tint-green text-white">
+          <Glyph name="check" size={32} weight={2.4} />
+        </span>
+        <h2 className="text-2xl font-bold tracking-[-0.022em]">Imported {result.inserted}</h2>
+        <p className="flex flex-wrap items-center justify-center gap-1.5 text-sm font-medium break-all text-label2">
+          <span>{filename}</span>
+          <span aria-hidden className="size-[3px] rounded-full bg-label3" />
+          <span className="inline-flex items-center gap-1">
+            <Glyph name="bank" size={14} />
+            {bank}
+          </span>
+          <InfoButton label="About this import">
+            <p>Nothing has posted. The new rows are waiting in the review queue.</p>
+          </InfoButton>
+        </p>
+        <div className="mt-3 grid w-full max-w-2xl grid-cols-2 gap-y-3 sm:grid-cols-4">
+          <Stat label="Imported">
+            <span className="num">{result.inserted}</span>
+          </Stat>
+          <Stat label="Already imported" className="hairline-l">
+            <span className="num text-label2">{result.duplicates}</span>
+          </Stat>
+          <Stat label="Transfers paired" glyph={<Glyph name="transfer" size={13} className="text-tint-blue" />} className="sm:hairline-l">
+            <span className="num">{result.transferPairsLinked}</span>
+          </Stat>
+          <Stat label="Returns paired" glyph={<Glyph name="undo" size={13} />} className="hairline-l">
+            <span className="num">{result.returnedPairsLinked}</span>
+          </Stat>
         </div>
-        <div className="flex gap-2">
-          <Button size="sm" variant="ghost" onClick={onAgain}>
-            <RotateCcw />
-            Import another
-          </Button>
-          <Button asChild size="sm">
+        <div className="mt-4 flex flex-wrap justify-center gap-2">
+          <Button asChild>
             <Link href="/banking/review">
-              <ListChecks />
-              Review them
+              <Glyph name="tray" />
+              Review
             </Link>
           </Button>
+          <Button variant="secondary" onClick={onAgain}>
+            <Glyph name="refresh" />
+            Import another
+          </Button>
         </div>
-      </CardHeader>
-      <div className="grid grid-cols-2 sm:grid-cols-4">
-        <Figure label="Imported">
-          <span className="num">{result.inserted}</span>
-        </Figure>
-        <Figure label="Already imported" className="border-l">
-          <span className="num text-muted-foreground">{result.duplicates}</span>
-        </Figure>
-        <Figure label="Transfers paired" className="border-t sm:border-t-0 sm:border-l">
-          <span className="num">{result.transferPairsLinked}</span>
-        </Figure>
-        <Figure label="Returns paired" className="border-t border-l sm:border-t-0">
-          <span className="num">{result.returnedPairsLinked}</span>
-        </Figure>
-      </div>
-      <CardContent className="flex flex-col gap-2 border-t border-border text-sm">
-        <p className="eyebrow">AI suggestions</p>
-        {ai === null ? (
-          <p className="text-xs text-muted-foreground">Not run: every new row already had a rule or history suggestion.</p>
-        ) : ai.skippedReason !== null ? (
-          <p className="text-xs text-muted-foreground">Not run: {ai.skippedReason}</p>
-        ) : (
-          <p className="text-xs">
-            Asked about <span className="num">{ai.attempted}</span> row{ai.attempted === 1 ? "" : "s"}
-            {ai.modelId === null ? "" : ` (${ai.modelId})`}: <span className="num">{ai.written}</span> suggested,{" "}
-            <span className="num">{ai.discarded}</span> answers refused by the guardrails,{" "}
-            <span className={cn("num", ai.unanswered > 0 && "text-warning")}>{ai.unanswered}</span> unanswered.
-            {ai.unanswered > 0 ? " Unanswered rows wait in the queue with no suggestion." : ""}
-          </p>
-        )}
-        {ai !== null && ai.failures.length > 0 ? (
-          <ul className="list-disc pl-5 text-xs text-negative">
-            {ai.failures.map((failure) => (
-              <li key={failure}>{failure}</li>
-            ))}
-          </ul>
-        ) : null}
-        {result.issues.length > 0 ? (
-          <ul className="flex flex-col gap-1 border-t border-border pt-2 text-xs">
-            {result.issues.map((issue, index) => (
-              <li key={`${issue.code}-${index}`}>
-                <Badge tone={SEVERITY_TONE[issue.severity]} size="sm" className="mr-1.5">
-                  {issue.severity}
-                </Badge>
-                {issue.message}
-              </li>
-            ))}
-          </ul>
-        ) : null}
-      </CardContent>
-    </Card>
+      </Card>
+
+      <InsetGroup separatorInset={52}>
+        <ListRow
+          leading={<IconBadge glyph="sparkle" tint="purple" size="lg" />}
+          title="AI suggestions"
+          subtitle={
+            ai === null ? (
+              "Not needed"
+            ) : ai.skippedReason !== null ? (
+              <span className="whitespace-normal">Not run: {ai.skippedReason}</span>
+            ) : (
+              <span className="num">
+                {ai.written} of {ai.attempted}
+                {ai.discarded > 0 ? ` · ${ai.discarded} refused` : ""}
+                {ai.unanswered > 0 ? ` · ${ai.unanswered} unanswered` : ""}
+              </span>
+            )
+          }
+          detail={ai?.modelId ?? undefined}
+        />
+        {ai !== null
+          ? ai.failures.map((failure) => (
+              <ListRow
+                key={failure}
+                leading={<IconBadge glyph="warning" tint="red" size="lg" />}
+                title={<span className="whitespace-normal">{failure}</span>}
+              />
+            ))
+          : null}
+        {result.issues.map((issue, index) => (
+          <ListRow
+            key={`${issue.code}-${index}`}
+            leading={<IconBadge glyph={SEVERITY_BADGE[issue.severity].glyph} tint={SEVERITY_BADGE[issue.severity].tint} size="lg" />}
+            title={<span className="whitespace-normal">{issue.message}</span>}
+            subtitle={SEVERITY_LABEL[issue.severity]}
+          />
+        ))}
+      </InsetGroup>
+    </div>
   );
 }

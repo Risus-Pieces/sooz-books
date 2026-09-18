@@ -43,7 +43,7 @@ export function DrilldownLink({ children, className, title, ...target }: Drilldo
       href={generalLedgerHref(target)}
       title={title ?? "Open the general ledger for this account"}
       className={cn(
-        "rounded-xs underline decoration-transparent underline-offset-2 transition-colors hover:decoration-primary/60 hover:text-primary",
+        "rounded-[4px] underline decoration-transparent underline-offset-2 transition-colors hover:text-ink-blue hover:decoration-[color-mix(in_srgb,var(--blue)_50%,transparent)]",
         className,
       )}
     >

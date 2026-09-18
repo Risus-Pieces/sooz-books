@@ -1,13 +1,13 @@
 import type { Metadata } from 'next';
-import Link from 'next/link';
 import { notFound } from 'next/navigation';
 
 import { ApplyCredit } from '@/components/arap/apply-credit';
 import { MoneyDocDetailView } from '@/components/arap/money-doc-detail';
 import { VoidButton } from '@/components/arap/void-button';
 import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
-import { PageHeader } from '@/components/ui/page-header';
+import { PageToolbar } from '@/components/shell/page-toolbar';
+import { formatCents } from '@/components/ui/money';
+import { ToolbarGroup } from '@/components/ui/toolbar';
 import { can } from '@/lib/auth/roles';
 import { requireUser } from '@/lib/auth/session';
 import { today } from '@/lib/dates';
@@ -32,46 +32,48 @@ export default async function PaymentPage({ params }: { params: Promise<{ paymen
     canPay && !payment.void && unapplied > 0 && payment.partyId !== null ? await openBillsFor(payment.partyId) : [];
 
   return (
-    <div className="flex flex-col gap-5">
-      <PageHeader
-        eyebrow="Purchases · Payment"
+    <div className="flex flex-col gap-3.5 max-md:gap-3">
+      <PageToolbar
+        back={{ href: '/purchases/payments', label: 'Payments' }}
         title={payment.docNo}
-        description={`${payment.partyName ?? ''} · ${payment.date}`}
-        meta={payment.void ? <Badge tone="neutral">Void</Badge> : null}
+        subtitle={payment.void ? <Badge tone="neutral">Void</Badge> : undefined}
+        info={
+          <p>
+            Money paid to a vendor and the bills it settled. Money not applied is a prepayment and can be applied below when the bill arrives.
+          </p>
+        }
         actions={
-          <>
-            <Button asChild variant="ghost" size="sm">
-              <Link href="/purchases/payments">All payments</Link>
-            </Button>
-            {canPay && !payment.void ? (
+          canPay && !payment.void ? (
+            <ToolbarGroup>
               <VoidButton
                 label="Void payment"
                 docNo={payment.docNo}
                 consequence={
                   payment.bankTransactionId
-                    ? 'Reverses the payment, reopens the bills it paid, and returns its bank line to the review queue.'
-                    : 'Reverses the payment and reopens the bills it paid.'
+                    ? `Posts a reversal of the ${formatCents(payment.amountCents, { currency: true })} payment, reopens the bills it paid, and returns its bank line to the review queue.`
+                    : `Posts a reversal of the ${formatCents(payment.amountCents, { currency: true })} payment and reopens the bills it paid.`
                 }
                 minDate={payment.date}
                 defaultDate={today()}
                 needsDate
                 onVoid={voidBillPaymentAction.bind(null, payment.id)}
               />
-            ) : null}
-          </>
+            </ToolbarGroup>
+          ) : undefined
         }
       />
-      <MoneyDocDetailView doc={payment} side="ap" />
-      {openDocs.length > 0 ? (
-        <ApplyCredit
-          side="ap"
-          unappliedCents={unapplied}
-          docs={openDocs}
-          minDate={payment.date}
-          today={today()}
-          onApply={applyVendorPrepaymentAction.bind(null, payment.id)}
-        />
-      ) : null}
+      <MoneyDocDetailView doc={payment} side="ap">
+        {openDocs.length > 0 ? (
+          <ApplyCredit
+            side="ap"
+            unappliedCents={unapplied}
+            docs={openDocs}
+            minDate={payment.date}
+            today={today()}
+            onApply={applyVendorPrepaymentAction.bind(null, payment.id)}
+          />
+        ) : null}
+      </MoneyDocDetailView>
     </div>
   );
 }

@@ -1,8 +1,6 @@
 import type { Metadata } from "next";
 
 import { RulesManager } from "@/components/banking/rules-manager";
-import { Badge } from "@/components/ui/badge";
-import { PageHeader } from "@/components/ui/page-header";
 import { can } from "@/lib/auth/roles";
 import { requireUser } from "@/lib/auth/session";
 
@@ -10,7 +8,7 @@ import { accountOptions } from "../../ledger/queries";
 import { bankAccountTabs, ruleRows, vendorOptions } from "../queries";
 
 export const metadata: Metadata = {
-  title: "Bank rules",
+  title: "Rules",
 };
 
 /**
@@ -27,13 +25,7 @@ export default async function RulesPage() {
   ]);
 
   return (
-    <div className="flex flex-col gap-4">
-      <PageHeader
-        eyebrow="Banking"
-        title="Rules"
-        description="How imported transactions are coded before anyone looks at them. The first rule that matches wins."
-        meta={<Badge tone="neutral">{rules.length} rules</Badge>}
-      />
+    <div className="flex flex-col gap-3.5 max-md:gap-3">
       <RulesManager
         rules={rules}
         accounts={accounts}

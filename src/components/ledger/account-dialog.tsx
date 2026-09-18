@@ -2,9 +2,10 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { Info } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { Glyph } from "@/components/ui/glyph";
+import { InfoButton } from "@/components/ui/info-button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
@@ -156,7 +157,7 @@ export function AccountDialog({
               onChange={(event) => setCode(event.target.value)}
             />
             {editing ? (
-              <Note>
+              <Note short="Code fixed" label="Why the code is fixed">
                 A code is how every module addresses this account. Renumbering one under a running
                 ledger would redirect everything that posts to it, so it never changes — retire this
                 account and open a new one instead.
@@ -198,7 +199,7 @@ export function AccountDialog({
               </SelectContent>
             </Select>
             {typeLocked ? (
-              <Note>
+              <Note short="Type fixed" label="Why the type is fixed">
                 {account.code} already carries {account.postedLineCount}{" "}
                 {account.postedLineCount === 1 ? "posted line" : "posted lines"} as {account.type}.
                 Changing the type would re-sign every one of them and move the account between
@@ -281,11 +282,14 @@ export function AccountDialog({
   );
 }
 
-function Note({ children }: { children: React.ReactNode }) {
+function Note({ short, label, children }: { short: string; label: string; children: React.ReactNode }) {
   return (
-    <p className="flex gap-1.5 text-xs leading-relaxed text-muted-foreground">
-      <Info className="mt-0.5 size-3 shrink-0" aria-hidden />
-      <span>{children}</span>
+    <p className="flex items-center gap-1.5 text-xs text-label2">
+      <Glyph name="lock" size={12} />
+      <span>{short}</span>
+      <InfoButton label={label} align="start">
+        {children}
+      </InfoButton>
     </p>
   );
 }

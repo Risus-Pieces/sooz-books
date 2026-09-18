@@ -1,11 +1,15 @@
 import * as React from "react";
-import Link from "next/link";
 
-import { Badge } from "@/components/ui/badge";
+import { Glyph } from "@/components/ui/glyph";
+import { Dot } from "@/components/ui/icon-badge";
+import { InsetGroup, ListRow } from "@/components/ui/inset-group";
+import { Monogram } from "@/components/ui/monogram";
 import { Money } from "@/components/ui/money";
 import { cn } from "@/lib/cn";
+import { today } from "@/lib/dates";
+import { monthLong, shortDate } from "@/lib/ui/format";
 
-import { DocStatusBadge, Td, Th } from "./doc-status";
+import { docStatusLabel, docStatusTint } from "./doc-status";
 import {
   PAYMENT_METHOD_LABELS,
   type BillListRow,
@@ -14,260 +18,277 @@ import {
   type ReceiptListRow,
 } from "./types";
 
-function Register({ caption, minWidth, head, children }: { caption: string; minWidth: string; head: React.ReactNode; children: React.ReactNode }) {
+/** "September", or "May 2025" outside the current year. */
+function monthHeader(date: string, currentYear: string): string {
+  const [year, month] = date.split("-");
+  const name = monthLong(Number(month));
+  return year === currentYear ? name : `${name} ${year}`;
+}
+
+/** Rows in date order, cut into months. */
+function byMonth<T>(rows: readonly T[], dateOf: (row: T) => string): { key: string; date: string; rows: T[] }[] {
+  const groups: { key: string; date: string; rows: T[] }[] = [];
+  for (const row of rows) {
+    const date = dateOf(row);
+    const key = date.slice(0, 7);
+    const last = groups[groups.length - 1];
+    if (last && last.key === key) last.rows.push(row);
+    else groups.push({ key, date, rows: [row] });
+  }
+  return groups;
+}
+
+interface ListProps<T> {
+  rows: readonly T[];
+  /** Month sections (a register) or one plain group (a short list on an overview). */
+  grouped?: boolean;
+  /** The heading of the single group when not grouped. */
+  header?: React.ReactNode;
+  headerAccessory?: React.ReactNode;
+  footer?: React.ReactNode;
+  className?: string;
+  /**
+   * The master list beside a detail pane: rows sit on the pane (plain), link to `selectHref`, and
+   * the selected one is filled. Without it, rows are inset cards that open the document's page.
+   */
+  select?: { selectedId: string | null; href: (id: string) => string };
+}
+
+interface RowOptions {
+  href: string;
+  selected: boolean;
+}
+
+function Sections<T extends { id: string }>({
+  rows,
+  grouped = true,
+  header,
+  headerAccessory,
+  footer,
+  className,
+  select,
+  dateOf,
+  pageHref,
+  row,
+}: ListProps<T> & {
+  dateOf: (row: T) => string;
+  pageHref: (id: string) => string;
+  row: (row: T, options: RowOptions) => React.ReactNode;
+}) {
+  const variant = select ? "plain" : "inset";
+  const inset = select ? 57 : 63;
+  const render = (r: T) =>
+    row(r, select ? { href: select.href(r.id), selected: select.selectedId === r.id } : { href: pageHref(r.id), selected: false });
+  if (!grouped) {
+    return (
+      <InsetGroup variant={variant} header={header} headerAccessory={headerAccessory} footer={footer} separatorInset={inset} className={className}>
+        {rows.map(render)}
+      </InsetGroup>
+    );
+  }
+  const year = today().slice(0, 4);
+  const groups = byMonth(rows, dateOf);
   return (
-    <div className="relative overflow-x-auto">
-      <table className={cn("w-full border-separate border-spacing-0 text-sm", minWidth)}>
-        <caption className="sr-only">{caption}</caption>
-        <thead>
-          <tr>{head}</tr>
-        </thead>
-        <tbody>{children}</tbody>
-      </table>
+    <div className={cn("flex flex-col", className)}>
+      {groups.map((group, index) => (
+        <InsetGroup
+          key={group.key}
+          variant={variant}
+          header={monthHeader(group.date, year)}
+          separatorInset={inset}
+          className={index === 0 && !select ? "[&>div:first-child]:pt-0" : undefined}
+          footer={index === groups.length - 1 ? footer : undefined}
+        >
+          {group.rows.map(render)}
+        </InsetGroup>
+      ))}
     </div>
   );
 }
 
-function TotalRow({ span, cents, trailing = 0 }: { span: number; cents: readonly number[]; trailing?: number }) {
+function Quiet({ children }: { children: React.ReactNode }) {
+  return <span className="truncate">{children}</span>;
+}
+
+function Sep() {
+  return <span aria-hidden>·</span>;
+}
+
+export function InvoiceRegister(props: ListProps<InvoiceListRow>) {
   return (
-    <tr>
-      <td colSpan={span} className="rule-subtotal rule-total px-3 py-1.5 text-xs font-semibold text-muted-foreground uppercase">
-        Total
-      </td>
-      {cents.map((value, index) => (
-        <td key={index} className="rule-subtotal rule-total px-3 py-1.5 text-right font-semibold">
-          <Money cents={value} />
-        </td>
-      ))}
-      {trailing > 0 ? <td colSpan={trailing} className="rule-subtotal rule-total" /> : null}
-    </tr>
+    <Sections
+      {...props}
+      dateOf={(r) => r.invoiceDate}
+      pageHref={(id) => `/sales/invoices/${id}`}
+      row={(r, o) => {
+        const partial = r.status === "partial" || (r.status === "open" && r.balanceCents < r.totalCents);
+        return (
+          <ListRow
+            key={r.id}
+            href={o.href}
+            selected={o.selected}
+            leading={<Monogram name={r.customerName} />}
+            title={r.customerName}
+            subtitle={
+              <>
+                <Dot tint={docStatusTint(r.status, r.daysOverdue)} size={7} />
+                <span className="num">{r.invoiceNo}</span>
+                <Sep />
+                <Quiet>
+                  {docStatusLabel(r.status, r.daysOverdue)}
+                  {partial ? (
+                    <>
+                      {" · "}
+                      <Money cents={r.balanceCents} currency plain /> open
+                    </>
+                  ) : null}
+                </Quiet>
+              </>
+            }
+            trailing={<Money cents={r.totalCents} currency plain className={cn(r.status === "void" && "line-through opacity-60")} />}
+            detail={shortDate(r.invoiceDate)}
+          />
+        );
+      }}
+    />
   );
 }
 
-export function InvoiceRegister({ rows, showCustomer = true }: { rows: readonly InvoiceListRow[]; showCustomer?: boolean }) {
+export function BillRegister(props: ListProps<BillListRow>) {
   return (
-    <Register
-      caption="Invoices"
-      minWidth="min-w-[48rem]"
-      head={
-        <>
-          <Th>Invoice</Th>
-          {showCustomer ? <Th>Customer</Th> : null}
-          <Th>Date</Th>
-          <Th>Due</Th>
-          <Th>Status</Th>
-          <Th align="right">Total</Th>
-          <Th align="right">Open</Th>
-        </>
-      }
-    >
-      {rows.map((row) => (
-        <tr key={row.id} className="hover:bg-muted/60">
-          <Td className="num whitespace-nowrap">
-            <Link href={`/sales/invoices/${row.id}`} className="font-medium text-primary hover:underline">
-              {row.invoiceNo}
-            </Link>
-            {row.poNumber ? (
-              <span className="block text-2xs text-muted-foreground">
-                {/^po/i.test(row.poNumber) ? row.poNumber : `PO ${row.poNumber}`}
-              </span>
-            ) : null}
-          </Td>
-          {showCustomer ? (
-            <Td>
-              <Link href={`/sales/invoices?customer=${row.customerId}`} className="hover:underline">
-                {row.customerName}
-              </Link>
-            </Td>
-          ) : null}
-          <Td className="num whitespace-nowrap">{row.invoiceDate}</Td>
-          <Td className={cn("num whitespace-nowrap", row.daysOverdue > 0 && "text-negative")}>{row.dueDate}</Td>
-          <Td>
-            <DocStatusBadge status={row.status} daysOverdue={row.daysOverdue} size="sm" />
-          </Td>
-          <Td align="right">
-            <Money cents={row.totalCents} className={cn(row.status === "void" && "text-muted-foreground line-through")} />
-          </Td>
-          <Td align="right">
-            <Money cents={row.balanceCents} zeroDash className="font-medium" />
-          </Td>
-        </tr>
-      ))}
-      {rows.length > 1 ? (
-        <TotalRow
-          span={showCustomer ? 5 : 4}
-          cents={[
-            rows.filter((r) => r.status !== "void").reduce((s, r) => s + r.totalCents, 0),
-            rows.reduce((s, r) => s + r.balanceCents, 0),
-          ]}
-        />
-      ) : null}
-    </Register>
+    <Sections
+      {...props}
+      dateOf={(r) => r.billDate}
+      pageHref={(id) => `/purchases/bills/${id}`}
+      row={(r, o) => {
+        const partial = r.status === "partial";
+        return (
+          <ListRow
+            key={r.id}
+            href={o.href}
+            selected={o.selected}
+            leading={<Monogram name={r.vendorName} />}
+            title={r.vendorName}
+            subtitle={
+              <>
+                <Dot tint={docStatusTint(r.status, r.daysOverdue)} size={7} />
+                <span className="num truncate">{r.billNo}</span>
+                <Sep />
+                <Quiet>
+                  {docStatusLabel(r.status, r.daysOverdue)}
+                  {partial ? (
+                    <>
+                      {" · "}
+                      <Money cents={r.balanceCents} currency plain /> open
+                    </>
+                  ) : null}
+                </Quiet>
+                {r.inventoryCents > 0 ? (
+                  <span className="inline-flex shrink-0 items-center text-tint-teal" title="Capitalized to inventory">
+                    <Glyph name="cube" size={12} />
+                    <span className="sr-only">Inventory</span>
+                  </span>
+                ) : null}
+              </>
+            }
+            trailing={<Money cents={r.totalCents} currency plain className={cn(r.status === "void" && "line-through opacity-60")} />}
+            detail={shortDate(r.billDate)}
+          />
+        );
+      }}
+    />
   );
 }
 
-export function BillRegister({ rows }: { rows: readonly BillListRow[] }) {
+export function ReceiptRegister(props: ListProps<ReceiptListRow>) {
   return (
-    <Register
-      caption="Bills"
-      minWidth="min-w-[52rem]"
-      head={
-        <>
-          <Th>Vendor</Th>
-          <Th>Their no.</Th>
-          <Th>Date</Th>
-          <Th>Due</Th>
-          <Th>Status</Th>
-          <Th align="right">Inventory</Th>
-          <Th align="right">Total</Th>
-          <Th align="right">Open</Th>
-        </>
-      }
-    >
-      {rows.map((row) => (
-        <tr key={row.id} className="hover:bg-muted/60">
-          <Td>
-            <Link href={`/purchases/bills/${row.id}`} className="font-medium text-primary hover:underline">
-              {row.vendorName}
-            </Link>
-          </Td>
-          <Td className="num whitespace-nowrap">{row.billNo}</Td>
-          <Td className="num whitespace-nowrap">{row.billDate}</Td>
-          <Td className={cn("num whitespace-nowrap", row.daysOverdue > 0 && "text-negative")}>{row.dueDate}</Td>
-          <Td>
-            <DocStatusBadge status={row.status} daysOverdue={row.daysOverdue} size="sm" />
-          </Td>
-          <Td align="right">
-            <Money cents={row.inventoryCents} zeroDash className="text-info" />
-          </Td>
-          <Td align="right">
-            <Money cents={row.totalCents} className={cn(row.status === "void" && "text-muted-foreground line-through")} />
-          </Td>
-          <Td align="right">
-            <Money cents={row.balanceCents} zeroDash className="font-medium" />
-          </Td>
-        </tr>
-      ))}
-      {rows.length > 1 ? (
-        <TotalRow
-          span={5}
-          cents={[
-            rows.filter((r) => r.status !== "void").reduce((s, r) => s + r.inventoryCents, 0),
-            rows.filter((r) => r.status !== "void").reduce((s, r) => s + r.totalCents, 0),
-            rows.reduce((s, r) => s + r.balanceCents, 0),
-          ]}
-        />
-      ) : null}
-    </Register>
+    <Sections
+      {...props}
+      dateOf={(r) => r.receiptDate}
+      pageHref={(id) => `/sales/receipts/${id}`}
+      row={(r, o) => {
+        const unapplied = r.void ? 0 : r.amountCents - r.appliedCents;
+        return (
+          <ListRow
+            key={r.id}
+            href={o.href}
+            selected={o.selected}
+            leading={<Monogram name={r.customerName ?? "?"} />}
+            title={r.customerName ?? "Unidentified"}
+            subtitle={
+              <>
+                <Dot tint={r.void ? "quiet" : unapplied > 0 ? "orange" : "green"} size={7} />
+                <span className="num">{r.receiptNo}</span>
+                <Sep />
+                <Quiet>
+                  {r.void ? "Void" : PAYMENT_METHOD_LABELS[r.method]}
+                  {unapplied > 0 ? (
+                    <>
+                      {" · "}
+                      <Money cents={unapplied} currency plain /> credit
+                    </>
+                  ) : null}
+                </Quiet>
+                {r.fromBank ? (
+                  <span className="inline-flex shrink-0 items-center" title="Matched from the bank">
+                    <Glyph name="bank" size={12} />
+                    <span className="sr-only">Bank match</span>
+                  </span>
+                ) : null}
+              </>
+            }
+            trailing={<Money cents={r.amountCents} currency plain className={cn(r.void && "line-through opacity-60")} />}
+            detail={shortDate(r.receiptDate)}
+          />
+        );
+      }}
+    />
   );
 }
 
-export function ReceiptRegister({ rows }: { rows: readonly ReceiptListRow[] }) {
+export function PaymentRegister(props: ListProps<PaymentListRow>) {
   return (
-    <Register
-      caption="Receipts"
-      minWidth="min-w-[50rem]"
-      head={
-        <>
-          <Th>Receipt</Th>
-          <Th>Customer</Th>
-          <Th>Date</Th>
-          <Th>Method</Th>
-          <Th>Deposited to</Th>
-          <Th align="right">Amount</Th>
-          <Th align="right">Unapplied</Th>
-        </>
-      }
-    >
-      {rows.map((row) => (
-        <tr key={row.id} className={cn("hover:bg-muted/60", row.void && "text-muted-foreground")}>
-          <Td className="num whitespace-nowrap">
-            <Link href={`/sales/receipts/${row.id}`} className="font-medium text-primary hover:underline">
-              {row.receiptNo}
-            </Link>
-            {row.void ? (
-              <Badge tone="neutral" size="sm" className="ml-2">
-                Void
-              </Badge>
-            ) : null}
-            {row.fromBank ? (
-              <Badge tone="info" size="sm" className="ml-2">
-                Bank match
-              </Badge>
-            ) : null}
-          </Td>
-          <Td>{row.customerName ?? <span className="text-muted-foreground">Unidentified</span>}</Td>
-          <Td className="num whitespace-nowrap">{row.receiptDate}</Td>
-          <Td className="text-xs">
-            {PAYMENT_METHOD_LABELS[row.method]}
-            {row.reference ? <span className="num block text-2xs text-muted-foreground">{row.reference}</span> : null}
-          </Td>
-          <Td className="text-xs">{row.depositAccountLabel}</Td>
-          <Td align="right">
-            <Money cents={row.amountCents} className={cn(row.void && "line-through")} />
-          </Td>
-          <Td align="right">
-            <Money cents={row.void ? 0 : row.amountCents - row.appliedCents} zeroDash />
-          </Td>
-        </tr>
-      ))}
-    </Register>
-  );
-}
-
-export function PaymentRegister({ rows }: { rows: readonly PaymentListRow[] }) {
-  return (
-    <Register
-      caption="Bill payments"
-      minWidth="min-w-[52rem]"
-      head={
-        <>
-          <Th>Payment</Th>
-          <Th>Vendor</Th>
-          <Th>Date</Th>
-          <Th>Method</Th>
-          <Th>Paid from</Th>
-          <Th align="center">1099</Th>
-          <Th align="right">Amount</Th>
-          <Th align="right">Unapplied</Th>
-        </>
-      }
-    >
-      {rows.map((row) => (
-        <tr key={row.id} className={cn("hover:bg-muted/60", row.void && "text-muted-foreground")}>
-          <Td className="num whitespace-nowrap">
-            <Link href={`/purchases/payments/${row.id}`} className="font-medium text-primary hover:underline">
-              {row.paymentNo}
-            </Link>
-            {row.void ? (
-              <Badge tone="neutral" size="sm" className="ml-2">
-                Void
-              </Badge>
-            ) : null}
-            {row.fromBank ? (
-              <Badge tone="info" size="sm" className="ml-2">
-                Bank match
-              </Badge>
-            ) : null}
-          </Td>
-          <Td>{row.vendorName}</Td>
-          <Td className="num whitespace-nowrap">{row.paymentDate}</Td>
-          <Td className="text-xs">
-            {PAYMENT_METHOD_LABELS[row.method]}
-            {row.reference ? <span className="num block text-2xs text-muted-foreground">{row.reference}</span> : null}
-          </Td>
-          <Td className="text-xs">{row.accountLabel}</Td>
-          <Td align="center" className="text-xs">
-            {row.is1099Reportable ? "Counts" : <span className="text-muted-foreground">Card</span>}
-          </Td>
-          <Td align="right">
-            <Money cents={row.amountCents} className={cn(row.void && "line-through")} />
-          </Td>
-          <Td align="right">
-            <Money cents={row.void ? 0 : row.amountCents - row.appliedCents} zeroDash />
-          </Td>
-        </tr>
-      ))}
-    </Register>
+    <Sections
+      {...props}
+      dateOf={(r) => r.paymentDate}
+      pageHref={(id) => `/purchases/payments/${id}`}
+      row={(r, o) => {
+        const unapplied = r.void ? 0 : r.amountCents - r.appliedCents;
+        return (
+          <ListRow
+            key={r.id}
+            href={o.href}
+            selected={o.selected}
+            leading={<Monogram name={r.vendorName} />}
+            title={r.vendorName}
+            subtitle={
+              <>
+                <Dot tint={r.void ? "quiet" : unapplied > 0 ? "orange" : "green"} size={7} />
+                <span className="num">{r.paymentNo}</span>
+                <Sep />
+                <Quiet>
+                  {r.void ? "Void" : PAYMENT_METHOD_LABELS[r.method]}
+                  {r.is1099Reportable ? null : " · not 1099"}
+                  {unapplied > 0 ? (
+                    <>
+                      {" · "}
+                      <Money cents={unapplied} currency plain /> prepaid
+                    </>
+                  ) : null}
+                </Quiet>
+                {r.fromBank ? (
+                  <span className="inline-flex shrink-0 items-center" title="Matched from the bank">
+                    <Glyph name="bank" size={12} />
+                    <span className="sr-only">Bank match</span>
+                  </span>
+                ) : null}
+              </>
+            }
+            trailing={<Money cents={r.amountCents} currency plain className={cn(r.void && "line-through opacity-60")} />}
+            detail={shortDate(r.paymentDate)}
+          />
+        );
+      }}
+    />
   );
 }

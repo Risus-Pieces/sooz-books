@@ -1,173 +1,163 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
-import { Banknote, Plus, Receipt } from 'lucide-react';
 
+import { OwedCard, SectionLinks, agingSplit } from '@/components/arap/overview';
 import { BillRegister } from '@/components/arap/registers';
+import { PageToolbar } from '@/components/shell/page-toolbar';
 import { Button } from '@/components/ui/button';
-import { Card, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card } from '@/components/ui/card';
 import { EmptyState } from '@/components/ui/empty-state';
 import { Money } from '@/components/ui/money';
-import { PageHeader } from '@/components/ui/page-header';
-import { StatTile } from '@/components/ui/stat-tile';
+import { ToolbarGroup, ToolbarLink } from '@/components/ui/toolbar';
+import { apAging } from '@/lib/arap';
 import { can } from '@/lib/auth/roles';
 import { requireUser } from '@/lib/auth/session';
-import { addDays } from '@/lib/dates';
 
 import { purchasesOverview } from './queries';
 
 export const metadata: Metadata = { title: 'Purchases' };
 
 /**
- * Payables at a glance: bills owed and when, drafts waiting on approval, and
- * how much of this year's buying went onto the balance sheet as inventory.
+ * Payables at a glance: what Sooz owes as one bar split by age, what is due, drafts waiting on
+ * approval, and how much of this year's buying went onto the balance sheet as inventory.
  */
 export default async function PurchasesPage() {
-  const [user, data] = await Promise.all([requireUser('/purchases'), purchasesOverview()]);
+  const user = await requireUser('/purchases');
+  const data = await purchasesOverview();
+  const aging = await apAging(data.asOf);
   const canManage = can(user.role, 'ap.manage');
   const canPay = can(user.role, 'ap.pay');
   const nothingYet = data.upcoming.length === 0 && data.drafts.length === 0;
 
-  return (
-    <div className="flex flex-col gap-5">
-      <PageHeader
-        eyebrow="Purchases"
-        title="Payables"
-        description="Bills from ingredient, packaging and service vendors, and the payments that settle them. Most small purchases are paid by card or ACH and booked from the bank review instead; use bills for anything on terms."
-        actions={
-          <>
-            {canPay ? (
-              <Button asChild variant="secondary" size="sm">
-                <Link href="/purchases/payments/new">
-                  <Banknote />
-                  Pay bills
-                </Link>
-              </Button>
-            ) : null}
-            {canManage ? (
-              <Button asChild size="sm">
-                <Link href="/purchases/bills/new">
-                  <Plus />
-                  New bill
-                </Link>
-              </Button>
-            ) : null}
-          </>
-        }
-      />
+  const actions =
+    canManage || canPay ? (
+      <ToolbarGroup>
+        {canManage ? <ToolbarLink href="/purchases/bills/new" glyph="plus" label="New bill" /> : null}
+        {canPay ? <ToolbarLink href="/purchases/payments/new" glyph="dollar" label="Pay bills" /> : null}
+      </ToolbarGroup>
+    ) : undefined;
 
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <StatTile
-          label="Open payables"
-          value={<Money cents={data.openCents} currency plain />}
-          hint={`${data.openCount} ${data.openCount === 1 ? 'bill' : 'bills'}`}
-          footer={
-            <Link href="/purchases/aging" className="text-primary hover:underline">
-              Aging by vendor
-            </Link>
-          }
-        />
-        <StatTile
-          label="Overdue"
-          value={<Money cents={data.overdueCents} currency plain className={data.overdueCents > 0 ? 'text-negative' : undefined} />}
-          hint={`${data.overdueCount} late`}
-          footer={
-            data.overdueCount === 0 ? (
-              'Nothing past its due date.'
-            ) : (
-              <Link href="/purchases/bills?status=overdue" className="text-primary hover:underline">
-                See late bills
-              </Link>
-            )
-          }
-        />
-        <StatTile
-          label="Due in 14 days"
-          value={<Money cents={data.dueSoonCents} currency plain />}
-          hint={`${data.dueSoonCount} due`}
-          footer={`Approved bills due by ${addDays(data.asOf, 14)}.`}
-        />
-        <StatTile
-          label={`Capitalized in ${data.asOf.slice(0, 4)}`}
-          value={<Money cents={data.capitalizedThisYearCents} currency plain />}
-          footer="Ingredient and packaging lines on approved bills, held in inventory."
-        />
-      </div>
+  const info = (
+    <p>
+      Bills from ingredient, packaging and service vendors, and the payments that settle them. Most small purchases
+      are paid by card or ACH and booked from the bank review instead; use bills for anything on terms.
+    </p>
+  );
 
-      {nothingYet ? (
+  const links = (
+    <SectionLinks
+      links={[
+        { label: 'Bills', href: '/purchases/bills', glyph: 'doc', tint: 'red', value: data.openCount > 0 ? `${data.openCount} open` : undefined },
+        ...(data.draftCount > 0
+          ? [{ label: 'Drafts', href: '/purchases/bills?status=draft', glyph: 'pencil' as const, tint: 'orange' as const, value: data.draftCount }]
+          : []),
+        { label: 'Vendors', href: '/purchases/vendors', glyph: 'people', tint: 'blue', value: data.vendorCount },
+        { label: 'Payments', href: '/purchases/payments', glyph: 'arrow-out', tint: 'green' },
+        { label: 'Aging', href: '/purchases/aging', glyph: 'hourglass', tint: 'purple' },
+        { label: '1099', href: '/purchases/1099', glyph: 'doc-text', tint: 'gray', value: data.flagged1099Count > 0 ? data.flagged1099Count : undefined },
+      ]}
+    />
+  );
+
+  if (nothingYet) {
+    return (
+      <div className="flex flex-col gap-3.5 max-md:gap-3">
+        <PageToolbar title="Purchases" info={info} actions={actions} />
         <Card>
           <EmptyState
-            icon={<Receipt />}
+            glyph="doc"
             title="No bills yet"
-            description="Enter a bill when a vendor gives you terms — a co-packer run, a pallet of bottles, an ingredient order on net 30. Mark ingredient and packaging lines Capitalize so they land in 1320 / 1330 inventory instead of expense. Approving a bill posts it to Accounts Payable; paying it clears it."
+            description="Enter a bill when a vendor gives you terms: a co-packer run, a pallet of bottles, an ingredient order on net 30. Ingredient and packaging lines capitalize to inventory. Approving posts the bill to Accounts Payable; paying it clears it."
             action={
               canManage ? (
-                <Button asChild size="sm">
-                  <Link href="/purchases/bills/new">
-                    <Plus />
-                    Enter a bill
-                  </Link>
+                <Button asChild>
+                  <Link href="/purchases/bills/new">New bill</Link>
                 </Button>
               ) : undefined
             }
-            secondaryAction={
-              <Button asChild variant="secondary" size="sm">
-                <Link href="/purchases/vendors">
-                  Review the {data.vendorCount} vendors
-                </Link>
-              </Button>
-            }
           />
         </Card>
-      ) : (
-        <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
-          <Card>
-            <CardHeader>
-              <CardTitle>Coming due</CardTitle>
-              <Link href="/purchases/bills?status=open" className="text-xs text-primary hover:underline">
-                All open bills
-              </Link>
-            </CardHeader>
-            {data.upcoming.length === 0 ? (
-              <EmptyState title="Nothing owed" description="Every approved bill is paid." />
-            ) : (
-              <BillRegister rows={data.upcoming} />
-            )}
-          </Card>
-          <Card>
-            <CardHeader>
-              <CardTitle>Drafts waiting for approval</CardTitle>
-              <Link href="/purchases/bills?status=draft" className="text-xs text-primary hover:underline">
-                All drafts
-              </Link>
-            </CardHeader>
-            {data.drafts.length === 0 ? (
-              <EmptyState title="No drafts" description="Every bill entered has been approved." />
-            ) : (
-              <BillRegister rows={data.drafts} />
-            )}
-          </Card>
-        </div>
-      )}
+        {links}
+      </div>
+    );
+  }
 
-      <div className="grid gap-3 sm:grid-cols-3">
-        <Card className="p-3 text-xs text-muted-foreground">
-          <p className="eyebrow mb-1">Vendors</p>
-          <Link href="/purchases/vendors" className="text-sm font-medium text-foreground hover:underline">
-            {data.vendorCount} active
-          </Link>{' '}
-          · {data.flagged1099Count} flagged for 1099
-        </Card>
-        <Card className="p-3 text-xs text-muted-foreground">
-          <p className="eyebrow mb-1">Prepayments</p>
-          <Money cents={data.prepaidCents} currency plain className="text-sm font-medium text-foreground" /> paid ahead of a bill
-        </Card>
-        <Card className="p-3 text-xs text-muted-foreground">
-          <p className="eyebrow mb-1">1099 season</p>
-          <Link href="/purchases/1099" className="text-sm font-medium text-primary hover:underline">
-            Contractor payments by year
-          </Link>
-        </Card>
+  const year = data.asOf.slice(0, 4);
+
+  return (
+    <div className="flex flex-col gap-3.5 max-md:gap-3">
+      <PageToolbar
+        title="Purchases"
+        subtitle={
+          <>
+            {data.openCount} open · <Money cents={data.openCents} currency plain />
+          </>
+        }
+        info={info}
+        actions={actions}
+      />
+
+      <div className="grid gap-3.5 max-md:gap-3 lg:grid-cols-12">
+        <OwedCard
+          className="lg:col-span-8"
+          title="Payables"
+          info={
+            <p>
+              What Sooz owes on approved bills, split by how late it is. Prepayments sit in Current. Inventory is what
+              ingredient and packaging lines capitalized this year. The bar opens the full aging.
+            </p>
+          }
+          totalCents={aging.totals.total}
+          split={agingSplit(aging.parties)}
+          buckets={aging.totals}
+          agingHref="/purchases/aging"
+          stats={[
+            { label: 'Overdue', cents: data.overdueCents, note: data.overdueCount, tone: 'red', href: '/purchases/bills?status=overdue' },
+            { label: 'Due soon', cents: data.dueSoonCents, note: data.dueSoonCount, tone: 'orange', href: '/purchases/bills?status=open' },
+            { label: 'Inventory', cents: data.capitalizedThisYearCents, note: year, href: '/inventory' },
+            ...(data.prepaidCents > 0 ? [{ label: 'Prepaid', cents: data.prepaidCents, href: '/purchases/payments' }] : []),
+          ]}
+        />
+
+        <div className="lg:col-span-4">{links}</div>
+
+        <div className="min-w-0 lg:col-span-6">
+          {data.upcoming.length === 0 ? (
+            <Card className="h-full">
+              <EmptyState glyph="check-circle" title="Nothing owed" />
+            </Card>
+          ) : (
+            <BillRegister
+              rows={data.upcoming}
+              grouped={false}
+              header="Coming due"
+              headerAccessory={<SeeAll href="/purchases/bills?status=open" label="All open bills" />}
+            />
+          )}
+        </div>
+        <div className="min-w-0 lg:col-span-6">
+          {data.drafts.length === 0 ? (
+            <Card className="h-full">
+              <EmptyState glyph="check-circle" title="No drafts" />
+            </Card>
+          ) : (
+            <BillRegister
+              rows={data.drafts}
+              grouped={false}
+              header="Drafts"
+              headerAccessory={<SeeAll href="/purchases/bills?status=draft" label="All draft bills" />}
+            />
+          )}
+        </div>
       </div>
     </div>
+  );
+}
+
+function SeeAll({ href, label }: { href: string; label: string }) {
+  return (
+    <Link href={href} aria-label={label} className="text-sm font-medium text-ink-blue hover:underline">
+      See all
+    </Link>
   );
 }

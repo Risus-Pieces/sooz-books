@@ -2,9 +2,7 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { Search } from "lucide-react";
 
-import { cn } from "@/lib/cn";
 import {
   Command,
   CommandEmpty,
@@ -12,10 +10,12 @@ import {
   CommandInput,
   CommandItem,
   CommandList,
-  CommandShortcut,
 } from "@/components/ui/command";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
-import { NAV_GROUPS } from "@/components/shell/nav";
+import { Glyph } from "@/components/ui/glyph";
+import { IconBadge } from "@/components/ui/icon-badge";
+
+import { NAV_GROUPS, type NavSection } from "./nav";
 
 export interface SearchTarget {
   label: string;
@@ -26,13 +26,17 @@ export interface SearchTarget {
   keywords?: string;
 }
 
-function navTargets(): SearchTarget[] {
-  const targets: SearchTarget[] = [];
+interface Target extends SearchTarget {
+  section?: NavSection;
+}
+
+function navTargets(): Target[] {
+  const targets: Target[] = [];
   for (const group of NAV_GROUPS) {
     for (const section of group.sections) {
-      targets.push({ label: section.label, href: section.href, group: "Sections" });
+      targets.push({ label: section.label, href: section.href, group: "Sections", section });
       for (const child of section.children ?? []) {
-        targets.push({ label: child.label, href: child.href, group: section.label });
+        targets.push({ label: child.label, href: child.href, group: section.label, section });
       }
     }
   }
@@ -40,20 +44,23 @@ function navTargets(): SearchTarget[] {
 }
 
 export interface GlobalSearchProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
   /** Records and reports contributed by feature modules, merged with the nav targets. */
   targets?: SearchTarget[];
-  className?: string;
 }
 
-export function GlobalSearch({ targets, className }: GlobalSearchProps) {
+/**
+ * The ⌘K palette: jump to any section or page. Opened from the sidebar's search field, the toolbar's
+ * search button on smaller screens, or ⌘K anywhere.
+ */
+export function GlobalSearch({ open, onOpenChange, targets }: GlobalSearchProps) {
   const router = useRouter();
-  const [open, setOpen] = React.useState(false);
-
-  const allTargets = React.useMemo(() => [...navTargets(), ...(targets ?? [])], [targets]);
+  const allTargets = React.useMemo<Target[]>(() => [...navTargets(), ...(targets ?? [])], [targets]);
 
   const grouped = React.useMemo(() => {
     const order: string[] = [];
-    const map = new Map<string, SearchTarget[]>();
+    const map = new Map<string, Target[]>();
     for (const target of allTargets) {
       if (!map.has(target.group)) {
         map.set(target.group, []);
@@ -68,65 +75,55 @@ export function GlobalSearch({ targets, className }: GlobalSearchProps) {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key.toLowerCase() === "k" && (event.metaKey || event.ctrlKey)) {
         event.preventDefault();
-        setOpen((current) => !current);
+        onOpenChange(!open);
       }
     };
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
-  }, []);
+  }, [open, onOpenChange]);
 
   const go = React.useCallback(
     (href: string) => {
-      setOpen(false);
+      onOpenChange(false);
       router.push(href);
     },
-    [router],
+    [router, onOpenChange],
   );
 
   return (
-    <>
-      <button
-        type="button"
-        onClick={() => setOpen(true)}
-        aria-label="Search"
-        className={cn(
-          "flex h-8 items-center gap-2 rounded-sm border border-border-strong bg-surface-raised px-2.5 max-sm:h-10 max-sm:w-10 max-sm:justify-center max-sm:px-0 text-sm text-muted-foreground transition-colors hover:border-ring hover:text-foreground",
-          className,
-        )}
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent
+        hideClose
+        size="md"
+        className="vibrancy p-0 sm:top-[16%] sm:translate-y-0 max-sm:top-3 max-sm:bottom-auto max-sm:mx-3 max-sm:rounded-[14px]"
       >
-        <Search className="size-3.5 shrink-0" />
-        <span className="hidden sm:inline">Search</span>
-        <kbd className="num ml-4 hidden text-2xs tracking-widest text-muted-foreground sm:inline">⌘K</kbd>
-      </button>
-
-      <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent hideClose size="md" className="top-[18%] translate-y-0 p-0">
-          <DialogTitle className="sr-only">Search Sooz Books</DialogTitle>
-          <DialogDescription className="sr-only">
-            Jump to any section, register or report.
-          </DialogDescription>
-          <Command loop>
-            <CommandInput placeholder="Jump to a section, register or report" />
-            <CommandList>
-              <CommandEmpty>Nothing matches that. Try an account code or a report name.</CommandEmpty>
-              {grouped.map(({ group, items }) => (
-                <CommandGroup key={group} heading={group}>
-                  {items.map((item) => (
-                    <CommandItem
-                      key={`${group}:${item.href}`}
-                      value={`${item.label} ${item.group} ${item.keywords ?? ""}`}
-                      onSelect={() => go(item.href)}
-                    >
-                      <span>{item.label}</span>
-                      <CommandShortcut>{item.href}</CommandShortcut>
-                    </CommandItem>
-                  ))}
-                </CommandGroup>
-              ))}
-            </CommandList>
-          </Command>
-        </DialogContent>
-      </Dialog>
-    </>
+        <DialogTitle className="sr-only">Search Sooz Books</DialogTitle>
+        <DialogDescription className="sr-only">Jump to any section or page.</DialogDescription>
+        <Command loop>
+          <CommandInput placeholder="Search" />
+          <CommandList>
+            <CommandEmpty>No match</CommandEmpty>
+            {grouped.map(({ group, items }) => (
+              <CommandGroup key={group} heading={group}>
+                {items.map((item) => (
+                  <CommandItem
+                    key={`${group}:${item.href}`}
+                    value={`${item.label} ${item.group} ${item.keywords ?? ""}`}
+                    onSelect={() => go(item.href)}
+                  >
+                    {item.section && item.group === "Sections" ? (
+                      <IconBadge glyph={item.section.glyph} tint={item.section.tint} size="sm" />
+                    ) : (
+                      <Glyph name="doc" size={15} />
+                    )}
+                    <span>{item.label}</span>
+                  </CommandItem>
+                ))}
+              </CommandGroup>
+            ))}
+          </CommandList>
+        </Command>
+      </DialogContent>
+    </Dialog>
   );
 }

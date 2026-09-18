@@ -1,8 +1,10 @@
 import * as React from "react";
-import Link from "next/link";
 
 import { Badge } from "@/components/ui/badge";
+import { Pill, type PillTone } from "@/components/ui/pill";
+import { SegmentedNav } from "@/components/ui/segmented-control";
 import { cn } from "@/lib/cn";
+import type { Tint } from "@/lib/ui/tints";
 
 import type { DocStatus } from "./types";
 
@@ -27,23 +29,64 @@ export function DocStatusBadge({
   status,
   daysOverdue = 0,
   size,
+  className,
 }: {
   status: DocStatus;
   daysOverdue?: number;
   size?: "sm" | "md";
+  className?: string;
 }) {
   if ((status === "open" || status === "partial") && daysOverdue > 0) {
     return (
-      <Badge tone="negative" size={size}>
-        {daysOverdue}d overdue
+      <Badge tone="negative" size={size} className={className}>
+        {daysOverdue}d late
       </Badge>
     );
   }
   return (
-    <Badge tone={TONE[status]} size={size}>
+    <Badge tone={TONE[status]} size={size} className={className}>
       {LABEL[status]}
     </Badge>
   );
+}
+
+const PILL: Record<DocStatus, { tone: PillTone; glyph: "pencil" | "clock" | "check-circle" | "exclude" }> = {
+  draft: { tone: "orange", glyph: "pencil" },
+  open: { tone: "blue", glyph: "clock" },
+  partial: { tone: "blue", glyph: "clock" },
+  paid: { tone: "green", glyph: "check-circle" },
+  void: { tone: "neutral", glyph: "exclude" },
+};
+
+/** The state as a capsule at the head of a detail pane. */
+export function DocStatusPill({ status, daysOverdue = 0 }: { status: DocStatus; daysOverdue?: number }) {
+  if ((status === "open" || status === "partial") && daysOverdue > 0) {
+    return (
+      <Pill tone="red" glyph="flag">
+        {daysOverdue} days late
+      </Pill>
+    );
+  }
+  return (
+    <Pill tone={PILL[status].tone} glyph={PILL[status].glyph}>
+      {LABEL[status]}
+    </Pill>
+  );
+}
+
+/** The one-word state of a document, for a list row's quiet line. */
+export function docStatusLabel(status: DocStatus, daysOverdue = 0): string {
+  if ((status === "open" || status === "partial") && daysOverdue > 0) return `${daysOverdue}d late`;
+  return LABEL[status];
+}
+
+/** The state as a colour: a dot in a list row. */
+export function docStatusTint(status: DocStatus, daysOverdue = 0): Tint | "quiet" {
+  if ((status === "open" || status === "partial") && daysOverdue > 0) return "red";
+  if (status === "draft") return "orange";
+  if (status === "paid") return "green";
+  if (status === "void") return "quiet";
+  return "blue";
 }
 
 export interface FilterTab {
@@ -54,29 +97,22 @@ export interface FilterTab {
   active: boolean;
 }
 
-/** Status filters as index tabs on the header rule. Plain links: the filter lives in the URL. */
-export function FilterTabs({ tabs, label }: { tabs: readonly FilterTab[]; label: string }) {
+/** Status filters as a segmented control. Plain links: the filter lives in the URL. */
+export function FilterTabs({ tabs, label, className }: { tabs: readonly FilterTab[]; label: string; className?: string }) {
+  const current = tabs.find((t) => t.active)?.key ?? tabs[0]?.key ?? "";
   return (
-    <nav aria-label={label} className="flex items-end gap-4 overflow-x-auto rule-head">
-      {tabs.map((tab) => (
-        <Link
-          key={tab.key}
-          href={tab.href}
-          aria-current={tab.active ? "page" : undefined}
-          className={cn(
-            "-mb-px inline-flex shrink-0 items-baseline gap-1.5 border-b-2 px-0.5 pb-1.5 text-sm font-medium whitespace-nowrap transition-colors",
-            tab.active
-              ? "border-primary text-foreground"
-              : "border-transparent text-muted-foreground hover:text-foreground",
-          )}
-        >
-          {tab.label}
-          {tab.count === undefined ? null : (
-            <span className="num text-2xs text-muted-foreground">{tab.count}</span>
-          )}
-        </Link>
-      ))}
-    </nav>
+    <div className={cn("-mx-1 overflow-x-auto px-1 pb-0.5", className)}>
+      <SegmentedNav
+        aria-label={label}
+        current={current}
+        className="min-w-max"
+        items={tabs.map((tab) => ({
+          value: tab.key,
+          href: tab.href,
+          label: tab.count === undefined || tab.count === 0 || tab.key === "all" ? tab.label : `${tab.label} ${tab.count}`,
+        }))}
+      />
+    </div>
   );
 }
 
@@ -92,13 +128,13 @@ export function Fact({
 }) {
   return (
     <div className={cn("flex min-w-0 flex-col gap-0.5", className)}>
-      <dt className="eyebrow">{label}</dt>
-      <dd className="min-w-0 text-sm text-foreground">{children}</dd>
+      <dt className="text-xs font-medium text-label2">{label}</dt>
+      <dd className="min-w-0 text-sm font-medium text-label">{children}</dd>
     </div>
   );
 }
 
-/** Shared header cell for the registers in this module. */
+/** Numbers-style header cell: quiet, sentence case, a hairline under it. */
 export function Th({
   children,
   align = "left",
@@ -112,7 +148,7 @@ export function Th({
     <th
       scope="col"
       className={cn(
-        "rule-head bg-surface-sunken px-3 py-1.5 align-bottom text-2xs font-semibold tracking-wider whitespace-nowrap text-muted-foreground uppercase",
+        "rule-head bg-card px-3 py-2 align-bottom text-xs font-semibold whitespace-nowrap text-label2 first:pl-5 last:pr-5 max-sm:first:pl-4 max-sm:last:pr-4",
         align === "right" ? "text-right" : align === "center" ? "text-center" : "text-left",
         className,
       )}
@@ -137,12 +173,43 @@ export function Td({
     <td
       colSpan={colSpan}
       className={cn(
-        "rule-row px-3 py-1.5 align-middle",
+        "rule-row px-3 py-2 align-middle first:pl-5 last:pr-5 max-sm:first:pl-4 max-sm:last:pr-4",
         align === "right" ? "text-right" : align === "center" ? "text-center" : "text-left",
         className,
       )}
     >
       {children}
     </td>
+  );
+}
+
+/** A Numbers-style table on a card: scrolls sideways on a phone, hairline rows, no zebra. */
+export function NumbersTable({
+  caption,
+  minWidth,
+  head,
+  children,
+  foot,
+  className,
+}: {
+  caption: string;
+  /** e.g. "min-w-[40rem]" — below it the table scrolls sideways. */
+  minWidth?: string;
+  head: React.ReactNode;
+  children: React.ReactNode;
+  foot?: React.ReactNode;
+  className?: string;
+}) {
+  return (
+    <div className={cn("relative overflow-x-auto", className)}>
+      <table className={cn("w-full border-separate border-spacing-0 text-sm", minWidth)}>
+        <caption className="sr-only">{caption}</caption>
+        <thead>
+          <tr>{head}</tr>
+        </thead>
+        <tbody>{children}</tbody>
+        {foot ? <tfoot>{foot}</tfoot> : null}
+      </table>
+    </div>
   );
 }

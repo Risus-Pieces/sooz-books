@@ -2,14 +2,17 @@
 
 import * as React from "react";
 import * as SelectPrimitive from "@radix-ui/react-select";
-import { Check, ChevronDown, ChevronUp } from "lucide-react";
 
 import { cn } from "@/lib/cn";
+
+import { Glyph } from "./glyph";
+import { fieldBase, fieldInvalid, menuItem, menuLabel, menuSeparator, menuSurface } from "./menu-styles";
 
 const Select = SelectPrimitive.Root;
 const SelectGroup = SelectPrimitive.Group;
 const SelectValue = SelectPrimitive.Value;
 
+/** A pop-up button in a form: the field bezel with the up-down chevron. */
 function SelectTrigger({
   className,
   children,
@@ -21,15 +24,16 @@ function SelectTrigger({
       data-slot="select-trigger"
       aria-invalid={invalid || undefined}
       className={cn(
-        "flex h-8 w-full items-center max-sm:h-10 justify-between gap-2 rounded-sm border border-border-strong bg-surface-raised px-2.5 text-sm text-foreground transition-colors data-[state=open]:border-ring data-[placeholder]:text-muted-foreground/80 disabled:cursor-not-allowed disabled:bg-muted disabled:text-muted-foreground [&>span]:truncate",
-        invalid && "border-negative",
+        fieldBase,
+        "flex items-center justify-between gap-2 pr-1.5 text-left font-medium data-[placeholder]:font-normal data-[placeholder]:text-label2 data-[state=open]:shadow-[0_0_0_3px_color-mix(in_srgb,var(--blue)_45%,transparent),0_0_0_0.5px_var(--blue)] [&>span]:truncate",
+        invalid && fieldInvalid,
         className,
       )}
       {...props}
     >
       {children}
       <SelectPrimitive.Icon asChild>
-        <ChevronDown className="size-3.5 shrink-0 text-muted-foreground" />
+        <Glyph name="chevron-updown" size={13} weight={2.2} className="text-label2" />
       </SelectPrimitive.Icon>
     </SelectPrimitive.Trigger>
   );
@@ -47,27 +51,28 @@ function SelectContent({
         data-slot="select-content"
         position={position}
         className={cn(
-          "relative z-50 max-h-72 min-w-[8rem] overflow-hidden rounded-md border border-border-strong bg-surface-raised text-foreground shadow-overlay",
-          "data-[state=open]:anim-pop-in data-[state=closed]:anim-pop-out",
+          menuSurface,
+          "relative max-h-80 min-w-[8rem] p-0",
           position === "popper" &&
             "data-[side=bottom]:translate-y-1 data-[side=left]:-translate-x-1 data-[side=right]:translate-x-1 data-[side=top]:-translate-y-1",
           className,
         )}
         {...props}
       >
-        <SelectPrimitive.ScrollUpButton className="flex h-5 items-center justify-center text-muted-foreground">
-          <ChevronUp className="size-3.5" />
+        <SelectPrimitive.ScrollUpButton className="flex h-5 items-center justify-center text-label2">
+          <Glyph name="chevron-up" size={12} />
         </SelectPrimitive.ScrollUpButton>
         <SelectPrimitive.Viewport
           className={cn(
-            "p-1",
-            position === "popper" && "h-[var(--radix-select-trigger-height)] w-full min-w-[var(--radix-select-trigger-width)]",
+            "p-[5px]",
+            position === "popper" &&
+              "h-[var(--radix-select-trigger-height)] w-full min-w-[var(--radix-select-trigger-width)]",
           )}
         >
           {children}
         </SelectPrimitive.Viewport>
-        <SelectPrimitive.ScrollDownButton className="flex h-5 items-center justify-center text-muted-foreground">
-          <ChevronDown className="size-3.5" />
+        <SelectPrimitive.ScrollDownButton className="flex h-5 items-center justify-center text-label2">
+          <Glyph name="chevron-down" size={12} />
         </SelectPrimitive.ScrollDownButton>
       </SelectPrimitive.Content>
     </SelectPrimitive.Portal>
@@ -75,12 +80,7 @@ function SelectContent({
 }
 
 function SelectLabel({ className, ...props }: React.ComponentPropsWithRef<typeof SelectPrimitive.Label>) {
-  return (
-    <SelectPrimitive.Label
-      className={cn("px-2 py-1.5 text-2xs font-semibold tracking-wider text-muted-foreground uppercase", className)}
-      {...props}
-    />
-  );
+  return <SelectPrimitive.Label className={cn(menuLabel, className)} {...props} />;
 }
 
 function SelectItem({
@@ -89,17 +89,10 @@ function SelectItem({
   ...props
 }: React.ComponentPropsWithRef<typeof SelectPrimitive.Item>) {
   return (
-    <SelectPrimitive.Item
-      data-slot="select-item"
-      className={cn(
-        "relative flex cursor-default items-center gap-2 rounded-xs py-1.5 pr-2 pl-7 text-sm outline-none select-none data-[disabled]:pointer-events-none data-[disabled]:opacity-45 data-[highlighted]:bg-muted",
-        className,
-      )}
-      {...props}
-    >
+    <SelectPrimitive.Item data-slot="select-item" className={cn(menuItem, "pl-7", className)} {...props}>
       <span className="absolute left-2 flex size-3.5 items-center justify-center">
         <SelectPrimitive.ItemIndicator>
-          <Check className="size-3.5 text-primary" />
+          <Glyph name="check" size={13} weight={2.2} />
         </SelectPrimitive.ItemIndicator>
       </span>
       <SelectPrimitive.ItemText>{children}</SelectPrimitive.ItemText>
@@ -111,7 +104,7 @@ function SelectSeparator({
   className,
   ...props
 }: React.ComponentPropsWithRef<typeof SelectPrimitive.Separator>) {
-  return <SelectPrimitive.Separator className={cn("-mx-1 my-1 h-px bg-border", className)} {...props} />;
+  return <SelectPrimitive.Separator className={cn(menuSeparator, className)} {...props} />;
 }
 
 export {

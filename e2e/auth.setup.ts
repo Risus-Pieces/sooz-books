@@ -35,8 +35,9 @@ setup('sign in as the E2E owner, on the e2e database', async ({ page }) => {
   try {
     await sql`insert into vendors (name) values (${sentinel})`;
     await page.goto('/purchases/vendors');
+    // The vendor's row in the list: a button that selects it, its name leading its label.
     await expect(
-      page.getByText(sentinel),
+      page.getByRole('button', { name: new RegExp(`^${sentinel}`) }),
       'The server under test is not reading the e2e database. Start it with `npx tsx e2e/support/serve.ts`.',
     ).toBeVisible();
   } finally {

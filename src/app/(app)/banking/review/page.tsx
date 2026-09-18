@@ -1,14 +1,7 @@
 import type { Metadata } from "next";
-import Link from "next/link";
-import { Upload } from "lucide-react";
 
-import { AutoPostButton } from "@/components/banking/auto-post-button";
-import { LinkTabs } from "@/components/banking/link-tabs";
 import { ReviewQueue } from "@/components/banking/review-queue";
 import type { QueueStage } from "@/components/banking/types";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { PageHeader } from "@/components/ui/page-header";
 import { can } from "@/lib/auth/roles";
 import { requireUser } from "@/lib/auth/session";
 import { listQueue, queueCounts } from "@/lib/banking/queue";
@@ -17,27 +10,23 @@ import { accountOptions } from "../../ledger/queries";
 import { vendorOptions } from "../queries";
 
 export const metadata: Metadata = {
-  title: "Review queue",
+  title: "Review",
 };
 
-const STAGES: readonly { stage: QueueStage; label: string }[] = [
-  { stage: "review", label: "Needs review" },
-  { stage: "ready", label: "Ready to post" },
-  { stage: "posted", label: "Posted" },
-  { stage: "excluded", label: "Excluded" },
-];
+const STAGES: readonly QueueStage[] = ["review", "ready", "posted", "excluded"];
 
 const PAGE_LIMIT = 500;
 
 function readStage(value: string | string[] | undefined): QueueStage {
   const raw = Array.isArray(value) ? value[0] : value;
-  return STAGES.some((s) => s.stage === raw) ? (raw as QueueStage) : "review";
+  return STAGES.find((s) => s === raw) ?? "review";
 }
 
 /**
  * The review queue: every bank transaction a person has to decide, with what the rules, the
  * payee's history and the AI propose for it. Decisions are made here and nowhere else — the
  * engine posts what a person accepts, and only what an owner-marked rule coded posts without.
+ * Laid out as Mail: the list beside the selected transaction, a toolbar of actions over it.
  */
 export default async function ReviewPage({
   searchParams,
@@ -54,62 +43,25 @@ export default async function ReviewPage({
     vendorOptions(),
   ]);
 
+  const canApprove = can(user.role, "bank.approve");
+  const autoPostRows =
+    stage === "ready" ? page.rows.filter((row) => row.suggestion.rule?.autoPost === true && row.status === "categorized") : [];
   const readyNet =
     stage === "ready" ? page.rows.filter((row) => row.status === "categorized").reduce((s, r) => s + r.amountCents, 0) : 0;
-  const canApprove = can(user.role, "bank.approve");
 
   return (
-    <div className="flex flex-col gap-4">
-      <PageHeader
-        eyebrow="Banking"
-        title="Review queue"
-        description="Decide what each bank transaction was. Nothing reaches the ledger until you accept it."
-        meta={
-          <Badge tone={counts.byStage.review > 0 ? "warning" : "positive"}>
-            {counts.byStage.review} to review
-          </Badge>
-        }
-        actions={
-          <>
-            {stage === "ready" && canApprove ? (
-              <AutoPostButton
-                count={page.rows.filter((row) => row.suggestion.rule?.autoPost === true && row.status === "categorized").length}
-                netCents={readyNet}
-              />
-            ) : null}
-            {can(user.role, "bank.import") ? (
-              <Button asChild size="sm" variant="secondary">
-                <Link href="/banking/import">
-                  <Upload />
-                  Import statement
-                </Link>
-              </Button>
-            ) : null}
-          </>
-        }
-        tabs={
-          <LinkTabs
-            label="Queue stage"
-            tabs={STAGES.map((s) => ({
-              href: s.stage === "review" ? "/banking/review" : `/banking/review?stage=${s.stage}`,
-              label: s.label,
-              count: counts.byStage[s.stage],
-              active: s.stage === stage,
-            }))}
-          />
-        }
-      />
-
-      <ReviewQueue
-        key={stage}
-        stage={stage}
-        rows={page.rows}
-        accounts={accounts}
-        vendors={vendors}
-        canApprove={canApprove}
-        mayAutoPost={can(user.role, "settings.manage")}
-        truncated={page.nextCursor !== null}
-      />
-    </div>
+    <ReviewQueue
+      key={stage}
+      stage={stage}
+      stageCounts={counts.byStage}
+      rows={page.rows}
+      accounts={accounts}
+      vendors={vendors}
+      canApprove={canApprove}
+      mayAutoPost={can(user.role, "settings.manage")}
+      mayImport={can(user.role, "bank.import")}
+      autoPost={stage === "ready" && canApprove ? { count: autoPostRows.length, netCents: readyNet } : null}
+      truncated={page.nextCursor !== null}
+    />
   );
 }

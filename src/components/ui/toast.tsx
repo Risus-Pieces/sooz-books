@@ -14,21 +14,22 @@ export function Toaster(props: ToasterProps) {
     <SonnerToaster
       theme={resolved}
       position="bottom-right"
+      mobileOffset={{ bottom: 100 }}
       offset={16}
       gap={8}
       visibleToasts={4}
       toastOptions={{
         classNames: {
           toast:
-            "!rounded-md !border !border-border-strong !bg-surface-raised !text-foreground !shadow-overlay !font-sans !text-sm",
+            "!rounded-[12px] !border-0 vibrancy !text-label !shadow-glass !font-sans !text-sm",
           title: "!text-sm !font-semibold",
-          description: "!text-xs !text-muted-foreground",
-          actionButton: "!rounded-sm !bg-primary !text-primary-foreground !text-xs !font-medium",
-          cancelButton: "!rounded-sm !bg-muted !text-muted-foreground !text-xs !font-medium",
-          success: "[&_[data-icon]]:!text-positive",
-          error: "[&_[data-icon]]:!text-negative",
-          warning: "[&_[data-icon]]:!text-warning",
-          info: "[&_[data-icon]]:!text-info",
+          description: "!text-xs !text-label2",
+          actionButton: "!rounded-[7px] !bg-accent-fill !text-white !text-xs !font-semibold",
+          cancelButton: "!rounded-[7px] !bg-fill2 !text-label !text-xs !font-medium",
+          success: "[&_[data-icon]]:!text-ink-green",
+          error: "[&_[data-icon]]:!text-ink-red",
+          warning: "[&_[data-icon]]:!text-ink-orange",
+          info: "[&_[data-icon]]:!text-ink-blue",
         },
       }}
       {...props}

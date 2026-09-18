@@ -1,14 +1,13 @@
 import type { Metadata } from 'next';
-import { Lock } from 'lucide-react';
 
-import { CloseHistory } from '@/components/planning/close-history';
-import { CloseWorkspace } from '@/components/planning/close-workspace';
-import { MonthRail } from '@/components/planning/month-rail';
-import { Badge } from '@/components/ui/badge';
-import { PageHeader } from '@/components/ui/page-header';
+import { PageToolbar } from '@/components/shell/page-toolbar';
+import { Pill } from '@/components/ui/pill';
 import { can } from '@/lib/auth/roles';
 import { requireUser } from '@/lib/auth/session';
 
+import { CloseHistory } from './_components/close-history';
+import { CloseWorkspace } from './_components/close-workspace';
+import { MonthStrip } from './_components/month-strip';
 import { closeMonths, closeScreen, closedPeriods } from './queries';
 
 export const metadata: Metadata = {
@@ -35,24 +34,30 @@ export default async function ClosePage({ searchParams }: { searchParams: Promis
   const closedCount = months.filter((m) => m.status === 'closed').length;
 
   return (
-    <div className="flex flex-col gap-5">
-      <PageHeader
-        eyebrow="Books"
-        title="Month-end close"
-        description="Closing a month freezes it: nothing posts into a closed month, and corrections after that are reversing entries in a later one."
-        meta={
+    <div className="flex flex-col gap-3.5 max-md:gap-3">
+      <PageToolbar
+        title="Close"
+        subtitle={
           <>
-            <Badge tone={screen.periodStatus === 'closed' ? 'positive' : 'info'}>
-              {screen.periodStatus === 'closed' ? <Lock /> : null}
-              {selected.label} {screen.periodStatus}
-            </Badge>
-            <Badge tone="neutral">
-              {closedCount} of {months.length} months closed
-            </Badge>
+            <span className="num">
+              {closedCount}/{months.length} closed
+            </span>
+            {screen.periodStatus === 'closed' ? (
+              <Pill tone="green" glyph="lock" className="h-5 px-2 text-2xs">
+                {selected.label}
+              </Pill>
+            ) : null}
           </>
         }
-        tabs={<MonthRail months={months} selected={selected.key} path="/close" />}
+        info={
+          <p>
+            Closing a month freezes it: nothing posts into a closed month, and corrections after that are reversing
+            entries in a later one. Months close in order. Reopening is owner-only.
+          </p>
+        }
       />
+
+      <MonthStrip months={months} selected={selected.key} />
 
       <CloseWorkspace
         year={selected.year}

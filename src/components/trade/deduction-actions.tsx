@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { disputeDeductions, previewValidation, recoverOne, validateDeductions, writeOffOne } from "@/app/(app)/trade/actions";
 import { MoneyInput, centsOf, textOf } from "@/components/arap/money-input";
 import { Button } from "@/components/ui/button";
+import { InfoButton } from "@/components/ui/info-button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { DateInput } from "@/components/ui/date-input";
 import { Input } from "@/components/ui/input";
@@ -16,7 +17,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/components/ui/toast";
 
 import { longDate } from "./labels";
-import { EntryTable, Field } from "./parts";
+import { EntryPreview, Field, NoEntry } from "./parts";
 import type { AccountLabel, EntryView, Option, ValidationPreview } from "./types";
 
 export interface DeductionActionsProps {
@@ -49,40 +50,41 @@ export function DeductionActions(props: DeductionActionsProps) {
   const needsCode = props.validation.kind === "needs_classification";
   return (
     <Tabs defaultValue={props.alreadyDisputed ? "recover" : needsCode ? "dispute" : "validate"}>
-      <TabsList aria-label="Deduction actions" className="px-4 pt-3">
+      <TabsList aria-label="Deduction actions" className="flex w-full [&>*]:flex-1">
         <TabsTrigger value="validate">Validate</TabsTrigger>
         <TabsTrigger value="dispute">Dispute</TabsTrigger>
         <TabsTrigger value="recover">Recover</TabsTrigger>
         <TabsTrigger value="writeoff">Write off</TabsTrigger>
       </TabsList>
-      <TabsContent value="validate" className="px-4 pb-4">
+      <TabsContent value="validate">
         <ValidatePanel {...props} />
       </TabsContent>
-      <TabsContent value="dispute" className="px-4 pb-4">
+      <TabsContent value="dispute">
         <DisputePanel {...props} />
       </TabsContent>
-      <TabsContent value="recover" className="px-4 pb-4">
+      <TabsContent value="recover">
         <RecoverPanel {...props} />
       </TabsContent>
-      <TabsContent value="writeoff" className="px-4 pb-4">
+      <TabsContent value="writeoff">
         <WriteOffPanel {...props} />
       </TabsContent>
     </Tabs>
   );
 }
 
-function Preview({ entry, note }: { entry: EntryView | null; note?: React.ReactNode }) {
+function Preview({ entry, note, tone }: { entry: EntryView | null; note?: React.ReactNode; tone?: "neutral" | "red" }) {
+  return entry === null ? <NoEntry tone={tone}>{note}</NoEntry> : <EntryPreview entry={entry} />;
+}
+
+/** The action's one-line name with its explanation behind the ⓘ. */
+function Intro({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <div className="flex flex-col gap-1.5">
-      <p className="eyebrow">Will post</p>
-      {entry === null ? (
-        <p className="rounded-md border border-dashed border-border-strong px-3 py-4 text-center text-xs text-muted-foreground">{note}</p>
-      ) : (
-        <div className="rounded-md border border-border bg-surface-raised/60">
-          <EntryTable entry={entry} />
-        </div>
-      )}
-    </div>
+    <p className="flex items-center gap-1 text-sm font-semibold">
+      {title}
+      <InfoButton label={`About ${title.toLowerCase()}`} align="start">
+        <p>{children}</p>
+      </InfoButton>
+    </p>
   );
 }
 
@@ -136,14 +138,14 @@ function ValidatePanel(props: DeductionActionsProps) {
 
   return (
     <div className="flex flex-col gap-3">
-      <p className="text-xs leading-relaxed text-muted-foreground">
+      <Intro title="Entitled">
         The distributor was entitled to it. The open amount leaves 1210 for trade spend (its promotion’s accrual first), or gross sales for a shortage or pricing claim that was real.
-      </p>
+      </Intro>
       <div className="grid gap-3 sm:grid-cols-[10rem_1fr]">
         <Field label="Date" htmlFor="validate-date">
           <DateInput id="validate-date" value={date} onValueChange={setDate} disabled={pending} />
         </Field>
-        <Field label="Reason code" htmlFor="validate-code" hint={props.reasonCode === null ? "required" : "optional"}>
+        <Field label="Reason code" htmlFor="validate-code" required={props.reasonCode === null}>
           <Select value={code === "" ? "__keep" : code} onValueChange={(v) => setCode(v === "__keep" ? "" : v)} disabled={pending}>
             <SelectTrigger id="validate-code">
               <SelectValue />
@@ -159,30 +161,25 @@ function ValidatePanel(props: DeductionActionsProps) {
           </Select>
         </Field>
       </div>
-      <Field label="Memo" htmlFor="validate-memo" hint="optional">
+      <Field label="Memo" htmlFor="validate-memo">
         <Input id="validate-memo" value={memo} maxLength={200} onChange={(e) => setMemo(e.target.value)} disabled={pending} />
       </Field>
       {preview === null ? (
         <Preview entry={null} note="Working out the entry…" />
       ) : preview.kind === "entry" ? (
         <>
-          <p className="text-xs text-muted-foreground">
-            Books as: <span className="text-foreground">{preview.destination}</span>
-            {preview.chargedToAccrualCents > 0 ? (
-              <>
-                {" "}
-                (<Money cents={preview.chargedToAccrualCents} plain className="text-xs" /> from the accrual)
-              </>
-            ) : null}
-            .
-          </p>
+          {preview.chargedToAccrualCents > 0 ? (
+            <p className="text-xs text-label2">
+              <Money cents={preview.chargedToAccrualCents} currency plain className="font-semibold text-label" /> from the accrual
+            </p>
+          ) : null}
           <Preview entry={{ ...preview.entry, date, memo: memo.trim() === "" ? preview.entry.memo : memo.trim() }} />
         </>
       ) : (
         <Preview entry={null} note={preview.message} />
       )}
       <div className="flex justify-end">
-        <Button size="sm" onClick={submit} disabled={pending || preview === null || preview.kind !== "entry"}>
+        <Button onClick={submit} disabled={pending || preview === null || preview.kind !== "entry"}>
           {pending ? "Validating…" : "Validate and post"}
         </Button>
       </div>
@@ -209,19 +206,19 @@ function DisputePanel(props: DeductionActionsProps) {
 
   return (
     <div className="flex flex-col gap-3">
-      <p className="text-xs leading-relaxed text-muted-foreground">
+      <Intro title="Not entitled">
         The distributor was not entitled to it. Record the case you filed with them; the claim stays in 1210 until they repay it or you concede.
-      </p>
+      </Intro>
       <div className="grid gap-3 sm:grid-cols-2">
         <Field label="Filed on" htmlFor="dispute-date">
           <DateInput id="dispute-date" value={date} onValueChange={setDate} disabled={pending} />
         </Field>
-        <Field label="Case number" htmlFor="dispute-ref" hint="K-Solve or Dispute Center">
+        <Field label="Case number" htmlFor="dispute-ref">
           <Input id="dispute-ref" value={reference} maxLength={80} onChange={(e) => setReference(e.target.value)} disabled={pending} />
         </Field>
       </div>
       {props.reasonCode === null ? (
-        <Field label="Reason code" htmlFor="dispute-code" hint="classify it while you are here">
+        <Field label="Reason code" htmlFor="dispute-code">
           <Select value={code === "" ? "__none" : code} onValueChange={(v) => setCode(v === "__none" ? "" : v)} disabled={pending}>
             <SelectTrigger id="dispute-code">
               <SelectValue />
@@ -237,24 +234,25 @@ function DisputePanel(props: DeductionActionsProps) {
           </Select>
         </Field>
       ) : null}
-      <Field label="Notes" htmlFor="dispute-notes" hint="the backup you sent">
+      <Field label="Notes" htmlFor="dispute-notes">
         <Textarea id="dispute-notes" rows={3} value={notes} maxLength={2000} onChange={(e) => setNotes(e.target.value)} disabled={pending} />
       </Field>
       <Preview
         entry={null}
+        tone={late ? "red" : "neutral"}
         note={
           late ? (
-            <span className="text-negative">The window closed on {longDate(props.disputeDeadline)}. Write it off or record a recovery instead.</span>
+            <>Window closed {longDate(props.disputeDeadline)}. Write it off or record a recovery.</>
           ) : (
             <>
-              No entry. <Money cents={props.openCents} plain className="text-xs" /> stays in {props.accounts.receivable.code}{" "}
-              {props.accounts.receivable.name}; dispute by {longDate(props.disputeDeadline)}.
+              No entry · <Money cents={props.openCents} currency plain className="font-semibold text-label" /> stays in {props.accounts.receivable.code}{" "}
+              {props.accounts.receivable.name}
             </>
           )
         }
       />
       <div className="flex justify-end">
-        <Button size="sm" variant="secondary" onClick={submit} disabled={pending || late}>
+        <Button variant="secondary" onClick={submit} disabled={pending || late}>
           {pending ? "Filing…" : props.alreadyDisputed ? "Update the dispute" : "File dispute"}
         </Button>
       </div>
@@ -293,14 +291,14 @@ function RecoverPanel(props: DeductionActionsProps) {
 
   return (
     <div className="flex flex-col gap-3">
-      <p className="text-xs leading-relaxed text-muted-foreground">
+      <Intro title="Paid back">
         The distributor paid it back, by check or as a repayment line. A repayment on a later remittance is matched automatically; use this for money that came any other way.
-      </p>
+      </Intro>
       <div className="grid gap-3 sm:grid-cols-2">
         <Field label="Received" htmlFor="recover-date">
           <DateInput id="recover-date" value={date} onValueChange={setDate} disabled={pending} />
         </Field>
-        <Field label="Amount" htmlFor="recover-amount" hint={`of ${textOf(props.openCents)} open`}>
+        <Field label="Amount" htmlFor="recover-amount" hint={`of ${textOf(props.openCents)}`}>
           <MoneyInput id="recover-amount" value={amount} onValueChange={setAmount} disabled={pending} invalid={amount !== "" && !valid} />
         </Field>
         <Field label="Landed in" htmlFor="recover-deposit">
@@ -317,19 +315,19 @@ function RecoverPanel(props: DeductionActionsProps) {
             </SelectContent>
           </Select>
         </Field>
-        <Field label="Reference" htmlFor="recover-ref" hint="check or payment no.">
+        <Field label="Reference" htmlFor="recover-ref">
           <Input id="recover-ref" value={reference} maxLength={80} onChange={(e) => setReference(e.target.value)} disabled={pending} />
         </Field>
       </div>
       {rest > 0 && valid ? (
-        <label className="flex items-center gap-2 text-xs text-foreground">
+        <label className="flex min-h-11 items-center gap-2.5 rounded-[12px] bg-card px-3.5 text-sm shadow-card">
           <Checkbox checked={writeRest} onCheckedChange={(v) => setWriteRest(v === true)} disabled={pending} />
-          Write off the other <Money cents={rest} plain className="text-xs" /> in the same entry
+          Write off the other <Money cents={rest} currency plain className="font-semibold" />
         </label>
       ) : null}
       <Preview entry={entry} note={`Enter an amount up to ${textOf(props.openCents)}.`} />
       <div className="flex justify-end">
-        <Button size="sm" onClick={submit} disabled={pending || !valid}>
+        <Button onClick={submit} disabled={pending || !valid}>
           {pending ? "Posting…" : "Post recovery"}
         </Button>
       </div>
@@ -357,14 +355,14 @@ function WriteOffPanel(props: DeductionActionsProps) {
 
   return (
     <div className="flex flex-col gap-3">
-      <p className="text-xs leading-relaxed text-muted-foreground">
+      <Intro title="Concede">
         Concede it: the dispute was denied, or the window closed. It is contra revenue the customer kept, not bad debt. A shortage that was real is a validation instead.
-      </p>
+      </Intro>
       <div className="grid gap-3 sm:grid-cols-2">
         <Field label="Date" htmlFor="writeoff-date">
           <DateInput id="writeoff-date" value={date} onValueChange={setDate} disabled={pending} />
         </Field>
-        <Field label="Amount" htmlFor="writeoff-amount" hint={`of ${textOf(props.openCents)} open`}>
+        <Field label="Amount" htmlFor="writeoff-amount" hint={`of ${textOf(props.openCents)}`}>
           <MoneyInput id="writeoff-amount" value={amount} onValueChange={setAmount} disabled={pending} invalid={amount !== "" && !valid} />
         </Field>
       </div>
@@ -373,7 +371,7 @@ function WriteOffPanel(props: DeductionActionsProps) {
       </Field>
       <Preview entry={entry} note={`Enter an amount up to ${textOf(props.openCents)}.`} />
       <div className="flex justify-end">
-        <Button size="sm" variant="danger-quiet" onClick={submit} disabled={pending || !valid || reason.trim() === ""}>
+        <Button variant="danger-quiet" onClick={submit} disabled={pending || !valid || reason.trim() === ""}>
           {pending ? "Posting…" : "Write off and post"}
         </Button>
       </div>

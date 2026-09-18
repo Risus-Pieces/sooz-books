@@ -1,274 +1,138 @@
 "use client";
 
 import * as React from "react";
-import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { FilterX, Search } from "lucide-react";
 
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
 import { DateInput } from "@/components/ui/date-input";
-import { EmptyState } from "@/components/ui/empty-state";
-import { FilterDisclosure } from "@/components/ui/filter-disclosure";
+import { GroupRow, InsetGroup } from "@/components/ui/inset-group";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { cn } from "@/lib/cn";
+import { PopUpButton } from "@/components/ui/pop-up-button";
+import { Sheet, SheetContent } from "@/components/ui/sheet";
+import { ToolbarButton } from "@/components/ui/toolbar";
 
-import { AuditDiff } from "./audit-diff";
-import type { ActorOption, AuditEntryRow, AuditFilters } from "./types";
+import { tableLabel } from "./audit-timeline";
+import type { ActorOption, AuditFilters } from "./types";
 
-const ANY = "__any__";
+const ANY = "any";
 
-const OP_TONE: Record<AuditEntryRow["op"], "positive" | "info" | "negative"> = {
-  INSERT: "positive",
-  UPDATE: "info",
-  DELETE: "negative",
-};
-
-export interface AuditTableProps {
-  rows: readonly AuditEntryRow[];
-  filters: AuditFilters;
-  tables: readonly string[];
-  actors: readonly ActorOption[];
-  page: number;
-  pageSize: number;
-  total: number;
-}
+const EMPTY_AUDIT_FILTERS: AuditFilters = { table: "", op: "", actorId: "", from: "", to: "", q: "" };
 
 /**
- * The audit trail as something a person can read.
- *
- * `audit_log` keeps a whole row snapshot per write, which is the right storage
- * and unreadable as-is; every row here is rendered as the fields that changed,
- * from what to what. A row that touched a journal entry links to it, so a
- * question about a figure ends on the entry that produced it.
+ * The audit trail's filters behind one toolbar button: table, operation, who, when and what,
+ * written into the URL on Apply.
  */
-export function AuditTable({
-  rows,
+export function AuditFilterButton({
   filters,
   tables,
   actors,
-  page,
-  pageSize,
-  total,
-}: AuditTableProps) {
+}: {
+  filters: AuditFilters;
+  tables: readonly string[];
+  actors: readonly ActorOption[];
+}) {
   const router = useRouter();
   const pathname = usePathname();
-  // Seeded from the filters the server matched on; the page remounts this
-  // component whenever those change.
+  const [open, setOpen] = React.useState(false);
   const [draft, setDraft] = React.useState<AuditFilters>(filters);
 
-  const apply = React.useCallback(
-    (next: AuditFilters, nextPage = 1) => {
-      const params = new URLSearchParams();
-      for (const [key, value] of Object.entries(next)) {
-        if (value !== "") params.set(key, value);
-      }
-      if (nextPage > 1) params.set("page", String(nextPage));
-      const query = params.toString();
-      router.push(query === "" ? pathname : `${pathname}?${query}`);
-    },
-    [pathname, router],
-  );
+  const set = <K extends keyof AuditFilters>(key: K, value: AuditFilters[K]) =>
+    setDraft((current) => ({ ...current, [key]: value }));
 
-  const set = React.useCallback(
-    <K extends keyof AuditFilters>(key: K, value: AuditFilters[K]) => {
-      setDraft((current) => ({ ...current, [key]: value }));
-    },
-    [],
-  );
+  const apply = (next: AuditFilters) => {
+    const params = new URLSearchParams();
+    for (const [key, value] of Object.entries(next)) {
+      if (value !== "") params.set(key, value);
+    }
+    const query = params.toString();
+    setOpen(false);
+    router.push(query === "" ? pathname : `${pathname}?${query}`);
+  };
 
-  const active = Object.values(filters).some((value) => value !== "");
-  const lastPage = Math.max(1, Math.ceil(total / pageSize));
-  const firstRow = total === 0 ? 0 : (page - 1) * pageSize + 1;
-  const lastRow = Math.min(page * pageSize, total);
-  const filterSummary = `${active ? "Filtered · " : ""}${total} recorded ${total === 1 ? "write" : "writes"}`;
+  const count = Object.values(filters).filter((value) => value !== "").length;
 
   return (
-    <div className="flex flex-col gap-4">
-      <Card>
-        <FilterDisclosure triggerClassName="p-3" summary={filterSummary}>
+    <>
+      <ToolbarButton
+        glyph="filter"
+        label={count > 0 ? `Filters (${count})` : "Filters"}
+        tone={count > 0 ? "accent" : "default"}
+        onClick={() => {
+          setDraft(filters);
+          setOpen(true);
+        }}
+      />
+      <Sheet open={open} onOpenChange={setOpen}>
+        <SheetContent title="Filters" width="sm">
           <form
-            className="grid grid-cols-2 gap-3 p-3 max-sm:pt-0 md:grid-cols-3 xl:grid-cols-6"
+            className="flex flex-col gap-1"
             onSubmit={(event) => {
               event.preventDefault();
               apply(draft);
             }}
           >
-            <Field label="Table">
-              <Select
-                value={draft.table === "" ? ANY : draft.table}
-                onValueChange={(value) => set("table", value === ANY ? "" : value)}
-              >
-                <SelectTrigger aria-label="Table">
-                  <SelectValue placeholder="Any table" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value={ANY}>Any table</SelectItem>
-                  {tables.map((table) => (
-                    <SelectItem key={table} value={table}>
-                      {table}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </Field>
-            <Field label="Operation">
-              <Select
-                value={draft.op === "" ? ANY : draft.op}
-                onValueChange={(value) => set("op", value === ANY ? "" : value)}
-              >
-                <SelectTrigger aria-label="Operation">
-                  <SelectValue placeholder="Any operation" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value={ANY}>Any operation</SelectItem>
-                  <SelectItem value="INSERT">Insert</SelectItem>
-                  <SelectItem value="UPDATE">Update</SelectItem>
-                  <SelectItem value="DELETE">Delete</SelectItem>
-                </SelectContent>
-              </Select>
-            </Field>
-            <Field label="Actor">
-              <Select
-                value={draft.actorId === "" ? ANY : draft.actorId}
-                onValueChange={(value) => set("actorId", value === ANY ? "" : value)}
-              >
-                <SelectTrigger aria-label="Actor">
-                  <SelectValue placeholder="Anyone" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value={ANY}>Anyone</SelectItem>
-                  {actors.map((actor) => (
-                    <SelectItem key={actor.id} value={actor.id}>
-                      {actor.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </Field>
-            <Field label="From" half>
-              <DateInput value={draft.from} onValueChange={(value) => set("from", value)} />
-            </Field>
-            <Field label="To" half>
-              <DateInput value={draft.to} onValueChange={(value) => set("to", value)} />
-            </Field>
-            <Field label="Contains">
-              <Input
-                value={draft.q}
-                placeholder="Any value in the row"
-                onChange={(event) => set("q", event.target.value)}
-              />
-            </Field>
+            <InsetGroup header="What">
+              <GroupRow label="Table">
+                <PopUpButton
+                  aria-label="Table"
+                  value={draft.table === "" ? ANY : draft.table}
+                  onValueChange={(value) => set("table", value === ANY ? "" : value)}
+                  options={[{ value: ANY, label: "Any" }, ...tables.map((t) => ({ value: t, label: tableLabel(t) }))]}
+                />
+              </GroupRow>
+              <GroupRow label="Change">
+                <PopUpButton
+                  aria-label="Operation"
+                  value={draft.op === "" ? ANY : draft.op}
+                  onValueChange={(value) => set("op", value === ANY ? "" : value)}
+                  options={[
+                    { value: ANY, label: "Any" },
+                    { value: "INSERT", label: "Added", tint: "green" },
+                    { value: "UPDATE", label: "Changed", tint: "blue" },
+                    { value: "DELETE", label: "Deleted", tint: "red" },
+                  ]}
+                />
+              </GroupRow>
+              <GroupRow label="Who">
+                <PopUpButton
+                  aria-label="Actor"
+                  value={draft.actorId === "" ? ANY : draft.actorId}
+                  onValueChange={(value) => set("actorId", value === ANY ? "" : value)}
+                  options={[{ value: ANY, label: "Anyone" }, ...actors.map((a) => ({ value: a.id, label: a.label }))]}
+                />
+              </GroupRow>
+            </InsetGroup>
 
-            <div className="col-span-2 flex flex-wrap items-end gap-2 md:col-span-3 xl:col-span-6">
-              <Button type="submit" size="sm">
-                <Search />
-                Apply
+            <InsetGroup header="When">
+              <GroupRow label="From" htmlFor="audit-from">
+                <DateInput id="audit-from" value={draft.from} onValueChange={(value) => set("from", value)} />
+              </GroupRow>
+              <GroupRow label="To" htmlFor="audit-to">
+                <DateInput id="audit-to" value={draft.to} onValueChange={(value) => set("to", value)} />
+              </GroupRow>
+            </InsetGroup>
+
+            <InsetGroup header="Value">
+              <GroupRow label="Contains" htmlFor="audit-q">
+                <Input
+                  id="audit-q"
+                  placeholder="Search"
+                  className="w-48 max-sm:w-44"
+                  value={draft.q}
+                  onChange={(event) => set("q", event.target.value)}
+                />
+              </GroupRow>
+            </InsetGroup>
+
+            <div className="mt-4 flex items-center justify-end gap-2">
+              <Button type="button" variant="ghost" onClick={() => apply(EMPTY_AUDIT_FILTERS)}>
+                Clear
               </Button>
-              {active ? (
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => apply({ table: "", op: "", actorId: "", from: "", to: "", q: "" })}
-                >
-                  <FilterX />
-                  Clear
-                </Button>
-              ) : null}
-              <p className="ml-auto text-xs text-muted-foreground">
-                {total === 0
-                  ? "No entries"
-                  : `${firstRow}\u2013${lastRow} of ${total} recorded ${total === 1 ? "write" : "writes"}`}
-              </p>
+              <Button type="submit">Apply</Button>
             </div>
           </form>
-        </FilterDisclosure>
-      </Card>
-
-      <Card>
-        {rows.length === 0 ? (
-          <EmptyState
-            title={active ? "Nothing matches those filters" : "Nothing recorded yet"}
-            description="Every insert, update and delete on a financial table lands here, attributed to whoever made it."
-          />
-        ) : (
-          <ul className="divide-y divide-border">
-            {rows.map((row) => (
-              <li key={row.id} className="flex flex-col gap-1.5 px-4 py-3">
-                <div className="flex flex-wrap items-baseline gap-2">
-                  <Badge tone={OP_TONE[row.op]}>{row.op}</Badge>
-                  <span className="num text-xs text-foreground">{row.tableName}</span>
-                  <span className="text-xs text-muted-foreground">{row.atLabel}</span>
-                  <span className="text-xs text-foreground">{row.actorLabel ?? "System"}</span>
-                  {row.tableName === "journal_entries" ? (
-                    <Link
-                      href={`/ledger/${row.rowId}`}
-                      className="text-xs text-primary hover:underline"
-                    >
-                      Open entry
-                    </Link>
-                  ) : null}
-                </div>
-                <AuditDiff op={row.op} before={row.before} after={row.after} />
-              </li>
-            ))}
-          </ul>
-        )}
-
-        {lastPage > 1 ? (
-          <div className="flex items-center justify-between gap-3 border-t border-border px-4 py-2.5">
-            <Button
-              type="button"
-              variant="secondary"
-              size="sm"
-              disabled={page <= 1}
-              onClick={() => apply(filters, page - 1)}
-            >
-              Previous
-            </Button>
-            <span className="num text-xs text-muted-foreground">
-              Page {page} of {lastPage}
-            </span>
-            <Button
-              type="button"
-              variant="secondary"
-              size="sm"
-              disabled={page >= lastPage}
-              onClick={() => apply(filters, page + 1)}
-            >
-              Next
-            </Button>
-          </div>
-        ) : null}
-      </Card>
-    </div>
-  );
-}
-
-function Field({
-  label,
-  children,
-  half = false,
-}: {
-  label: string;
-  children: React.ReactNode;
-  /** Takes half a row on a phone — dates and amounts pair up; everything else runs full width. */
-  half?: boolean;
-}) {
-  return (
-    <div className={cn("flex min-w-0 flex-col gap-1.5", !half && "max-md:col-span-2")}>
-      <Label>{label}</Label>
-      {children}
-    </div>
+        </SheetContent>
+      </Sheet>
+    </>
   );
 }

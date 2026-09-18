@@ -1,9 +1,9 @@
 "use client";
 
 import * as React from "react";
-import { Check, ClipboardCopy } from "lucide-react";
 
-import { Button } from "@/components/ui/button";
+import { toast } from "@/components/ui/toast";
+import { ToolbarButton, ToolbarGroup } from "@/components/ui/toolbar";
 
 export interface CopyReportButtonProps {
   /** The export route with `format=tsv`. Fetched on click rather than shipped with the page. */
@@ -19,7 +19,7 @@ export interface CopyReportButtonProps {
  * would double the weight of every report for a feature most readers never use.
  */
 export function CopyReportButton({ href }: CopyReportButtonProps) {
-  const [state, setState] = React.useState<"idle" | "busy" | "done" | "failed">("idle");
+  const [state, setState] = React.useState<"idle" | "busy" | "done">("idle");
 
   const copy = React.useCallback(async () => {
     setState("busy");
@@ -28,24 +28,30 @@ export function CopyReportButton({ href }: CopyReportButtonProps) {
       if (!response.ok) throw new Error(`Export failed with ${response.status}`);
       await navigator.clipboard.writeText(await response.text());
       setState("done");
+      toast.success("Copied for a spreadsheet");
       window.setTimeout(() => setState("idle"), 2000);
     } catch {
-      setState("failed");
-      window.setTimeout(() => setState("idle"), 3000);
+      setState("idle");
+      toast.error("Copy failed");
     }
   }, [href]);
 
   return (
-    <Button
-      type="button"
-      size="sm"
-      variant="secondary"
-      onClick={copy}
+    <ToolbarButton
+      glyph={state === "done" ? "check" : "doc"}
+      label={state === "done" ? "Copied" : "Copy as table"}
       disabled={state === "busy"}
-      title="Copy the statement as tab-separated text"
-    >
-      {state === "done" ? <Check aria-hidden /> : <ClipboardCopy aria-hidden />}
-      {state === "done" ? "Copied" : state === "failed" ? "Copy failed" : "Copy"}
-    </Button>
+      onClick={copy}
+    />
+  );
+}
+
+/** Export and copy, the report's toolbar group. Export is a plain download of the CSV route. */
+export function ReportFileActions({ csvHref, copyHref }: { csvHref: string; copyHref: string }) {
+  return (
+    <ToolbarGroup>
+      <CopyReportButton href={copyHref} />
+      <ToolbarButton glyph="export" label="Export CSV" onClick={() => window.location.assign(csvHref)} />
+    </ToolbarGroup>
   );
 }

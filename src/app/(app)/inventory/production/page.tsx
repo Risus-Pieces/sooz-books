@@ -1,17 +1,28 @@
 import type { Metadata } from 'next';
-import { Factory } from 'lucide-react';
 
 import { NewRunDialog } from '@/components/inventory/new-run-dialog';
-import { RunsTable } from '@/components/inventory/runs-table';
-import { Badge } from '@/components/ui/badge';
+import { ComponentLegend, RunsTable, type RunsTableRow } from '@/components/inventory/runs-table';
+import { StackBar } from '@/components/inventory/stack-bar';
+import { COMPONENT_KEYS, COMPONENT_LABELS, COMPONENT_STYLE, type CostComponentKey } from '@/components/inventory/types';
+import { PageToolbar } from '@/components/shell/page-toolbar';
 import { Card } from '@/components/ui/card';
 import { EmptyState } from '@/components/ui/empty-state';
-import { formatCents, Money } from '@/components/ui/money';
-import { PageHeader } from '@/components/ui/page-header';
+import { IconBadge } from '@/components/ui/icon-badge';
+import { GroupRow, InsetGroup } from '@/components/ui/inset-group';
+import { Money } from '@/components/ui/money';
+import { ToolbarGroup } from '@/components/ui/toolbar';
 import { can } from '@/lib/auth/roles';
 import { requireCapability } from '@/lib/auth/session';
+import { categoryForCode } from '@/lib/ui/categories';
 
-import { bankQueueInventory, productOptions, productionRunRows, stockBalances, vendorOptions } from '../queries';
+import {
+  bankQueueInventory,
+  productOptions,
+  productionRunRows,
+  runComponentTotals,
+  stockBalances,
+  vendorOptions,
+} from '../queries';
 
 export const metadata: Metadata = {
   title: 'Production Runs',
@@ -31,7 +42,7 @@ export default async function ProductionPage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  const [user, params, runs, products, vendors, stock, queue] = await Promise.all([
+  const [user, params, runs, products, vendors, stock, queue, split] = await Promise.all([
     requireCapability('reports.view'),
     searchParams,
     productionRunRows(),
@@ -39,13 +50,20 @@ export default async function ProductionPage({
     vendorOptions(),
     stockBalances(),
     bankQueueInventory(),
+    runComponentTotals(),
   ]);
   const canManage = can(user.role, 'inventory.manage');
   const openNew = canManage && params.new === '1';
-  const stockCents = stock.reduce((sum, s) => sum + s.cents, 0);
   const open = runs.filter((r) => r.status === 'open').length;
 
-  const dialog = (trigger: 'button' | 'none', defaultOpen: boolean) => (
+  const rows: RunsTableRow[] = runs.map((r) => ({ ...r, components: split.get(r.id) ?? {} }));
+  const totals: Partial<Record<CostComponentKey, number>> = {};
+  for (const r of rows) {
+    for (const k of COMPONENT_KEYS) totals[k] = (totals[k] ?? 0) + (r.components[k] ?? 0);
+  }
+  const landed = rows.reduce((sum, r) => sum + r.landedCostCents, 0);
+
+  const dialog = (trigger: 'button' | 'toolbar', defaultOpen: boolean) => (
     <NewRunDialog
       products={products}
       vendors={vendors}
@@ -56,59 +74,95 @@ export default async function ProductionPage({
   );
 
   return (
-    <div className="flex flex-col gap-5">
-      <PageHeader
-        eyebrow="Inventory"
+    <div className="flex flex-col gap-3.5 max-md:gap-3">
+      <PageToolbar
         title="Production runs"
-        description="Each run gathers the tolling, materials and freight that went into one batch, then strikes the unit cost and moves the value into Finished Goods."
-        meta={
+        back={{ href: '/inventory', label: 'Inventory' }}
+        phoneTitleRow
+        subtitle={
           runs.length > 0 ? (
-            <>
-              <Badge tone="outline">{runs.length} runs</Badge>
-              {open > 0 ? <Badge tone="info">{open} open</Badge> : null}
-            </>
-          ) : null
+            <span className="num">
+              {runs.length} {runs.length === 1 ? 'run' : 'runs'}
+              {open > 0 ? ` · ${open} open` : ''}
+            </span>
+          ) : undefined
         }
-        actions={canManage && runs.length > 0 ? dialog('button', openNew) : null}
+        info="Each run gathers the tolling, materials and freight that went into one batch, then strikes the unit cost and moves the value into Finished Goods."
+        actions={canManage && runs.length > 0 ? <ToolbarGroup>{dialog('toolbar', openNew)}</ToolbarGroup> : undefined}
       />
 
       {runs.length === 0 ? (
-        <Card>
-          <EmptyState
-            icon={<Factory />}
-            title="No production runs yet"
-            description={
-              stockCents > 0 || queue.totalCents > 0
-                ? `Sooz has ${formatCents(stockCents + queue.totalCents, { currency: true })} of ingredients and packaging on hand or waiting in the bank queue, and nothing has been made from it yet. Create the first production run when the co-packer runs; attach the materials it consumed and the tolling invoice, and costing the run moves that value into Finished Goods.`
-                : 'Create the first production run when the co-packer runs; attach the materials it consumed and the tolling invoice, and costing the run moves that value into Finished Goods.'
-            }
-            action={canManage ? <span>{dialog('button', openNew)}</span> : undefined}
-          />
-          <dl className="grid grid-cols-2 gap-3 border-t border-border px-4 py-3 sm:grid-cols-3">
-            {stock.map((s) => (
-              <div key={s.code}>
-                <dt className="eyebrow">
-                  <span className="num">{s.code}</span> {s.name}
-                </dt>
-                <dd className="mt-1 text-sm">
-                  <Money cents={s.cents} currency plain />
-                </dd>
-              </div>
-            ))}
-            <div>
-              <dt className="eyebrow">In the bank queue</dt>
-              <dd className="mt-1 text-sm">
-                <Money cents={queue.totalCents} currency plain />
-              </dd>
-            </div>
-          </dl>
-        </Card>
+        <>
+          <Card>
+            <EmptyState
+              glyph="wrench"
+              title="No production runs yet"
+              description="Create the first production run when the co-packer runs; attach the materials it consumed and the tolling invoice, and costing the run moves that value into Finished Goods."
+              action={canManage ? dialog('button', openNew) : undefined}
+            />
+          </Card>
+          <InsetGroup header="Materials on hand" separatorInset={50}>
+            {stock.map((s) => {
+              const c = categoryForCode(s.code);
+              return (
+                <GroupRow
+                  key={s.code}
+                  label={
+                    <span className="flex items-center gap-3">
+                      <IconBadge glyph={c.glyph} tint={c.tint} size="lg" />
+                      {c.label}
+                    </span>
+                  }
+                >
+                  <Money cents={s.cents} currency plain className="font-semibold text-label" />
+                </GroupRow>
+              );
+            })}
+            <GroupRow
+              href="/banking/review"
+              label={
+                <span className="flex items-center gap-3">
+                  <IconBadge glyph="tray" tint="orange" size="lg" />
+                  In review
+                </span>
+              }
+            >
+              <Money cents={queue.totalCents} currency plain className="font-semibold text-label" />
+            </GroupRow>
+          </InsetGroup>
+        </>
       ) : (
-        <Card className="overflow-hidden">
-          <RunsTable rows={runs} />
-        </Card>
+        <>
+          <Card className="px-5 pt-[18px] pb-4 max-md:p-4">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <h2 className="text-sm font-semibold text-label2">Landed cost</h2>
+                <Money
+                  cents={landed}
+                  currency
+                  plain
+                  className="mt-0.5 block text-[2.5rem] leading-[1.05] font-bold tracking-[-0.03em] max-md:text-[2.125rem]"
+                />
+              </div>
+            </div>
+            <StackBar
+              className="mt-4"
+              height={12}
+              label="Landed cost by component, all runs"
+              segments={COMPONENT_KEYS.map((k) => ({
+                key: k,
+                label: COMPONENT_LABELS[k],
+                cents: totals[k] ?? 0,
+                tint: COMPONENT_STYLE[k].tint,
+              }))}
+            />
+            <div className="mt-3">
+              <ComponentLegend totals={totals} />
+            </div>
+          </Card>
+          <RunsTable rows={rows} />
+        </>
       )}
     </div>
   );
 }
-

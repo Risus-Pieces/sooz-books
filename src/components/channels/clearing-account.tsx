@@ -1,286 +1,344 @@
 import * as React from "react";
 import Link from "next/link";
-import { ArrowRight, ChevronRight, TriangleAlert, Upload } from "lucide-react";
 
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Glyph } from "@/components/ui/glyph";
+import { IconBadge } from "@/components/ui/icon-badge";
+import { InfoButton } from "@/components/ui/info-button";
 import { Money } from "@/components/ui/money";
+import { Pill } from "@/components/ui/pill";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/cn";
+import { dayNumber, dollars } from "@/lib/ui/format";
 
-import { Figure, dateSpan, longDate, shortDate } from "./parts";
+import { PROVIDER_BADGE, dateSpan, longDate, shortDate } from "./parts";
 import { PROVIDER_GUIDE } from "./providers";
-import { PROVIDER_NAME, type ChannelCardView } from "./types";
+import { PROVIDER_NAME, type ChannelCardView, type ClearingDepositView, type ClearingSettlementView } from "./types";
 
-const SHOWN = 12;
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+function firstOfMonth(date: string): string {
+  return `${date.slice(0, 7)}-01`;
+}
+
+function nextMonth(date: string): string {
+  const y = Number(date.slice(0, 4));
+  const m = Number(date.slice(5, 7));
+  return m === 12 ? `${y + 1}-01-01` : `${y}-${String(m + 1).padStart(2, "0")}-01`;
+}
+
+interface Mark {
+  id: string;
+  date: string;
+  cents: number;
+  posted: boolean;
+  label: string;
+}
 
 /**
- * A clearing account drawn the way it is taught: as a T. Settlements — what the channel
- * says it owes Sooz — on the debit side; deposits — the cash that reached the bank — on
- * the credit side. When both halves of every payout are in, the sides are equal and the
- * account is zero. When one side is empty, the picture says which half is missing before
- * a word is read.
+ * The clearing account as two lanes on one time axis: what the channel settled (what it says it
+ * owes Sooz) above, and the deposits that reached the bank below, a line joining each deposit to
+ * the settlement it paid. When one half is missing, its lane is empty — the picture says which half
+ * before a word is read. Hollow dots are imported or coded but not yet posted.
  */
-export function ClearingAccount({ card }: { card: ChannelCardView }) {
-  const name = PROVIDER_NAME[card.provider];
-  const settlementTotal = card.settlements.reduce((sum, s) => sum + s.netCents, 0);
-  const depositTotal = card.deposits.reduce((sum, d) => sum + d.amountCents, 0);
-  const projected = card.projectedBalanceCents;
-  // What the T itself adds to: every settlement and deposit shown, posted or not.
-  const tBalance = settlementTotal - depositTotal;
-  const anyUnposted = card.settlements.some((s) => !s.posted) || card.deposits.some((d) => !d.posted);
-  const blocks = card.exceptions.filter((e) => e.severity === "block").length;
-  const warns = card.exceptions.filter((e) => e.severity === "warn").length;
-  const depositsOnly = card.settlements.length === 0 && card.deposits.length > 0;
-  const span = dateSpan(card.deposits.map((d) => d.date));
-  const importHref = `/channels/payouts?provider=${card.provider}#import`;
+export function ClearingLanes({
+  settlements,
+  deposits,
+  asOf,
+  className,
+}: {
+  settlements: readonly ClearingSettlementView[];
+  deposits: readonly ClearingDepositView[];
+  asOf: string;
+  className?: string;
+}) {
+  const top: Mark[] = settlements
+    .filter((s): s is ClearingSettlementView & { date: string } => s.date !== null)
+    .map((s) => ({ id: s.id, date: s.date, cents: s.netCents, posted: s.posted, label: s.key ?? "Settlement" }));
+  const bottom: Mark[] = deposits.map((d) => ({ id: d.id, date: d.date, cents: d.amountCents, posted: d.posted, label: d.description }));
+  const dates = [...top, ...bottom].map((m) => m.date);
+  const first = firstOfMonth([...dates, asOf].sort()[0]);
+  const months: string[] = [];
+  let cursor = first;
+  while (cursor <= asOf && months.length < 24) {
+    months.push(cursor);
+    cursor = nextMonth(cursor);
+  }
+  const origin = dayNumber(first);
+  const span = Math.max(1, dayNumber(cursor) - origin);
+  const at = (date: string) => ((dayNumber(date) - origin + 0.5) / span) * 100;
+  const max = Math.max(1, ...[...top, ...bottom].map((m) => Math.abs(m.cents)));
+  const size = (cents: number) => Math.round(7 + 11 * Math.sqrt(Math.abs(cents) / max));
+  const settledTotal = top.reduce((s, m) => s + m.cents, 0);
+  const depositedTotal = bottom.reduce((s, m) => s + m.cents, 0);
+  const pairs = deposits
+    .filter((d) => d.payoutImportId !== null)
+    .map((d) => {
+      const s = top.find((t) => t.id === d.payoutImportId);
+      return s === undefined ? null : { key: `${s.id}-${d.id}`, x1: at(s.date), x2: at(d.date) };
+    })
+    .filter((p): p is { key: string; x1: number; x2: number } => p !== null);
+
+  const lane = (marks: Mark[], tint: "green" | "blue", label: string, total: number, empty: string) => (
+    <div className="grid grid-cols-[4.75rem_minmax(0,1fr)_5.5rem] items-center gap-3 max-sm:grid-cols-[3.75rem_minmax(0,1fr)_4.75rem] max-sm:gap-2">
+      <span className="text-xs font-semibold text-label2">{label}</span>
+      <div className="relative h-7">
+        <span aria-hidden className={cn("absolute inset-x-0 top-1/2 border-t", marks.length === 0 ? "border-dashed border-label3" : "border-[var(--sep-strong)]")} />
+        {marks.length === 0 ? (
+          <span className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-card px-2 text-2xs font-semibold whitespace-nowrap text-label2">
+            {empty}
+          </span>
+        ) : null}
+        {marks.map((m) => {
+          const s = size(m.cents);
+          return (
+            <span
+              key={m.id}
+              title={`${shortDate(m.date)} · ${dollars(m.cents)}${m.posted ? "" : " · not posted"}`}
+              className="absolute top-1/2 rounded-full"
+              style={{
+                left: `${at(m.date)}%`,
+                width: s,
+                height: s,
+                marginLeft: -s / 2,
+                marginTop: -s / 2,
+                background: m.posted ? `var(--${tint})` : "var(--card)",
+                boxShadow: m.posted ? "0 0 0 1.5px var(--card)" : `inset 0 0 0 1.5px var(--${tint})`,
+              }}
+            />
+          );
+        })}
+      </div>
+      <Money cents={total} currency plain className={cn("text-right text-sm font-semibold", marks.length === 0 && "text-label2")} />
+    </div>
+  );
+
+  const summary = `${top.length} settlements totalling ${dollars(settledTotal)}; ${bottom.length} deposits totalling ${dollars(depositedTotal)}.`;
 
   return (
-    <Card>
-      <CardHeader>
-        <div className="min-w-0">
-          <CardTitle>
-            {name} <span className="font-normal text-muted-foreground">·</span>{" "}
-            <span className="num text-muted-foreground">{card.accountCode}</span> {card.accountName}
-          </CardTitle>
-          <CardDescription>Live channel · as of {longDate(card.asOf)}</CardDescription>
-        </div>
-        {card.blocking ? (
-          <Badge tone="negative">
-            <TriangleAlert aria-hidden />
-            Blocks the close
-          </Badge>
-        ) : projected === 0 ? (
-          <Badge tone="positive">Clear</Badge>
-        ) : (
-          <Badge tone="info">In transit</Badge>
-        )}
-      </CardHeader>
-
-      <div className="px-4 pt-4 pb-3">
-        {depositsOnly ? (
-          <>
-            <p className="max-w-3xl text-lg leading-snug font-semibold tracking-tight text-balance">
-              <Money cents={card.unmatchedDepositCents} currency plain /> of {name} deposits reached the bank with no
-              settlement behind them.
-            </p>
-            <p className="mt-1.5 max-w-3xl text-sm text-muted-foreground">
-              The cash is real and nothing is wrong with the deposits. What is missing is the other half: the {name}{" "}
-              sales, sales tax and fees that netted to that cash have never been imported, so revenue is understated and{" "}
-              {card.accountCode} will sit at a <Money cents={Math.abs(projected)} currency plain /> credit until they are.
-              Import the {name} {PROVIDER_GUIDE[card.provider].file.replace(/ \(.*\)$/, "").toLowerCase()} covering {span}.
-            </p>
-          </>
-        ) : (
-          <p className="max-w-3xl text-sm text-muted-foreground">{card.explanation}</p>
-        )}
-      </div>
-
-      {/* The T. */}
-      <div className="mx-4 mb-4 rounded-sm border border-border bg-surface-raised">
-        <div className="grid grid-cols-2">
-          <div className="rule-head px-3 py-1.5">
-            <p className="text-2xs font-semibold tracking-wider text-muted-foreground uppercase">
-              Debit · settlements
-            </p>
-            <p className="hidden text-2xs text-muted-foreground sm:block">What {name} says it owes Sooz</p>
-          </div>
-          <div className="rule-head rule-gutter border-l-border-strong px-3 py-1.5 text-right sm:text-left">
-            <p className="text-2xs font-semibold tracking-wider text-muted-foreground uppercase">
-              Credit · deposits
-            </p>
-            <p className="hidden text-2xs text-muted-foreground sm:block">Cash that reached the bank</p>
-          </div>
-        </div>
-        <div className="grid grid-cols-2">
-          <ul className="flex min-w-0 flex-col">
-            {card.settlements.length === 0 ? (
-              <li className="flex h-full min-h-16 items-center justify-center px-3 py-4 text-center text-xs text-muted-foreground italic">
-                No {name} settlement imported
-              </li>
-            ) : (
-              card.settlements.slice(-SHOWN).map((s) => (
-                <li key={s.id} className="rule-row flex items-baseline gap-2 px-3 py-1 text-sm">
-                  <span className="num w-12 shrink-0 text-xs text-muted-foreground">{shortDate(s.date)}</span>
-                  <Link href={`/channels/payouts/${s.id}`} className="hidden min-w-0 flex-1 truncate text-xs hover:underline sm:block">
-                    {s.key ?? "Settlement"}
-                  </Link>
-                  <span className="flex-1 sm:hidden" />
-                  <Money cents={s.netCents} plain className={cn(!s.posted && "text-muted-foreground")} />
-                </li>
-              ))
-            )}
-            {card.settlements.length > SHOWN ? (
-              <li className="px-3 py-1 text-2xs text-muted-foreground">and {card.settlements.length - SHOWN} earlier</li>
-            ) : null}
-          </ul>
-          <ul className="rule-gutter flex min-w-0 flex-col border-l-border-strong">
-            {card.deposits.length === 0 ? (
-              <li className="flex h-full min-h-16 items-center justify-center px-3 py-4 text-center text-xs text-muted-foreground italic">
-                No deposit coded here
-              </li>
-            ) : (
-              card.deposits.slice(-SHOWN).map((d) => (
-                <li key={d.id} className="rule-row flex items-baseline gap-2 px-3 py-1 text-sm">
-                  <span className="num w-12 shrink-0 text-xs text-muted-foreground">{shortDate(d.date)}</span>
-                  <span className="hidden min-w-0 flex-1 truncate text-xs text-muted-foreground sm:block">
-                    {d.description}
-                    {d.posted ? null : <span> · coded, not posted</span>}
-                    {d.payoutImportId === null ? null : <span className="text-positive"> · matched</span>}
-                  </span>
-                  <span className="flex-1 sm:hidden" />
-                  <Money cents={d.amountCents} plain className={cn(!d.posted && "text-muted-foreground")} />
-                </li>
-              ))
-            )}
-            {card.deposits.length > SHOWN ? (
-              <li className="px-3 py-1 text-2xs text-muted-foreground">and {card.deposits.length - SHOWN} earlier</li>
-            ) : null}
-          </ul>
-        </div>
-        <div className="grid grid-cols-2">
-          <div className="rule-subtotal flex items-baseline justify-between gap-2 px-3 py-1.5">
-            <span className="text-2xs font-semibold tracking-wider text-muted-foreground uppercase">Total</span>
-            <Money cents={settlementTotal} plain className="font-semibold" />
-          </div>
-          <div className="rule-subtotal rule-gutter flex items-baseline justify-between gap-2 border-l-border-strong px-3 py-1.5">
-            <span className="text-2xs font-semibold tracking-wider text-muted-foreground uppercase">Total</span>
-            <Money cents={depositTotal} plain className="font-semibold" />
-          </div>
-        </div>
-        <div className="rule-subtotal flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 px-3 py-2">
-          <span className="text-xs">
-            <span className="font-semibold">Balance{anyUnposted ? " once everything shown posts" : ""}</span>
-            {anyUnposted ? <span className="block text-2xs text-muted-foreground">Grey figures are imported or coded, not yet posted.</span> : null}
-          </span>
-          <span className="rule-total inline-flex items-baseline gap-1.5 pb-0.5">
-            <Money
-              cents={Math.abs(tBalance)}
-              currency
-              plain
-              className={cn("text-base font-semibold", tBalance < 0 && "text-warning", tBalance > 0 && "text-info")}
-            />
-            <span className="text-xs text-muted-foreground">{tBalance < 0 ? "Cr" : tBalance > 0 ? "Dr" : ""}</span>
-          </span>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-2 border-t border-border lg:grid-cols-4">
-        <Figure label={`Posted balance, ${card.accountCode}`}>
-          <Money cents={card.balanceCents} currency plain={card.balanceCents === 0} />
-        </Figure>
-        <Figure label="Coded, not posted" className="border-l">
-          <Money cents={card.pendingDepositsCents} currency plain />
-        </Figure>
-        <Figure label="Last settlement" className="border-t lg:border-t-0 lg:border-l">
-          {card.lastSettlement === null ? (
-            <span className="text-sm font-normal text-muted-foreground">None imported</span>
-          ) : (
-            <Link href={`/channels/payouts/${card.lastSettlement.id}`} className="num text-base hover:underline">
-              {longDate(card.lastSettlement.date)}
-            </Link>
-          )}
-        </Figure>
-        <Figure label="Unmatched deposits" className="border-t border-l lg:border-t-0">
-          <span className={cn("num", card.unmatchedDepositCount > 0 && "text-warning")}>
-            {card.unmatchedDepositCount}
-            {card.unmatchedDepositCount > 0 ? (
-              <span className="ml-1.5 text-sm font-normal">
-                · <Money cents={card.unmatchedDepositCents} plain />
-              </span>
-            ) : null}
-          </span>
-        </Figure>
-      </div>
-
-      <div className="flex flex-col gap-3 border-t border-border px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
-        {card.exceptions.length === 0 ? (
-          <p className="text-xs text-muted-foreground">Nothing on this account needs attention.</p>
-        ) : (
-          <details className="group min-w-0 text-xs">
-            <summary className="flex cursor-pointer list-none items-center gap-1 text-muted-foreground hover:text-foreground max-sm:min-h-10">
-              <ChevronRight className="size-3.5 transition-transform group-open:rotate-90" aria-hidden />
-              <span>
-                {blocks > 0 ? <span className="font-medium text-negative">{blocks} block the close</span> : null}
-                {blocks > 0 && warns > 0 ? " · " : null}
-                {warns > 0 ? <span className="text-warning">{warns} to finish</span> : null}
-                {blocks === 0 && warns === 0 ? `${card.exceptions.length} notes` : null}
-              </span>
-            </summary>
-            <ul className="mt-2 flex flex-col gap-1 pl-4.5">
-              {card.exceptions.map((e, index) => (
-                <li key={`${e.code}-${index}`} className="flex gap-2">
-                  <span
-                    className={cn(
-                      "mt-1.5 size-1.5 shrink-0 rounded-full",
-                      e.severity === "block" ? "bg-negative" : e.severity === "warn" ? "bg-warning" : "bg-info",
-                    )}
-                    aria-hidden
-                  />
-                  <span className="text-muted-foreground">{e.message}</span>
-                </li>
+    <figure className={cn("flex flex-col gap-1", className)}>
+      <figcaption className="sr-only">{summary}</figcaption>
+      <div aria-hidden className="relative flex flex-col gap-1">
+        {lane(top, "green", "Settled", settledTotal, "None imported")}
+        {pairs.length > 0 ? (
+          <div className="pointer-events-none absolute inset-y-[14px] right-[6.25rem] left-[5.5rem] max-sm:right-[5.25rem] max-sm:left-[4.25rem]">
+            <svg viewBox="0 0 100 100" preserveAspectRatio="none" className="size-full overflow-visible">
+              {pairs.map((p) => (
+                <line key={p.key} x1={p.x1} y1={0} x2={p.x2} y2={100} stroke="var(--label3)" strokeWidth={1} vectorEffect="non-scaling-stroke" />
               ))}
-            </ul>
-          </details>
-        )}
-        <div className="flex shrink-0 flex-wrap gap-2">
-          <Button asChild variant="secondary" size="sm">
-            <Link href={`/channels/payouts?provider=${card.provider}`}>
-              Settlements
-              <ArrowRight />
-            </Link>
-          </Button>
-          <Button asChild size="sm">
-            <Link href={importHref}>
-              <Upload />
-              Import {name} settlements
-            </Link>
-          </Button>
+            </svg>
+          </div>
+        ) : null}
+        {lane(bottom, "blue", "Deposited", depositedTotal, "No deposit")}
+        <div className="grid grid-cols-[4.75rem_minmax(0,1fr)_5.5rem] gap-3 max-sm:grid-cols-[3.75rem_minmax(0,1fr)_4.75rem] max-sm:gap-2">
+          <span />
+          <div className="relative h-4">
+            {months.map((m, i) => (
+              <span
+                key={m}
+                className={cn(
+                  "absolute top-0 -translate-x-1/2 text-2xs font-medium text-label2",
+                  months.length > 7 && i % 2 === 1 && "max-sm:hidden",
+                )}
+                style={{ left: `${((dayNumber(m) - origin + 15) / span) * 100}%` }}
+              >
+                {MONTHS[Number(m.slice(5, 7)) - 1]}
+              </span>
+            ))}
+          </div>
+          <span />
         </div>
       </div>
-    </Card>
+    </figure>
   );
 }
 
-/** A channel that has never carried a settlement or a deposit: what connects it. */
-export function UnconnectedChannel({ card }: { card: ChannelCardView }) {
-  const name = PROVIDER_NAME[card.provider];
-  const guide = PROVIDER_GUIDE[card.provider];
+function Issues({ card }: { card: ChannelCardView }) {
+  if (card.exceptions.length === 0) return null;
+  const blocks = card.exceptions.filter((e) => e.severity === "block").length;
+  const warns = card.exceptions.filter((e) => e.severity === "warn").length;
+  const label = blocks > 0 ? `${blocks} blocking` : warns > 0 ? `${warns} to finish` : `${card.exceptions.length} notes`;
   return (
-    <Card className="flex flex-col">
-      <CardHeader>
-        <div className="min-w-0">
-          <CardTitle>{name}</CardTitle>
-          <CardDescription>
+    <Popover>
+      <PopoverTrigger
+        className={cn(
+          "inline-flex h-[26px] items-center gap-[5px] rounded-full px-2.5 text-xs font-semibold outline-none focus-visible:ring-2 focus-visible:ring-tint-blue max-sm:h-11",
+          blocks > 0 ? "bg-tint-red/12 text-ink-red" : warns > 0 ? "bg-tint-orange/14 text-ink-orange" : "bg-fill2 text-label2",
+        )}
+      >
+        <Glyph name="warning" size={13} />
+        {label}
+      </PopoverTrigger>
+      <PopoverContent align="start" className="w-[340px] px-0 py-1.5 text-sm">
+        <ul className="flex flex-col">
+          {card.exceptions.map((e, index) => (
+            <li key={`${e.code}-${index}`} className={cn("flex gap-2.5 px-3.5 py-2", index > 0 && "hairline-t")}>
+              <span
+                aria-hidden
+                className={cn(
+                  "mt-1.5 size-2 shrink-0 rounded-full",
+                  e.severity === "block" ? "bg-tint-red" : e.severity === "warn" ? "bg-tint-orange" : "bg-tint-blue",
+                )}
+              />
+              <span className="leading-[1.4]">{e.message}</span>
+            </li>
+          ))}
+        </ul>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+/**
+ * A live channel's clearing account: the balance as the headline, the two-lane picture of what
+ * settled against what was deposited, and the one next step. Every sentence of explanation is
+ * behind the ⓘ.
+ */
+export function ClearingAccount({ card }: { card: ChannelCardView }) {
+  const name = PROVIDER_NAME[card.provider];
+  const badge = PROVIDER_BADGE[card.provider];
+  const projected = card.projectedBalanceCents;
+  const depositsOnly = card.settlements.length === 0 && card.deposits.length > 0;
+  const span = dateSpan(card.deposits.map((d) => d.date));
+  const file = PROVIDER_GUIDE[card.provider].file.replace(/ \(.*\)$/, "").toLowerCase();
+  const status = card.blocking ? (
+    <Pill tone="red" glyph="warning">
+      Blocks close
+    </Pill>
+  ) : depositsOnly ? (
+    <Pill tone="orange" glyph="flag">
+      Settlements missing
+    </Pill>
+  ) : projected === 0 ? (
+    <Pill tone="green" glyph="check-circle">
+      Clear
+    </Pill>
+  ) : (
+    <Pill tone="blue" glyph="clock">
+      In transit
+    </Pill>
+  );
+
+  return (
+    <section aria-labelledby={`channel-${card.provider}`} className="flex flex-col gap-4 rounded-2xl bg-card px-5 pt-[18px] pb-4 shadow-card max-md:rounded-[22px] max-md:p-4">
+      <header className="flex flex-wrap items-center gap-x-3 gap-y-2">
+        <IconBadge glyph={badge.glyph} tint={badge.tint} size="lg" />
+        <div className="min-w-0 flex-1">
+          <h2 id={`channel-${card.provider}`} className="text-lg leading-tight font-semibold tracking-[-0.01em]">
+            {name}
+          </h2>
+          <p className="truncate text-xs font-medium text-label2">
             <span className="num">{card.accountCode}</span> {card.accountName}
-          </CardDescription>
+          </p>
         </div>
-        <Badge tone="neutral">Not connected</Badge>
-      </CardHeader>
-      <div className="flex flex-1 flex-col gap-3 px-4 py-3">
+        {status}
+      </header>
+
+      <div className="flex flex-wrap items-end justify-between gap-x-8 gap-y-3">
         <div>
-          <p className="eyebrow">To connect, import</p>
-          <p className="mt-0.5 text-sm font-medium">{guide.file}</p>
-          <p className="mt-0.5 text-xs text-muted-foreground">{guide.path}</p>
-          {guide.secondary === null ? null : (
-            <p className="mt-1 text-xs text-muted-foreground">
-              With it: {guide.secondary.label} — {guide.secondary.path}
-            </p>
-          )}
+          <p className="flex items-center gap-1 text-sm font-semibold text-label2">
+            Clearing
+            <InfoButton label={`About the ${name} clearing balance`} align="start">
+              {depositsOnly ? (
+                <>
+                  <p>
+                    {dollars(card.unmatchedDepositCents)} of {name} deposits reached the bank with no settlement behind them.
+                  </p>
+                  <p>
+                    The cash is real. The {name} sales, sales tax and fees that netted to it have not been imported, so revenue is
+                    understated and {card.accountCode} sits at a {dollars(Math.abs(projected))} credit until they are.
+                  </p>
+                  <p>
+                    Import the {name} {file} covering {span}.
+                  </p>
+                </>
+              ) : (
+                <p>{card.explanation}</p>
+              )}
+              <p className="text-label2">
+                A settlement posts gross sales, tax and fees here; the bank deposit takes it back to zero. As of {longDate(card.asOf)}.
+              </p>
+            </InfoButton>
+          </p>
+          <p className="mt-0.5 flex items-baseline gap-1.5">
+            <Money cents={Math.abs(projected)} currency plain className="text-4xl leading-[1.05] font-bold tracking-[-0.03em] max-md:text-[2.25rem]" />
+            {projected !== 0 ? <span className="text-sm font-semibold text-label2">{projected < 0 ? "credit" : "debit"}</span> : null}
+          </p>
         </div>
-        <p className="text-xs text-muted-foreground">{guide.note}</p>
+        <dl className="grid min-w-[260px] grid-cols-3 overflow-hidden rounded-[11px] bg-inset max-sm:w-full max-sm:min-w-0">
+          <div className="px-3 py-2">
+            <dt className="text-2xs font-semibold text-label2">Posted</dt>
+            <dd className="text-sm font-semibold">
+              <Money cents={card.balanceCents} currency plain />
+            </dd>
+          </div>
+          <div className="hairline-l px-3 py-2">
+            <dt className="text-2xs font-semibold text-label2">Not posted</dt>
+            <dd className="text-sm font-semibold">
+              <Money cents={card.pendingDepositsCents} currency plain />
+            </dd>
+          </div>
+          <div className="hairline-l px-3 py-2">
+            <dt className="text-2xs font-semibold text-label2">Unmatched</dt>
+            <dd className={cn("num text-sm font-semibold", card.unmatchedDepositCount > 0 && "text-ink-orange")}>
+              {card.unmatchedDepositCount}
+            </dd>
+          </div>
+        </dl>
       </div>
-      <div className="flex items-center justify-between gap-2 border-t border-border px-4 py-2.5">
-        <span className="text-xs text-muted-foreground">
-          Balance <Money cents={card.balanceCents} currency plain />
-        </span>
+
+      <ClearingLanes settlements={card.settlements} deposits={card.deposits} asOf={card.asOf} />
+
+      <footer className="flex flex-wrap items-center gap-2 hairline-t pt-3.5">
+        <Issues card={card} />
+        {card.lastSettlement !== null ? (
+          <Link href={`/channels/payouts/${card.lastSettlement.id}`} className="text-xs font-medium text-label2 hover:text-label">
+            Last settled {longDate(card.lastSettlement.date)}
+          </Link>
+        ) : null}
+        <span className="flex-1" />
         <Button asChild variant="secondary" size="sm">
+          <Link href={`/channels/payouts?provider=${card.provider}`}>Payouts</Link>
+        </Button>
+        <Button asChild size="sm">
           <Link href={`/channels/payouts?provider=${card.provider}#import`}>
-            <Upload />
+            <Glyph name="import" />
             Import
           </Link>
         </Button>
+      </footer>
+    </section>
+  );
+}
+
+/** A channel that has never carried a settlement or a deposit: a quiet tile with one action. */
+export function UnconnectedChannel({ card }: { card: ChannelCardView }) {
+  const name = PROVIDER_NAME[card.provider];
+  const guide = PROVIDER_GUIDE[card.provider];
+  const badge = PROVIDER_BADGE[card.provider];
+  return (
+    <section aria-label={name} className="flex min-w-0 items-center gap-3 rounded-2xl bg-card px-4 py-3.5 shadow-card max-md:rounded-[22px]">
+      <IconBadge glyph={badge.glyph} tint={badge.tint} size="lg" className="opacity-45 saturate-50" />
+      <div className="min-w-0 flex-1">
+        <p className="flex items-center gap-1 text-sm font-semibold max-sm:text-lg">
+          {name}
+          <InfoButton label={`How to connect ${name}`} align="start" title={guide.file}>
+            <p>{guide.path}</p>
+            {guide.secondary === null ? null : (
+              <p>
+                With it: {guide.secondary.label} — {guide.secondary.path}
+              </p>
+            )}
+            <p className="text-label2">{guide.note}</p>
+          </InfoButton>
+        </p>
+        <p className="text-xs font-medium text-label2">Not connected</p>
       </div>
-    </Card>
+      <Button asChild variant="secondary" size="sm">
+        <Link href={`/channels/payouts?provider=${card.provider}#import`} aria-label={`Import ${name}`}>
+          Import
+        </Link>
+      </Button>
+    </section>
   );
 }

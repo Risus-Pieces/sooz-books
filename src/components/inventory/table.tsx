@@ -1,15 +1,16 @@
 import * as React from "react";
-import { CircleCheck, Info, TriangleAlert } from "lucide-react";
 
+import { Glyph, type GlyphName } from "@/components/ui/glyph";
+import { InfoButton } from "@/components/ui/info-button";
 import { cn } from "@/lib/cn";
 
 /**
- * The register pieces every inventory table is built from: a sunken header on a
- * solid rule, hairline rows, and a wrapper that scrolls sideways inside its own
- * box so a wide register never pushes the page past the viewport on a phone.
+ * The register pieces every inventory table is built from, Numbers-style: a quiet header over a
+ * hairline, hairline rows, right-aligned tabular figures, weight only where a total closes. The
+ * wrapper scrolls sideways inside its own box so a wide register never pushes a phone page wide.
  */
 export function TableScroll({ className, children }: { className?: string; children: React.ReactNode }) {
-  return <div className={cn("w-full overflow-x-auto", className)}>{children}</div>;
+  return <div className={cn("w-full overflow-x-auto overscroll-x-contain", className)}>{children}</div>;
 }
 
 export function Table({
@@ -42,7 +43,7 @@ export function Th({
     <th
       scope="col"
       className={cn(
-        "rule-head bg-surface-sunken px-3 py-1.5 text-2xs font-semibold tracking-wider whitespace-nowrap text-muted-foreground uppercase",
+        "rule-head px-3 pt-2 pb-1.5 text-xs font-semibold whitespace-nowrap text-label2 first:pl-5 last:pr-5 max-sm:first:pl-4 max-sm:last:pr-4",
         align === "right" ? "text-right" : "text-left",
         className,
       )}
@@ -64,7 +65,14 @@ export function Td({
   colSpan?: number;
 }) {
   return (
-    <td colSpan={colSpan} className={cn("px-3 py-1.5 align-middle", align === "right" && "text-right", className)}>
+    <td
+      colSpan={colSpan}
+      className={cn(
+        "px-3 py-2 align-middle first:pl-5 last:pr-5 max-sm:first:pl-4 max-sm:last:pr-4",
+        align === "right" && "text-right",
+        className,
+      )}
+    >
       {children}
     </td>
   );
@@ -72,21 +80,24 @@ export function Td({
 
 export type CalloutTone = "warning" | "info" | "positive" | "negative";
 
-const toneClass: Record<CalloutTone, string> = {
-  warning: "border-warning/35 bg-warning/8",
-  info: "border-info/30 bg-info/6",
-  positive: "border-positive/30 bg-positive/6",
-  negative: "border-negative/35 bg-negative/8",
+const toneGlyph: Record<CalloutTone, GlyphName> = {
+  warning: "warning",
+  info: "info",
+  positive: "check-circle",
+  negative: "warning",
 };
 
-const iconClass: Record<CalloutTone, string> = {
-  warning: "text-warning",
-  info: "text-info",
-  positive: "text-positive",
-  negative: "text-negative",
+const toneInk: Record<CalloutTone, string> = {
+  warning: "text-ink-orange",
+  info: "text-ink-blue",
+  positive: "text-ink-green",
+  negative: "text-ink-red",
 };
 
-/** A boxed note that says what is true and what to do about it. */
+/**
+ * A one-line status on a card: a coloured glyph, a few words, and at most one action. Anything
+ * that explains it goes behind the ⓘ, never on the screen.
+ */
 export function Callout({
   tone,
   title,
@@ -96,27 +107,27 @@ export function Callout({
 }: {
   tone: CalloutTone;
   title: React.ReactNode;
+  /** The explanation: shown in the ⓘ popover. */
   children?: React.ReactNode;
   action?: React.ReactNode;
   className?: string;
 }) {
-  const Icon = tone === "positive" ? CircleCheck : tone === "info" ? Info : TriangleAlert;
   return (
     <div
+      role={tone === "warning" || tone === "negative" ? "status" : undefined}
       className={cn(
-        "flex flex-col gap-3 rounded-md border p-3 sm:flex-row sm:items-start sm:justify-between",
-        toneClass[tone],
+        "flex min-h-12 flex-wrap items-center gap-x-3 gap-y-2 rounded-2xl bg-card px-4 py-2.5 shadow-card max-sm:rounded-[22px]",
         className,
       )}
     >
-      <div className="flex min-w-0 gap-2.5">
-        <Icon className={cn("mt-0.5 size-4 shrink-0", iconClass[tone])} aria-hidden />
-        <div className="flex min-w-0 flex-col gap-1">
-          <p className="text-sm font-semibold text-foreground">{title}</p>
-          {children ? <div className="text-xs leading-relaxed text-muted-foreground">{children}</div> : null}
-        </div>
-      </div>
-      {action ? <div className="flex shrink-0 flex-wrap items-center gap-2 pl-6.5 sm:pl-0">{action}</div> : null}
+      <Glyph name={toneGlyph[tone]} size={18} className={cn("shrink-0", toneInk[tone])} />
+      <p className="min-w-0 flex-1 text-sm font-semibold">{title}</p>
+      {children ? (
+        <InfoButton label="More information" align="end">
+          {children}
+        </InfoButton>
+      ) : null}
+      {action ? <div className="flex shrink-0 flex-wrap items-center gap-2">{action}</div> : null}
     </div>
   );
 }
@@ -125,8 +136,8 @@ export function Callout({
 export function Fact({ label, children, className }: { label: string; children: React.ReactNode; className?: string }) {
   return (
     <div className={cn("flex min-w-0 flex-col gap-0.5", className)}>
-      <dt className="eyebrow">{label}</dt>
-      <dd className="text-sm text-foreground">{children}</dd>
+      <dt className="text-xs font-medium text-label2">{label}</dt>
+      <dd className="text-sm font-semibold text-label">{children}</dd>
     </div>
   );
 }

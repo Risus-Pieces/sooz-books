@@ -2,9 +2,10 @@
 
 import * as React from "react";
 import * as CheckboxPrimitive from "@radix-ui/react-checkbox";
-import { Check, Minus } from "lucide-react";
 
 import { cn } from "@/lib/cn";
+
+import { Glyph } from "./glyph";
 
 export function Checkbox({
   className,
@@ -14,17 +15,15 @@ export function Checkbox({
     <CheckboxPrimitive.Root
       data-slot="checkbox"
       className={cn(
-        "peer size-4 shrink-0 rounded-xs border relative max-sm:after:absolute max-sm:after:-inset-3 max-sm:after:content-[''] border-border-strong bg-surface-raised transition-colors data-[state=checked]:border-primary data-[state=checked]:bg-primary data-[state=indeterminate]:border-primary data-[state=indeterminate]:bg-primary disabled:cursor-not-allowed disabled:opacity-45",
+        "peer relative size-4 shrink-0 rounded-[4px] bg-ctl text-white shadow-ctl transition-colors",
+        "max-sm:after:absolute max-sm:after:-inset-3.5 max-sm:after:content-['']",
+        "data-[state=checked]:bg-accent-fill data-[state=checked]:shadow-none data-[state=indeterminate]:bg-accent-fill data-[state=indeterminate]:shadow-none disabled:cursor-not-allowed disabled:opacity-45",
         className,
       )}
       {...props}
     >
-      <CheckboxPrimitive.Indicator className="flex items-center justify-center text-primary-foreground">
-        {props.checked === "indeterminate" ? (
-          <Minus className="size-3" strokeWidth={3} />
-        ) : (
-          <Check className="size-3" strokeWidth={3} />
-        )}
+      <CheckboxPrimitive.Indicator className="flex items-center justify-center">
+        <Glyph name={props.checked === "indeterminate" ? "minus" : "check"} size={12} weight={3} />
       </CheckboxPrimitive.Indicator>
     </CheckboxPrimitive.Root>
   );

@@ -1,12 +1,11 @@
 "use client";
 
 import * as React from "react";
-import { Pencil, Plus, Search, Zap } from "lucide-react";
 
 import { AccountCombobox } from "@/components/ledger/account-combobox";
-import { Badge } from "@/components/ui/badge";
+import { SplitBar } from "@/components/charts";
+import { PageToolbar } from "@/components/shell/page-toolbar";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
@@ -17,16 +16,23 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { EmptyState } from "@/components/ui/empty-state";
+import { Glyph } from "@/components/ui/glyph";
+import { Dot, IconBadge } from "@/components/ui/icon-badge";
 import { Input } from "@/components/ui/input";
+import { InsetGroup } from "@/components/ui/inset-group";
 import { Label } from "@/components/ui/label";
 import { Money, formatCents } from "@/components/ui/money";
+import { Pill } from "@/components/ui/pill";
+import { SearchField } from "@/components/ui/search-field";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "@/components/ui/toast";
+import { ToolbarButton, ToolbarGroup } from "@/components/ui/toolbar";
 import { cn } from "@/lib/cn";
 import { parseMoney } from "@/lib/money";
+import { categoryForCode } from "@/lib/ui/categories";
 import { previewRuleDraft, saveRuleDraft, setRuleEnabled } from "@/app/(app)/banking/actions";
 
-import { Th } from "./parts";
 import { AutoPostWarning, ConditionRows, DIRECTION_LABEL, FIELD_LABEL, OP_LABEL } from "./review-dialogs";
 import { shortDate } from "./review-logic";
 import type {
@@ -110,126 +116,141 @@ export function RulesManager({
           .some((part) => part.toLowerCase().includes(text)),
       );
 
+  const active = rules.filter((r) => r.active).length;
+  const autoPost = rules.filter((r) => r.autoPost && r.active).length;
+
   return (
     <>
-      <Card>
-        <div className="flex flex-wrap items-center gap-2 p-3">
-          <div className="relative min-w-0 flex-[1_1_14rem]">
-            <Search className="pointer-events-none absolute top-1/2 left-2 size-3.5 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              aria-label="Search rules"
-              placeholder="Search by name, payee text or account"
-              className="pl-7"
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-            />
-          </div>
-          <p className="num text-xs text-muted-foreground">
-            {rules.filter((r) => r.active).length} active · {rules.filter((r) => r.autoPost && r.active).length} auto-post
-          </p>
-          {canEdit ? (
-            <Button className="ml-auto" onClick={() => setEditing(draftOf(null, nextPriority))}>
-              <Plus />
-              New rule
-            </Button>
-          ) : null}
-        </div>
-        <div className="relative overflow-x-auto border-t border-border">
-          <table className="w-full min-w-[60rem] border-separate border-spacing-0 text-sm">
-            <caption className="sr-only">Categorization rules in the order they are tried</caption>
-            <thead>
-              <tr>
-                <Th className="w-14 text-right">Order</Th>
-                <Th>Rule</Th>
-                <Th className="w-[26%]">Codes to</Th>
-                <Th className="w-20 text-right">Hits</Th>
-                <Th className="w-24 text-right">Suggesting</Th>
-                <Th className="w-20">Active</Th>
-                <Th className="w-16">
-                  <span className="sr-only">Edit</span>
-                </Th>
-              </tr>
-            </thead>
-            <tbody>
-              {shown.map((rule) => (
-                <tr key={rule.id} className={cn("align-top", !rule.active && "text-muted-foreground")}>
-                  <td className="rule-row num px-3 py-1.5 text-right text-xs leading-5 text-muted-foreground">{rule.priority}</td>
-                  <td className="rule-row max-w-0 px-3 py-1.5">
-                    <p className="flex items-center gap-1.5">
-                      <span className="truncate font-medium">{rule.name}</span>
-                      {rule.autoPost ? (
-                        <Badge tone="primary" size="sm">
-                          <Zap />
-                          Auto-post
-                        </Badge>
-                      ) : null}
-                    </p>
-                    <p className="truncate text-2xs text-muted-foreground" title={describeConditions(rule)}>
-                      {DIRECTION_LABEL[rule.direction]} · {describeConditions(rule)}
-                      {rule.amountMinCents !== null || rule.amountMaxCents !== null ? (
-                        <>
-                          {" "}
-                          · {rule.amountMinCents === null ? "up to" : formatCents(rule.amountMinCents, { currency: true })}
-                          {rule.amountMinCents !== null && rule.amountMaxCents !== null ? "–" : " "}
-                          {rule.amountMaxCents === null ? "and up" : formatCents(rule.amountMaxCents, { currency: true })}
-                        </>
-                      ) : null}
-                      {rule.bankAccountLabel === null ? null : <> · only {rule.bankAccountLabel}</>}
-                    </p>
-                  </td>
-                  <td className="rule-row max-w-0 px-3 py-1.5">
-                    {rule.accountCode === null ? (
-                      <span className="text-muted-foreground">—</span>
-                    ) : (
-                      <p className="flex items-baseline gap-1.5">
-                        <span className="num shrink-0 text-xs text-muted-foreground">{rule.accountCode}</span>
-                        <span className="truncate">{rule.accountName}</span>
-                      </p>
-                    )}
-                    {rule.vendorName === null ? null : <p className="truncate text-2xs text-muted-foreground">{rule.vendorName}</p>}
-                  </td>
-                  <td className="rule-row num px-3 py-1.5 text-right" title={rule.lastHit === null ? "Never matched" : `Last matched ${rule.lastHit}`}>
-                    {rule.hitCount}
-                  </td>
-                  <td className="rule-row num px-3 py-1.5 text-right">{rule.currentMatches}</td>
-                  <td className="rule-row px-3 py-1.5">
-                    <Checkbox
-                      aria-label={`${rule.active ? "Turn off" : "Turn on"} ${rule.name}`}
-                      checked={rule.active}
-                      disabled={!canEdit || pending || (rule.autoPost && !mayAutoPost)}
-                      onCheckedChange={(value) =>
-                        startTransition(async () => {
-                          const result = await setRuleEnabled(rule.id, value === true);
-                          if (!result.ok) toast.error(result.error.message);
-                        })
-                      }
-                    />
-                  </td>
-                  <td className="rule-row px-3 py-1">
-                    {canEdit ? (
-                      <Button
-                        size="icon-sm"
-                        variant="ghost"
-                        aria-label={`Edit ${rule.name}`}
-                        onClick={() => setEditing(draftOf(rule, nextPriority))}
-                      >
-                        <Pencil />
-                      </Button>
-                    ) : null}
-                  </td>
-                </tr>
-              ))}
-              {shown.length === 0 ? (
-                <tr>
-                  <td colSpan={7} className="px-3 py-10 text-center text-xs text-muted-foreground">
-                    {rules.length === 0 ? "No rules yet. Create one, or press r on a row in the review queue." : "No rule matches that search."}
-                  </td>
-                </tr>
-              ) : null}
-            </tbody>
-          </table>
-        </div>
-      </Card>
+      <PageToolbar
+        title="Rules"
+        subtitle={
+          <>
+            <span className="num">{active} active</span>
+            {autoPost > 0 ? (
+              <>
+                <span aria-hidden>·</span>
+                <span className="num inline-flex items-center gap-1">
+                  <Glyph name="wand" size={12} className="text-tint-purple" />
+                  {autoPost} auto-post
+                </span>
+              </>
+            ) : null}
+          </>
+        }
+        info="How imported transactions are coded before anyone looks at them. Rules are tried in order, lowest number first; the first that matches suggests the account. Only a rule the owner marks auto-post lets a match post without review."
+        search={
+          <SearchField
+            appearance="toolbar"
+            aria-label="Search rules"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+          />
+        }
+        actions={
+          canEdit ? (
+            <ToolbarGroup>
+              <ToolbarButton glyph="plus" label="New rule" onClick={() => setEditing(draftOf(null, nextPriority))} />
+            </ToolbarGroup>
+          ) : undefined
+        }
+      />
+
+      {shown.length === 0 ? (
+        <EmptyState
+          glyph="wand"
+          title={rules.length === 0 ? "No rules yet" : "Nothing matches"}
+          description={rules.length === 0 ? "Create one here, or press R on a row in the review queue." : undefined}
+          action={
+            rules.length === 0 && canEdit ? (
+              <Button onClick={() => setEditing(draftOf(null, nextPriority))}>
+                <Glyph name="plus" />
+                New rule
+              </Button>
+            ) : undefined
+          }
+        />
+      ) : (
+        <InsetGroup separatorInset={60}>
+          {shown.map((rule) => {
+            const category = categoryForCode(rule.accountCode);
+            const amount =
+              rule.amountMinCents !== null || rule.amountMaxCents !== null
+                ? ` · ${rule.amountMinCents === null ? "up to " : formatCents(rule.amountMinCents, { currency: true })}${
+                    rule.amountMinCents !== null && rule.amountMaxCents !== null ? "–" : " "
+                  }${rule.amountMaxCents === null ? "and up" : formatCents(rule.amountMaxCents, { currency: true })}`
+                : "";
+            const conditions = `${describeConditions(rule)}${amount}${rule.bankAccountLabel === null ? "" : ` · ${rule.bankAccountLabel}`}`;
+            return (
+              <div
+                key={rule.id}
+                className={cn(
+                  "relative flex min-h-[58px] items-center gap-3 pr-4 before:pointer-events-none before:absolute before:top-0 before:right-0 before:left-[60px] before:border-t-[0.5px] before:border-sep first:before:hidden",
+                  !rule.active && "[&_[data-slot=icon-badge]]:opacity-45",
+                )}
+              >
+                <button
+                  type="button"
+                  disabled={!canEdit}
+                  aria-label={`Edit ${rule.name}`}
+                  onClick={() => setEditing(draftOf(rule, nextPriority))}
+                  className="flex min-w-0 flex-1 items-center gap-3 py-2.5 pl-4 text-left outline-none focus-ring-inset transition-colors hover:bg-fill2 focus-visible:bg-fill2 disabled:hover:bg-transparent"
+                >
+                  <IconBadge glyph={rule.accountCode === null ? "question" : category.glyph} tint={rule.accountCode === null ? "gray" : category.tint} size="lg" />
+                  <span className="min-w-0 flex-1">
+                    <span className={cn("flex items-center gap-1.5 text-sm font-semibold max-sm:text-[1rem] max-sm:font-medium", !rule.active && "text-label2")}>
+                      <span className="truncate">{rule.name}</span>
+                      {rule.autoPost ? <Glyph name="wand" size={13} label="Auto-post" className="shrink-0 text-tint-purple" /> : null}
+                    </span>
+                    <span className="mt-0.5 flex items-center gap-1.5 text-xs text-label2 max-sm:text-sm">
+                      <Glyph
+                        name={rule.direction === "in" ? "arrow-in" : rule.direction === "out" ? "arrow-out" : "transfer"}
+                        size={12}
+                        weight={2.2}
+                        label={DIRECTION_LABEL[rule.direction]}
+                        className="shrink-0"
+                      />
+                      <span className="truncate" title={conditions}>
+                        {conditions}
+                      </span>
+                    </span>
+                    <span className="mt-0.5 flex items-center gap-1.5 text-xs text-label2 lg:hidden">
+                      <Dot tint={rule.accountCode === null ? "quiet" : category.tint} size={7} />
+                      <span className="truncate">{rule.accountName ?? "No account"}</span>
+                    </span>
+                  </span>
+                  <span className="hidden w-[30%] min-w-0 items-center gap-1.5 text-sm lg:flex">
+                    <Dot tint={rule.accountCode === null ? "quiet" : category.tint} size={7} />
+                    <span className="min-w-0">
+                      <span className="block truncate font-medium">{rule.accountName ?? "—"}</span>
+                      {rule.vendorName === null ? null : <span className="block truncate text-xs text-label2">{rule.vendorName}</span>}
+                    </span>
+                  </span>
+                  <span
+                    className="flex w-16 shrink-0 flex-col items-end"
+                    title={rule.lastHit === null ? "Never matched" : `Last matched ${rule.lastHit}`}
+                  >
+                    <span className="num text-sm font-semibold">{rule.hitCount}</span>
+                    <span className="num text-2xs text-label2">
+                      {rule.currentMatches > 0 ? `${rule.currentMatches} now` : `#${rule.priority}`}
+                    </span>
+                  </span>
+                </button>
+                <Checkbox
+                  aria-label={`${rule.active ? "Turn off" : "Turn on"} ${rule.name}`}
+                  checked={rule.active}
+                  disabled={!canEdit || pending || (rule.autoPost && !mayAutoPost)}
+                  onCheckedChange={(value) =>
+                    startTransition(async () => {
+                      const result = await setRuleEnabled(rule.id, value === true);
+                      if (!result.ok) toast.error(result.error.message);
+                    })
+                  }
+                />
+              </div>
+            );
+          })}
+        </InsetGroup>
+      )}
 
       <RuleEditor
         key={editing === null ? "closed" : (editing.id ?? "new")}
@@ -331,16 +352,13 @@ function RuleEditor({
           <DialogHeader>
             <DialogTitle>{draft.id === null ? "New rule" : `Edit “${initial?.name ?? ""}”`}</DialogTitle>
             <DialogDescription>
-              Rules are tried in order, lowest number first; the first that matches suggests the account. Saving never
-              changes a transaction already imported.
+              Saving never changes a transaction already imported.
             </DialogDescription>
           </DialogHeader>
           <DialogBody className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_18rem]">
             <div className="flex min-w-0 flex-col gap-4">
               {lockedAutoPost ? (
-                <p className="rounded-sm border border-border bg-muted px-3 py-2 text-xs text-muted-foreground">
-                  This rule posts without review, so only the owner can change it.
-                </p>
+                <Pill glyph="lock">Owner only</Pill>
               ) : null}
               <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_6rem]">
                 <div className="flex flex-col gap-1.5">
@@ -442,7 +460,7 @@ function RuleEditor({
                   <Checkbox checked={draft.active} onCheckedChange={(v) => set("active", v === true)} />
                   Active
                 </label>
-                <label className={cn("flex items-center gap-2 text-sm", !mayAutoPost && "text-muted-foreground")}>
+                <label className={cn("flex items-center gap-2 text-sm", !mayAutoPost && "text-label2")}>
                   <Checkbox checked={draft.autoPost} disabled={!mayAutoPost} onCheckedChange={(v) => set("autoPost", v === true)} />
                   Post matches without review
                   {mayAutoPost ? null : <span className="text-xs">(owner only)</span>}
@@ -468,41 +486,47 @@ function RuleEditor({
 
 function RulePreviewPanel({ preview }: { preview: RulePreview | null }) {
   return (
-    <aside className="flex min-w-0 flex-col gap-2 rounded-md border border-border bg-surface-sunken/40 p-3" aria-live="polite">
-      <p className="eyebrow">Would match</p>
+    <aside className="flex min-w-0 flex-col gap-2 rounded-[14px] bg-inset p-3.5" aria-live="polite">
+      <p className="text-xs font-semibold text-label2">Would match</p>
       {preview === null ? (
-        <p className="text-xs text-muted-foreground">Checking your transactions…</p>
+        <p className="text-xs text-label2">Checking…</p>
       ) : preview.problems.length > 0 ? (
-        <ul className="list-disc pl-4 text-xs text-warning">
+        <ul className="list-disc pl-4 text-xs text-ink-orange">
           {preview.problems.map((problem) => (
             <li key={problem}>{problem}</li>
           ))}
         </ul>
       ) : (
         <>
-          <p className="text-sm">
-            <span className="num text-2xl font-semibold">{preview.matched}</span>{" "}
-            <span className="text-muted-foreground">of your transactions</span>
-          </p>
-          <p className="text-xs text-muted-foreground">
-            It would win <span className="num text-foreground">{preview.wins}</span>; an earlier rule takes{" "}
-            <span className="num text-foreground">{preview.matched - preview.wins}</span>.
+          <p className="num text-3xl font-bold tracking-[-0.028em]">{preview.matched}</p>
+          {preview.matched > 0 ? (
+            <SplitBar
+              label={`Wins ${preview.wins}, earlier rule ${preview.matched - preview.wins}`}
+              segments={[
+                { label: "wins", value: preview.wins, tint: "purple" },
+                { label: "earlier", value: preview.matched - preview.wins, tint: "gray" },
+              ]}
+            />
+          ) : null}
+          <p className="text-xs text-label2">
+            It would win <span className="num text-label">{preview.wins}</span>; an earlier rule takes{" "}
+            <span className="num text-label">{preview.matched - preview.wins}</span>.
             {preview.posted > 0 ? ` ${preview.posted} already posted — a rule never changes those.` : ""}
           </p>
-          <ul className="flex flex-col divide-y divide-border border-t border-border">
+          <ul className="flex flex-col divide-y divide-sep hairline-t">
             {preview.sample.map((row) => (
               <li key={row.id} className="flex items-baseline gap-2 py-1 text-xs">
-                <span className="num w-12 shrink-0 text-muted-foreground">{shortDate(row.txnDate)}</span>
+                <span className="num w-12 shrink-0 text-label2">{shortDate(row.txnDate)}</span>
                 <span className="min-w-0 flex-1">
                   <span className="block truncate">{row.payee}</span>
-                  {row.wonBy === null ? null : <span className="block truncate text-2xs text-muted-foreground">won by {row.wonBy}</span>}
+                  {row.wonBy === null ? null : <span className="block truncate text-2xs text-label2">won by {row.wonBy}</span>}
                 </span>
                 <Money cents={row.amountCents} colorPositive className="text-xs" />
               </li>
             ))}
           </ul>
           {preview.matched > preview.sample.length ? (
-            <p className="text-2xs text-muted-foreground">and {preview.matched - preview.sample.length} more</p>
+            <p className="text-2xs text-label2">and {preview.matched - preview.sample.length} more</p>
           ) : null}
         </>
       )}

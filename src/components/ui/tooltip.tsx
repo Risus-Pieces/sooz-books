@@ -9,6 +9,7 @@ const TooltipProvider = TooltipPrimitive.Provider;
 const Tooltip = TooltipPrimitive.Root;
 const TooltipTrigger = TooltipPrimitive.Trigger;
 
+/** The help tag: a name and, where there is one, its shortcut. */
 function TooltipContent({
   className,
   sideOffset = 6,
@@ -21,7 +22,7 @@ function TooltipContent({
         data-slot="tooltip-content"
         sideOffset={sideOffset}
         className={cn(
-          "z-50 max-w-64 rounded-sm border border-border-strong bg-surface-raised px-2 py-1 text-xs text-foreground shadow-overlay",
+          "z-50 flex max-w-64 items-center gap-2 rounded-[7px] vibrancy px-2 py-1 text-xs font-medium text-label shadow-glass",
           "data-[state=delayed-open]:anim-pop-in data-[state=closed]:anim-pop-out",
           className,
         )}

@@ -7,12 +7,15 @@ import { cn } from "@/lib/cn";
 
 const Tabs = TabsPrimitive.Root;
 
-/** Index tabs standing on the divider rule, the way a binder's section tabs do. */
+/** Tabs drawn as a segmented control, the way macOS switches between views of one thing. */
 function TabsList({ className, ...props }: React.ComponentPropsWithRef<typeof TabsPrimitive.List>) {
   return (
     <TabsPrimitive.List
       data-slot="tabs-list"
-      className={cn("flex items-end gap-4 rule-head overflow-x-auto", className)}
+      className={cn(
+        "inline-flex max-w-full items-center gap-0.5 self-start overflow-x-auto rounded-[8px] bg-fill2 p-0.5 [scrollbar-width:none]",
+        className,
+      )}
       {...props}
     />
   );
@@ -23,7 +26,8 @@ function TabsTrigger({ className, ...props }: React.ComponentPropsWithRef<typeof
     <TabsPrimitive.Trigger
       data-slot="tabs-trigger"
       className={cn(
-        "-mb-px shrink-0 border-b-2 border-transparent px-0.5 pb-1.5 max-sm:pt-3 text-sm font-medium whitespace-nowrap text-muted-foreground transition-colors hover:text-foreground data-[state=active]:border-primary data-[state=active]:text-foreground disabled:pointer-events-none disabled:opacity-45",
+        "inline-flex h-6 shrink-0 items-center justify-center gap-1 rounded-[6px] px-3 text-xs font-medium whitespace-nowrap text-label transition-[background-color,box-shadow] duration-150 outline-none focus-ring max-sm:h-9 max-sm:text-sm",
+        "hover:bg-fill2 data-[state=active]:bg-ctl data-[state=active]:font-semibold data-[state=active]:shadow-ctl disabled:pointer-events-none disabled:opacity-45",
         className,
       )}
       {...props}

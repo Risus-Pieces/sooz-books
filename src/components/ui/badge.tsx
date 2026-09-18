@@ -3,22 +3,26 @@ import { cva, type VariantProps } from "class-variance-authority";
 
 import { cn } from "@/lib/cn";
 
+/**
+ * A small rounded-square tag: "Equity", "7 payouts", "Draft". Quiet by default; a tone only when
+ * the state is the point (posted, overdue, closed). Never uppercase.
+ */
 const badgeVariants = cva(
-  "inline-flex items-center gap-1 rounded-xs border px-1.5 py-px text-2xs font-semibold tracking-wide whitespace-nowrap uppercase [&_svg]:size-3",
+  "inline-flex shrink-0 items-center gap-1 rounded-[6px] font-semibold whitespace-nowrap [&_svg]:size-3 [&_svg]:shrink-0",
   {
     variants: {
       tone: {
-        neutral: "border-border-strong/70 bg-muted text-muted-foreground",
-        primary: "border-primary/35 bg-primary/10 text-primary",
-        positive: "border-positive/35 bg-positive/10 text-positive",
-        negative: "border-negative/35 bg-negative/10 text-negative",
-        warning: "border-warning/35 bg-warning/10 text-warning",
-        info: "border-info/35 bg-info/10 text-info",
-        outline: "border-border-strong bg-transparent text-foreground",
+        neutral: "bg-fill2 text-label2",
+        primary: "bg-tint-blue/12 text-ink-blue",
+        positive: "bg-tint-green/12 text-ink-green",
+        negative: "bg-tint-red/12 text-ink-red",
+        warning: "bg-tint-orange/14 text-ink-orange",
+        info: "bg-tint-blue/12 text-ink-blue",
+        outline: "bg-transparent text-label2 shadow-[inset_0_0_0_0.5px_var(--sep-strong)]",
       },
       size: {
-        sm: "px-1 text-[0.5625rem]",
-        md: "px-1.5 text-2xs",
+        sm: "h-4 px-1.5 text-[0.6875rem] leading-none",
+        md: "h-[1.125rem] px-[7px] text-[0.6875rem] leading-none",
       },
     },
     defaultVariants: { tone: "neutral", size: "md" },

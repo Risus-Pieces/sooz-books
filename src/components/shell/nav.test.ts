@@ -3,7 +3,7 @@ import { join, resolve } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
-import { NAV_GROUPS, labelForPath } from '@/components/shell/nav';
+import { NAV_GROUPS, activeSectionHref, labelForPath } from '@/components/shell/nav';
 
 const APP_DIR = resolve(__dirname, '../../app');
 
@@ -49,6 +49,22 @@ describe('navigation', () => {
         expect(routes.has(`/${segments.slice(0, depth).join('/')}`)).toBe(true);
       }
     }
+  });
+
+  it('groups the sidebar as Home · Review · Banking · Business · Books · Settings', () => {
+    expect(NAV_GROUPS.map((g) => g.label ?? g.key)).toEqual(['top', 'Banking', 'Business', 'Books', 'footer']);
+    expect(NAV_GROUPS[0].sections.map((s) => s.label)).toEqual(['Home', 'Review']);
+    expect(NAV_GROUPS[3].sections.map((s) => s.label)).toEqual(['Ledger', 'Reports', 'Close', 'Plan']);
+  });
+
+  it('selects the most specific section for a path', () => {
+    expect(activeSectionHref('/banking/review')).toBe('/banking/review');
+    expect(activeSectionHref('/banking/import')).toBe('/banking');
+    expect(activeSectionHref('/banking')).toBe('/banking');
+    expect(activeSectionHref('/reports/margin')).toBe('/inventory');
+    expect(activeSectionHref('/reports/profit-loss')).toBe('/reports');
+    expect(activeSectionHref('/sales/invoices/abc')).toBe('/sales');
+    expect(activeSectionHref('/nowhere')).toBeNull();
   });
 
   it('labels a child link by its own name', () => {

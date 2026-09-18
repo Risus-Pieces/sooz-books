@@ -2,22 +2,28 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { Send } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import { Card, CardHeader, CardTitle } from "@/components/ui/card";
 import { DateInput, todayIso } from "@/components/ui/date-input";
+import { Glyph } from "@/components/ui/glyph";
+import { GroupRow, InsetGroup } from "@/components/ui/inset-group";
 import { Input } from "@/components/ui/input";
 import { formatCents } from "@/components/ui/money";
+import { PopUpButton } from "@/components/ui/pop-up-button";
+import { SegmentedControl } from "@/components/ui/segmented-control";
+import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { toast } from "@/components/ui/toast";
+import { ToolbarButton } from "@/components/ui/toolbar";
+import { cn } from "@/lib/cn";
 import { postAdjustmentAction, previewAdjustmentAction } from "@/app/(app)/inventory/actions";
 
 import { EntryPreview } from "./entry-preview";
-import { Field, NativeSelect, Segmented } from "./fields";
 import {
   REASON_KEYS,
   REASON_LABELS,
+  REASON_STYLE,
   STAGE_LABELS,
+  STAGE_STYLE,
   type AdjustmentFormInput,
   type AdjustmentPreviewData,
   type AdjustmentReasonKey,
@@ -27,33 +33,68 @@ import {
 } from "./types";
 
 const STAGES: readonly StageKey[] = ["finished", "raw", "packaging", "in_transit"];
+const NO_CHANNEL = "none";
 
-/** Where the value goes, in words, so the reason picker explains itself. */
-const REASON_NOTE: Record<AdjustmentReasonKey, string> = {
-  samples: "Given away on purpose — 5070 Samples & Demo Product.",
-  demo: "Poured at a demo — 5070 Samples & Demo Product.",
-  donation: "Donated — 5070 Samples & Demo Product.",
-  spoilage: "Spoiled — 5060 Inventory Write-offs & Spoilage.",
-  damage: "Damaged — 5060 Inventory Write-offs & Spoilage.",
-  expiry: "Past date — 5060 Inventory Write-offs & Spoilage.",
-  theft: "Lost or stolen — 5060 Inventory Write-offs & Spoilage.",
-  count_variance: "A count that disagrees with the books — 5060.",
-  rework: "Reworked — 5060 Inventory Write-offs & Spoilage.",
-  revaluation: "A change in carrying value — 5060.",
-  opening_balance: "Stock on hand when the books began — 3990 Opening Balance Equity.",
+/** Where the value goes, as the account it posts to. */
+const REASON_ACCOUNT: Record<AdjustmentReasonKey, string> = {
+  samples: "5070 Samples & Demo",
+  demo: "5070 Samples & Demo",
+  donation: "5070 Samples & Demo",
+  spoilage: "5060 Write-offs",
+  damage: "5060 Write-offs",
+  expiry: "5060 Write-offs",
+  theft: "5060 Write-offs",
+  count_variance: "5060 Write-offs",
+  rework: "5060 Write-offs",
+  revaluation: "5060 Write-offs",
+  opening_balance: "3990 Opening Equity",
 };
 
+const field = "h-8 w-40 border-transparent bg-transparent text-right shadow-none hover:bg-fill2 focus-visible:bg-ctl max-sm:h-11 max-sm:w-36";
+
 /**
- * Records stock that left (or came back) outside a sale. The entry it will post
- * is recomputed as the form changes and shown before the post button, so the
- * accounts and the value are checked before anything reaches the ledger.
+ * Records stock that left (or came back) outside a sale, in a sheet: the facts as grouped rows,
+ * then the entry it will post, recomputed as the form changes and drawn as a flow before the button
+ * that posts it, so the accounts and the value are checked before anything reaches the ledger.
  */
-export function AdjustmentForm({
+export function AdjustmentSheet({
   products,
   channels,
+  trigger = "toolbar",
 }: {
   products: readonly ProductOption[];
   channels: readonly ChannelOption[];
+  /** A toolbar item, or the button of an empty state. */
+  trigger?: "toolbar" | "button";
+}) {
+  const [open, setOpen] = React.useState(false);
+  return (
+    <>
+      {trigger === "toolbar" ? (
+        <ToolbarButton glyph="plus" label="New adjustment" onClick={() => setOpen(true)} />
+      ) : (
+        <Button onClick={() => setOpen(true)}>
+          <Glyph name="plus" />
+          New adjustment
+        </Button>
+      )}
+      <Sheet open={open} onOpenChange={setOpen}>
+        <SheetContent title="New adjustment" width="lg" description="Record stock that left or came back outside a sale.">
+          <AdjustmentForm products={products} channels={channels} onPosted={() => setOpen(false)} />
+        </SheetContent>
+      </Sheet>
+    </>
+  );
+}
+
+export function AdjustmentForm({
+  products,
+  channels,
+  onPosted,
+}: {
+  products: readonly ProductOption[];
+  channels: readonly ChannelOption[];
+  onPosted?: () => void;
 }) {
   const router = useRouter();
   const [form, setForm] = React.useState<AdjustmentFormInput>({
@@ -68,8 +109,8 @@ export function AdjustmentForm({
     channelId: null,
     memo: "",
   });
-  // Each preview remembers the form it was computed from, so a stale one is
-  // never shown beside the post button.
+  // Each preview remembers the form it was computed from, so a stale one is never shown beside the
+  // post button.
   const [preview, setPreview] = React.useState<{ key: string; data: AdjustmentPreviewData } | null>(null);
   const [problem, setProblem] = React.useState<{ key: string; message: string } | null>(null);
   const [posting, startPost] = React.useTransition();
@@ -115,116 +156,149 @@ export function AdjustmentForm({
       setForm((f) => ({ ...f, quantity: "", unitCost: "", value: "", memo: "" }));
       setPreview(null);
       router.refresh();
+      onPosted?.();
     });
 
+  const costHint =
+    form.stage === "finished"
+      ? product?.unitCostCents != null
+        ? `Blank: ${formatCents(product.unitCostCents, { currency: true })}`
+        : "Required"
+      : "Required";
+
   return (
-    <Card className="min-w-0 overflow-hidden">
-      <CardHeader>
-        <CardTitle>Record an adjustment</CardTitle>
-      </CardHeader>
-      <div className="grid gap-4 p-4 sm:grid-cols-2 lg:grid-cols-4">
-        <Field id="adj-product" label="Product" required className="sm:col-span-2">
-          <NativeSelect id="adj-product" value={form.productId} onChange={(e) => set("productId", e.target.value)}>
-            {products.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.sku} · {p.name}
-              </option>
-            ))}
-          </NativeSelect>
-        </Field>
-        <Field id="adj-date" label="Date" required>
-          <DateInput id="adj-date" value={form.date} onValueChange={(v) => set("date", v)} className="w-full" />
-        </Field>
-        <Field id="adj-stage" label="Stage" required>
-          <NativeSelect id="adj-stage" value={form.stage} onChange={(e) => set("stage", e.target.value as StageKey)}>
-            {STAGES.map((s) => (
-              <option key={s} value={s}>
-                {STAGE_LABELS[s]}
-              </option>
-            ))}
-          </NativeSelect>
-        </Field>
+    <div className="flex flex-col gap-1 pt-1">
+      <SegmentedControl
+        aria-label="Direction"
+        fill
+        value={form.direction}
+        onValueChange={(v) => set("direction", v === "in" ? "in" : "out")}
+        options={[
+          { value: "out", label: "Remove", glyph: "minus" },
+          { value: "in", label: "Add", glyph: "plus" },
+        ]}
+      />
 
-        <Field id="adj-reason" label="Reason" required note={REASON_NOTE[form.reason]} className="sm:col-span-2">
-          <NativeSelect id="adj-reason" value={form.reason} onChange={(e) => set("reason", e.target.value as AdjustmentReasonKey)}>
-            {REASON_KEYS.map((r) => (
-              <option key={r} value={r}>
-                {REASON_LABELS[r]}
-              </option>
-            ))}
-          </NativeSelect>
-        </Field>
-        <div className="flex flex-col gap-1.5 sm:col-span-2">
-          <span className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">Direction</span>
-          <Segmented
-            label="Direction"
-            value={form.direction}
-            onChange={(v) => set("direction", v)}
-            options={[
-              { value: "out", label: "Remove from stock" },
-              { value: "in", label: "Add to stock" },
-            ]}
+      <InsetGroup header="Stock">
+        <GroupRow label="Product">
+          <PopUpButton
+            aria-label="Product"
+            value={form.productId}
+            onValueChange={(v) => set("productId", v)}
+            options={products.map((p) => ({ value: p.id, label: `${p.sku} · ${p.name}` }))}
+            className="max-w-56"
           />
-        </div>
+        </GroupRow>
+        <GroupRow label="Stage">
+          <PopUpButton
+            aria-label="Stage"
+            value={form.stage}
+            onValueChange={(v) => {
+              const stage = STAGES.find((s) => s === v);
+              if (stage) set("stage", stage);
+            }}
+            options={STAGES.map((s) => ({ value: s, label: STAGE_LABELS[s], tint: STAGE_STYLE[s].tint }))}
+          />
+        </GroupRow>
+        <GroupRow label="Reason">
+          <PopUpButton
+            aria-label="Reason"
+            value={form.reason}
+            onValueChange={(v) => {
+              const reason = REASON_KEYS.find((r) => r === v);
+              if (reason) set("reason", reason);
+            }}
+            options={REASON_KEYS.map((r) => ({ value: r, label: REASON_LABELS[r], tint: REASON_STYLE[r].tint }))}
+          />
+        </GroupRow>
+        <GroupRow label="Posts to">
+          <span className="text-xs">{REASON_ACCOUNT[form.reason]}</span>
+        </GroupRow>
+        <GroupRow label="Date" htmlFor="adj-date">
+          <DateInput id="adj-date" value={form.date} onValueChange={(v) => set("date", v)} className={field} />
+        </GroupRow>
+      </InsetGroup>
 
-        <Field id="adj-qty" label="Quantity" required hint={product?.unit}>
-          <Input id="adj-qty" value={form.quantity} onChange={(e) => set("quantity", e.target.value)} numeric inputMode="decimal" placeholder="0" />
-        </Field>
-        <Field
-          id="adj-cost"
-          label="Unit cost"
-          hint="USD"
-          note={
-            form.stage === "finished"
-              ? product?.unitCostCents != null
-                ? `Blank uses the book cost, ${formatCents(product.unitCostCents, { currency: true })} today.`
-                : "This product has no book cost yet; enter one."
-              : "Materials carry no product cost; enter one, or the value."
-          }
-        >
-          <Input id="adj-cost" value={form.unitCost} onChange={(e) => set("unitCost", e.target.value)} numeric inputMode="decimal" placeholder="0.00" />
-        </Field>
-        <Field id="adj-value" label="Or total value" hint="USD" note="Overrides quantity × unit cost.">
-          <Input id="adj-value" value={form.value} onChange={(e) => set("value", e.target.value)} numeric inputMode="decimal" placeholder="0.00" />
-        </Field>
-        <Field id="adj-channel" label="Channel" hint="optional">
-          <NativeSelect id="adj-channel" value={form.channelId ?? ""} onChange={(e) => set("channelId", e.target.value || null)}>
-            <option value="">None</option>
-            {channels.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name}
-              </option>
-            ))}
-          </NativeSelect>
-        </Field>
-        <Field id="adj-memo" label="Memo" hint="optional" className="sm:col-span-2 lg:col-span-4">
-          <Input id="adj-memo" value={form.memo} onChange={(e) => set("memo", e.target.value)} placeholder="12 cans to the Heights farmers market tasting" />
-        </Field>
-      </div>
+      <InsetGroup header="Value">
+        <GroupRow label={`Quantity${product ? ` (${product.unit})` : ""}`} htmlFor="adj-qty">
+          <Input
+            id="adj-qty"
+            value={form.quantity}
+            onChange={(e) => set("quantity", e.target.value)}
+            numeric
+            inputMode="decimal"
+            placeholder="0"
+            className={field}
+          />
+        </GroupRow>
+        <GroupRow label="Unit cost" htmlFor="adj-cost">
+          <Input
+            id="adj-cost"
+            value={form.unitCost}
+            onChange={(e) => set("unitCost", e.target.value)}
+            numeric
+            inputMode="decimal"
+            placeholder={costHint}
+            className={field}
+          />
+        </GroupRow>
+        <GroupRow label="Or total" htmlFor="adj-value">
+          <Input
+            id="adj-value"
+            value={form.value}
+            onChange={(e) => set("value", e.target.value)}
+            numeric
+            inputMode="decimal"
+            placeholder="0.00"
+            className={field}
+          />
+        </GroupRow>
+      </InsetGroup>
 
-      <div className="border-t border-border">
-        <p className="eyebrow px-3 pt-3">Entry this will post</p>
+      <InsetGroup header="Details">
+        <GroupRow label="Channel">
+          <PopUpButton
+            aria-label="Channel"
+            value={form.channelId ?? NO_CHANNEL}
+            onValueChange={(v) => set("channelId", v === NO_CHANNEL ? null : v)}
+            options={[{ value: NO_CHANNEL, label: "None" }, ...channels.map((c) => ({ value: c.id, label: c.name }))]}
+          />
+        </GroupRow>
+        <GroupRow label="Memo" htmlFor="adj-memo">
+          <Input
+            id="adj-memo"
+            value={form.memo}
+            onChange={(e) => set("memo", e.target.value)}
+            placeholder="Farmers market tasting"
+            className={cn(field, "w-56 max-sm:w-44")}
+          />
+        </GroupRow>
+      </InsetGroup>
+
+      <InsetGroup header="Entry">
         {shownPreview ? (
-          <EntryPreview entry={shownPreview.entry} caption="Adjustment entry" />
+          <EntryPreview entry={shownPreview.entry} caption="Adjustment entry" className="pt-1" />
         ) : (
-          <p className="px-3 py-4 text-xs text-muted-foreground">
-            {shownProblem ?? "Choose a product and enter a quantity to see the entry."}
+          <p className={cn("flex items-center gap-2 px-4 py-4 text-sm font-medium", shownProblem ? "text-ink-orange" : "text-label2")}>
+            <Glyph name={shownProblem ? "warning" : "doc"} size={15} />
+            {shownProblem ?? "Enter a quantity"}
           </p>
         )}
-      </div>
-      <div className="flex flex-wrap items-center justify-end gap-3 border-t border-border bg-surface-sunken/40 px-4 py-3">
+      </InsetGroup>
+
+      <div className="flex flex-wrap items-center justify-end gap-3 pt-4">
         {shownPreview ? (
-          <span className="text-xs text-muted-foreground">
+          <span className="text-sm text-label2">
             {shownPreview.valueCents < 0 ? "Takes" : "Adds"}{" "}
-            <span className="num text-foreground">{formatCents(Math.abs(shownPreview.valueCents), { currency: true })}</span>{" "}
+            <span className="num font-semibold text-label">{formatCents(Math.abs(shownPreview.valueCents), { currency: true })}</span>{" "}
             {shownPreview.valueCents < 0 ? "out of" : "to"} inventory
           </span>
         ) : null}
-        <Button size="sm" disabled={posting || shownPreview === null} onClick={post}>
-          <Send />
+        <Button disabled={posting || shownPreview === null} onClick={post}>
+          <Glyph name="check" />
           Post adjustment
         </Button>
       </div>
-    </Card>
+    </div>
   );
 }

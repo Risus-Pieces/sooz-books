@@ -1,11 +1,8 @@
 import type { Metadata } from 'next';
-import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
 
 import { BillFormView } from '@/components/arap/bill-form';
 import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
-import { PageHeader } from '@/components/ui/page-header';
 import { can } from '@/lib/auth/roles';
 import { requireUser } from '@/lib/auth/session';
 import { addDays } from '@/lib/dates';
@@ -26,18 +23,13 @@ export default async function EditBillPage({ params }: { params: Promise<{ billI
   const canManage = can(user.role, 'ap.manage');
 
   return (
-    <div className="flex flex-col gap-5">
-      <PageHeader
-        eyebrow="Purchases"
-        title={`Edit ${bill.vendorName} ${bill.billNo}`}
-        meta={<Badge tone="warning">Draft</Badge>}
-        actions={
-          <Button asChild variant="ghost" size="sm">
-            <Link href={`/purchases/bills/${bill.id}`}>Back to the bill</Link>
-          </Button>
-        }
-      />
-      <BillFormView
+    <BillFormView
+        toolbar={{
+          title: `Edit ${bill.billNo}`,
+          subtitle: <Badge tone="warning">Draft</Badge>,
+          back: { href: `/purchases/bills/${bill.id}`, label: 'Bill' },
+          info: <p>An approved bill is in the ledger and is corrected by voiding; a draft can change freely.</p>,
+        }}
         billId={bill.id}
         vendors={vendors}
         accounts={billLineAccounts(accounts)}
@@ -61,6 +53,5 @@ export default async function EditBillPage({ params }: { params: Promise<{ billI
         canManage={canManage}
         canApprove={canManage}
       />
-    </div>
   );
 }

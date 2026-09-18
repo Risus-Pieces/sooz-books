@@ -2,17 +2,27 @@ import * as React from "react";
 
 import { cn } from "@/lib/cn";
 
-export interface EmptyStateProps extends React.ComponentPropsWithRef<"div"> {
+import { Glyph, type GlyphName } from "./glyph";
+import { InfoButton } from "./info-button";
+
+export interface EmptyStateProps extends Omit<React.ComponentPropsWithRef<"div">, "title"> {
+  /** A glyph from the kit. Preferred over `icon`. */
+  glyph?: GlyphName;
+  /** Any other large icon. */
   icon?: React.ReactNode;
+  /** Six words at most. */
   title: string;
+  /** Not shown on the screen: it goes behind an ⓘ beside the title. */
   description?: string;
+  /** The one next step. */
   action?: React.ReactNode;
   secondaryAction?: React.ReactNode;
 }
 
-/** An empty screen is an invitation to act, so `action` carries the next step. */
+/** An empty screen: one large glyph, a few words, one button. */
 export function EmptyState({
   className,
+  glyph,
   icon,
   title,
   description,
@@ -32,15 +42,19 @@ export function EmptyState({
       )}
       {...props}
     >
-      {icon ? (
-        <div className="mb-3 flex size-9 items-center justify-center rounded-sm border border-border bg-muted text-muted-foreground [&_svg]:size-4">
-          {icon}
-        </div>
+      {glyph ? (
+        <Glyph name={glyph} size={48} weight={1.4} className="mb-3 text-label3" />
+      ) : icon ? (
+        <div className="mb-3 text-label3 [&_svg]:size-12 [&_svg]:stroke-[1.4]">{icon}</div>
       ) : null}
-      <p className="text-sm font-semibold text-foreground">{title}</p>
-      {description ? (
-        <p className="mt-1 max-w-sm text-xs leading-relaxed text-pretty text-muted-foreground">{description}</p>
-      ) : null}
+      <div className="flex items-center gap-1">
+        <p className="text-lg font-semibold text-label">{title}</p>
+        {description ? (
+          <InfoButton label="More information" align="center">
+            {description}
+          </InfoButton>
+        ) : null}
+      </div>
       {action || secondaryAction ? (
         <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
           {action}

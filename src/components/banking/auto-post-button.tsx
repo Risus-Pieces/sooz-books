@@ -1,9 +1,9 @@
 "use client";
 
 import * as React from "react";
-import { Zap } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { Glyph } from "@/components/ui/glyph";
 import { Money } from "@/components/ui/money";
 import { toast } from "@/components/ui/toast";
 import { postAutoPostRows } from "@/app/(app)/banking/actions";
@@ -14,7 +14,7 @@ import { ConfirmDialog, type ConfirmRequest } from "./review-dialogs";
  * Posts what the owner's auto-post rules already coded. One deliberate click, with a
  * confirmation that states how many and how much.
  */
-export function AutoPostButton({ count, netCents }: { count: number; netCents: number }) {
+export function AutoPostButton({ count, netCents, className }: { count: number; netCents: number; className?: string }) {
   const [request, setRequest] = React.useState<ConfirmRequest | null>(null);
   const [pending, startTransition] = React.useTransition();
   if (count === 0) return null;
@@ -22,6 +22,7 @@ export function AutoPostButton({ count, netCents }: { count: number; netCents: n
     <>
       <Button
         size="sm"
+        className={className}
         disabled={pending}
         onClick={() =>
           setRequest({
@@ -48,7 +49,7 @@ export function AutoPostButton({ count, netCents }: { count: number; netCents: n
           })
         }
       >
-        <Zap />
+        <Glyph name="wand" />
         Post {count} auto-post
       </Button>
       <ConfirmDialog request={request} onClose={() => setRequest(null)} />

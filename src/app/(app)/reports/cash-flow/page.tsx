@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 
+import { CashFlowSummary } from '@/components/reports/report-charts';
 import { ReportSurface } from '@/components/reports/report-surface';
 import { requireCapability } from '@/lib/auth/session';
 import { today } from '@/lib/dates';
@@ -30,8 +31,21 @@ export default async function CashFlowPage({ searchParams }: { searchParams: Pro
 
   const report = await cashFlowReport(request);
 
+  // The last column is the whole range.
+  const t = report.totals;
+  const last = (values: number[]) => values[values.length - 1] ?? 0;
+
   return (
     <ReportSurface
+      summary={
+        <CashFlowSummary
+          beginningCents={last(t.beginningCash)}
+          operatingCents={last(t.operating)}
+          investingCents={last(t.investing)}
+          financingCents={last(t.financing)}
+          endingCents={last(t.beginningCash) + last(t.netChange)}
+        />
+      }
       report={report}
       request={request}
       path={PATH}

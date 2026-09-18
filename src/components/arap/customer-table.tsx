@@ -3,37 +3,32 @@
 import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Pencil, Plus, Search, Store } from "lucide-react";
 
-import { Badge } from "@/components/ui/badge";
+import { SplitBar } from "@/components/charts";
+import { PageToolbar } from "@/components/shell/page-toolbar";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
-import {
-  Dialog,
-  DialogBody,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { DetailPane } from "@/components/ui/detail-pane";
 import { EmptyState } from "@/components/ui/empty-state";
+import { Glyph } from "@/components/ui/glyph";
+import { Dot } from "@/components/ui/icon-badge";
 import { Input } from "@/components/ui/input";
+import { GroupRow, InsetGroup } from "@/components/ui/inset-group";
 import { Label } from "@/components/ui/label";
+import { Monogram } from "@/components/ui/monogram";
 import { Money } from "@/components/ui/money";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { Pill } from "@/components/ui/pill";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/components/ui/toast";
+import { ToolbarButton, ToolbarGroup } from "@/components/ui/toolbar";
+import { cn } from "@/lib/cn";
+import { dollars } from "@/lib/ui/format";
 import { saveCustomer } from "@/app/(app)/sales/actions";
 
-import { Td, Th } from "./doc-status";
+import { Directory } from "./directory";
 import { readMoney, termsLabel } from "./math";
 import { MoneyInput, textOf } from "./money-input";
 import {
@@ -90,6 +85,7 @@ function formOf(row: CustomerRow): CustomerForm {
   };
 }
 
+/** Who you invoice: a searchable list beside the chosen customer's card, and the form in a sheet. */
 export function CustomerTable({
   rows,
   channels,
@@ -102,120 +98,173 @@ export function CustomerTable({
   openNew: boolean;
 }) {
   const [editing, setEditing] = React.useState<CustomerRow | "new" | null>(openNew && canManage ? "new" : null);
-  const [query, setQuery] = React.useState("");
+  const [selectedId, setSelectedId] = React.useState<string | null>(rows[0]?.id ?? null);
+  const selected = rows.find((r) => r.id === selectedId) ?? rows[0] ?? null;
+  const active = rows.filter((r) => r.active).length;
 
-  const shown = rows.filter((row) => row.name.toLowerCase().includes(query.trim().toLowerCase()));
-
-  const addButton = canManage ? (
-    <Button size="sm" onClick={() => setEditing("new")}>
-      <Plus />
-      New customer
-    </Button>
-  ) : null;
+  const editButton =
+    canManage && selected ? <ToolbarButton glyph="pencil" label={`Edit ${selected.name}`} onClick={() => setEditing(selected)} /> : null;
 
   return (
-    <>
+    <div className="flex flex-col gap-3.5 max-md:gap-3">
+      <PageToolbar
+        title="Customers"
+        subtitle={rows.length > 0 ? <>{active} active</> : undefined}
+        info={
+          <p>
+            Who you invoice, on what terms, and which sales channel their revenue reports under. Square sales at markets
+            don&rsquo;t need a customer; they arrive through Square Clearing. Terms set here default onto new invoices.
+          </p>
+        }
+        actions={
+          canManage ? (
+            <ToolbarGroup>
+              <ToolbarButton glyph="plus" label="New customer" onClick={() => setEditing("new")} />
+              {editButton ? <span className="max-lg:hidden">{editButton}</span> : null}
+            </ToolbarGroup>
+          ) : undefined
+        }
+      />
+
       {rows.length === 0 ? (
         <Card>
           <EmptyState
-            icon={<Store />}
+            glyph="people"
             title="No customers yet"
-            description="A customer is anyone you invoice: a restaurant buying cases, a shop on net terms, a distributor. Square sales at markets don't need one — they arrive through Square Clearing. Set each customer's terms here (2/10 net 30 included) and every invoice picks them up."
-            action={addButton ?? undefined}
+            description="A customer is anyone you invoice: a restaurant buying cases, a shop on net terms, a distributor. Set each customer's terms (2/10 net 30 included) and every invoice picks them up."
+            action={canManage ? <Button onClick={() => setEditing("new")}>New customer</Button> : undefined}
           />
         </Card>
       ) : (
-        <Card>
-          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-3 py-2">
-            <div className="relative w-full max-w-xs">
-              <Search className="pointer-events-none absolute top-1/2 left-2 size-3.5 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                placeholder="Find a customer"
-                aria-label="Find a customer"
-                className="pl-7"
-              />
-            </div>
-            {addButton}
-          </div>
-          <div className="relative overflow-x-auto">
-            <table className="w-full min-w-[52rem] border-separate border-spacing-0 text-sm">
-              <caption className="sr-only">Customers</caption>
-              <thead>
-                <tr>
-                  <Th>Customer</Th>
-                  <Th>Type</Th>
-                  <Th>Channel</Th>
-                  <Th>Terms</Th>
-                  <Th align="right">Open</Th>
-                  <Th align="right">Overdue</Th>
-                  <Th className="w-10" />
-                </tr>
-              </thead>
-              <tbody>
-                {shown.map((row) => (
-                  <tr key={row.id} className="hover:bg-muted/60">
-                    <Td>
-                      <Link href={`/sales/invoices?customer=${row.id}`} className="font-medium hover:underline">
-                        {row.name}
-                      </Link>
-                      {row.active ? null : (
-                        <Badge tone="neutral" size="sm" className="ml-2">
-                          Inactive
-                        </Badge>
-                      )}
-                      {row.email ? <span className="block text-2xs text-muted-foreground">{row.email}</span> : null}
-                    </Td>
-                    <Td className="text-xs text-muted-foreground">{CUSTOMER_TYPE_LABELS[row.customerType]}</Td>
-                    <Td className="text-xs">{row.channelName ?? <span className="text-muted-foreground">From type</span>}</Td>
-                    <Td className="text-xs whitespace-nowrap">
-                      {termsLabel(row.termsDays, row.termsDiscountPct, row.termsDiscountDays)}
-                    </Td>
-                    <Td align="right">
-                      <Money cents={row.openCents} zeroDash />
-                      {row.openInvoiceCount > 0 ? (
-                        <span className="num block text-2xs text-muted-foreground">{row.openInvoiceCount} open</span>
-                      ) : null}
-                    </Td>
-                    <Td align="right">
-                      <Money cents={row.overdueCents} zeroDash className={row.overdueCents > 0 ? "text-negative" : undefined} />
-                    </Td>
-                    <Td align="right">
-                      {canManage ? (
-                        <Button variant="ghost" size="icon-sm" aria-label={`Edit ${row.name}`} onClick={() => setEditing(row)}>
-                          <Pencil />
-                        </Button>
-                      ) : null}
-                    </Td>
-                  </tr>
-                ))}
-                {shown.length === 0 ? (
-                  <tr>
-                    <td colSpan={7} className="px-3 py-8 text-center text-xs text-muted-foreground">
-                      No customer matches &ldquo;{query}&rdquo;.
-                    </td>
-                  </tr>
-                ) : null}
-              </tbody>
-            </table>
-          </div>
-        </Card>
+        <Directory
+          rows={rows}
+          selectedId={selected?.id ?? null}
+          onSelect={setSelectedId}
+          noMatch="No match"
+          sheetActions={editButton}
+          row={(r) => ({
+            leading: <Monogram name={r.name} />,
+            subtitle: (
+              <>
+                {r.overdueCents > 0 ? <Dot tint="red" size={7} /> : null}
+                <span className="truncate">{termsLabel(r.termsDays, r.termsDiscountPct, r.termsDiscountDays)}</span>
+              </>
+            ),
+            trailing: r.openCents !== 0 ? <Money cents={r.openCents} currency plain /> : undefined,
+            detail: r.openInvoiceCount > 0 ? `${r.openInvoiceCount} open` : undefined,
+          })}
+          detail={selected ? <CustomerDetail customer={selected} canManage={canManage} /> : null}
+        />
       )}
 
       {editing !== null ? (
-        <CustomerDialog
+        <CustomerSheet
           key={editing === "new" ? "new" : editing.id}
           customer={editing === "new" ? null : editing}
           channels={channels}
           onClose={() => setEditing(null)}
         />
       ) : null}
-    </>
+    </div>
   );
 }
 
-function CustomerDialog({
+function CustomerDetail({ customer, canManage }: { customer: CustomerRow; canManage: boolean }) {
+  const current = customer.openCents - customer.overdueCents;
+  return (
+    <DetailPane
+      leading={<Monogram name={customer.name} size="lg" />}
+      title={customer.name}
+      meta={[CUSTOMER_TYPE_LABELS[customer.customerType], ...(customer.channelName ? [customer.channelName] : [])]}
+      amount={<Money cents={customer.openCents} currency plain />}
+      status={
+        customer.overdueCents > 0 ? (
+          <Pill tone="red" glyph="flag">
+            <Money cents={customer.overdueCents} currency plain /> late
+          </Pill>
+        ) : !customer.active ? (
+          <Pill glyph="exclude">Inactive</Pill>
+        ) : customer.openCents === 0 ? (
+          <Pill tone="green" glyph="check-circle">
+            Nothing owed
+          </Pill>
+        ) : null
+      }
+      actions={
+        canManage && customer.active ? (
+          <>
+            <Button asChild>
+              <Link href={`/sales/invoices/new?customer=${customer.id}`}>
+                <Glyph name="plus" size={15} weight={2} />
+                New invoice
+              </Link>
+            </Button>
+            {customer.openCents > 0 ? (
+              <Button asChild variant="secondary">
+                <Link href={`/sales/receipts/new?customer=${customer.id}`}>Record receipt</Link>
+              </Button>
+            ) : null}
+          </>
+        ) : undefined
+      }
+    >
+      {customer.openCents > 0 ? (
+        <Card className="flex flex-col gap-2 px-5 py-4 max-sm:px-4">
+          <SplitBar
+            label={`Current ${dollars(current)}, late ${dollars(customer.overdueCents)}`}
+            segments={[
+              { label: "Current", value: Math.max(0, current), tint: "blue" },
+              { label: "Late", value: customer.overdueCents, tint: "red" },
+            ]}
+          />
+          <div aria-hidden className="flex justify-between gap-3 text-xs font-medium text-label2">
+            <span className="inline-flex items-center gap-1.5">
+              <Dot tint="blue" size={7} />
+              Current <Money cents={current} currency plain className="text-label" />
+            </span>
+            <span className="inline-flex items-center gap-1.5">
+              <Dot tint="red" size={7} />
+              Late <Money cents={customer.overdueCents} currency plain className="text-label" />
+            </span>
+          </div>
+        </Card>
+      ) : null}
+      <InsetGroup>
+        <GroupRow label="Invoices" href={`/sales/invoices?customer=${customer.id}`}>
+          {customer.openInvoiceCount > 0 ? `${customer.openInvoiceCount} open` : "All"}
+        </GroupRow>
+        <GroupRow label="Terms">{termsLabel(customer.termsDays, customer.termsDiscountPct, customer.termsDiscountDays)}</GroupRow>
+        <GroupRow label="Channel">{customer.channelName ?? "From type"}</GroupRow>
+        {customer.email ? (
+          <GroupRow label="Email">
+            <a href={`mailto:${customer.email}`} className="truncate text-ink-blue hover:underline">
+              {customer.email}
+            </a>
+          </GroupRow>
+        ) : null}
+        {customer.phone ? (
+          <GroupRow label="Phone">
+            <a href={`tel:${customer.phone}`} className="text-ink-blue hover:underline">
+              {customer.phone}
+            </a>
+          </GroupRow>
+        ) : null}
+        {customer.creditLimitCents !== null ? (
+          <GroupRow label="Credit limit">
+            <Money cents={customer.creditLimitCents} currency plain />
+          </GroupRow>
+        ) : null}
+      </InsetGroup>
+      {customer.notes ? (
+        <InsetGroup header="Notes">
+          <p className="px-4 py-3 text-sm whitespace-pre-line">{customer.notes}</p>
+        </InsetGroup>
+      ) : null}
+    </DetailPane>
+  );
+}
+
+function CustomerSheet({
   customer,
   channels,
   onClose,
@@ -264,135 +313,162 @@ function CustomerDialog({
   };
 
   return (
-    <Dialog open onOpenChange={(open) => (open ? null : onClose())}>
-      <DialogContent size="lg">
-        <DialogHeader>
-          <DialogTitle>{customer === null ? "New customer" : `Edit ${customer.name}`}</DialogTitle>
-          <DialogDescription>
-            Terms set here default onto new invoices. Invoices already issued keep the terms they went out on.
-          </DialogDescription>
-        </DialogHeader>
-        <DialogBody className="grid gap-4 sm:grid-cols-2">
-          <Field label="Name" required htmlFor="c-name" className="sm:col-span-2">
-            <Input id="c-name" value={form.name} onChange={(e) => set("name", e.target.value)} placeholder="e.g. Blacksmith Coffee" autoFocus />
-          </Field>
-          <Field label="Type" htmlFor="c-type" hint="sets the default channel">
-            <Select value={form.customerType} onValueChange={(v) => set("customerType", v as CustomerType)}>
-              <SelectTrigger id="c-type">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {CUSTOMER_TYPES.map((t) => (
-                  <SelectItem key={t} value={t}>
-                    {CUSTOMER_TYPE_LABELS[t]}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </Field>
-          <Field label="Sales channel" htmlFor="c-channel" hint="where its revenue reports">
-            <Select value={form.channelId ?? FROM_TYPE} onValueChange={(v) => set("channelId", v === FROM_TYPE ? null : v)}>
-              <SelectTrigger id="c-channel">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value={FROM_TYPE}>
-                  <span className="text-muted-foreground">From the customer type</span>
-                </SelectItem>
-                {channels.map((c) => (
-                  <SelectItem key={c.id} value={c.id}>
-                    {c.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </Field>
-          <Field label="Email" htmlFor="c-email" hint="for sending invoices">
-            <Input id="c-email" type="email" value={form.email} onChange={(e) => set("email", e.target.value)} />
-          </Field>
-          <Field label="Phone" htmlFor="c-phone">
-            <Input id="c-phone" value={form.phone} onChange={(e) => set("phone", e.target.value)} />
-          </Field>
+    <Sheet open onOpenChange={(open) => (open ? null : onClose())}>
+      <SheetContent
+        title={customer === null ? "New customer" : `Edit ${customer.name}`}
+        description="Terms set here default onto new invoices. Invoices already issued keep the terms they went out on."
+      >
+        <div className="flex flex-col gap-1">
+          <InsetGroup>
+            <SheetField label="Name" htmlFor="c-name">
+              <Input id="c-name" value={form.name} onChange={(e) => set("name", e.target.value)} placeholder="Blacksmith Coffee" autoFocus className="w-56" />
+            </SheetField>
+            <SheetField label="Type" htmlFor="c-type">
+              <Select value={form.customerType} onValueChange={(v) => set("customerType", v as CustomerType)}>
+                <SelectTrigger id="c-type" className="w-56">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {CUSTOMER_TYPES.map((t) => (
+                    <SelectItem key={t} value={t}>
+                      {CUSTOMER_TYPE_LABELS[t]}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </SheetField>
+            <SheetField label="Channel" htmlFor="c-channel">
+              <Select value={form.channelId ?? FROM_TYPE} onValueChange={(v) => set("channelId", v === FROM_TYPE ? null : v)}>
+                <SelectTrigger id="c-channel" className="w-56">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={FROM_TYPE}>From the type</SelectItem>
+                  {channels.map((c) => (
+                    <SelectItem key={c.id} value={c.id}>
+                      {c.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </SheetField>
+            <SheetField label="Email" htmlFor="c-email">
+              <Input id="c-email" type="email" value={form.email} onChange={(e) => set("email", e.target.value)} className="w-56" />
+            </SheetField>
+            <SheetField label="Phone" htmlFor="c-phone">
+              <Input id="c-phone" value={form.phone} onChange={(e) => set("phone", e.target.value)} className="w-56" />
+            </SheetField>
+          </InsetGroup>
 
-          <fieldset className="flex flex-col gap-2 rounded-sm border border-border p-3 sm:col-span-2">
-            <legend className="eyebrow px-1">Payment terms</legend>
-            <div className="flex flex-wrap gap-1.5">
+          <InsetGroup header="Terms" footer={<>Reads as {termsLabel(form.termsDays, form.termsDiscountPct || "0", form.termsDiscountDays)}. Discounts taken post to 4580.</>}>
+            <div role="group" aria-label="Common terms" className="flex flex-wrap gap-1.5 px-4 py-3">
               {TERM_PRESETS.map((p) => (
-                <Button
+                <button
                   key={p.label}
                   type="button"
-                  size="sm"
-                  variant={preset?.label === p.label ? "default" : "secondary"}
+                  aria-pressed={preset?.label === p.label}
                   onClick={() => setForm((f) => ({ ...f, termsDays: p.net, termsDiscountPct: p.pct, termsDiscountDays: p.days }))}
+                  className={cn(
+                    "h-7 rounded-full px-3 text-xs font-semibold transition-colors max-sm:h-9 max-sm:text-sm",
+                    preset?.label === p.label ? "bg-accent-fill text-white" : "bg-fill2 text-label hover:bg-fill",
+                  )}
                 >
                   {p.label}
-                </Button>
+                </button>
               ))}
             </div>
-            <div className="grid grid-cols-3 gap-3">
-              <Field label="Net days" htmlFor="c-net">
-                <Input id="c-net" numeric inputMode="numeric" value={String(form.termsDays)} onChange={(e) => set("termsDays", Number(e.target.value.replace(/\D/g, "") || "0"))} />
-              </Field>
-              <Field label="Discount %" htmlFor="c-pct">
-                <Input id="c-pct" numeric inputMode="decimal" value={form.termsDiscountPct} onChange={(e) => set("termsDiscountPct", e.target.value.replace(/[^\d.]/g, ""))} />
-              </Field>
-              <Field label="If paid in" htmlFor="c-ddays" hint="days">
-                <Input id="c-ddays" numeric inputMode="numeric" value={String(form.termsDiscountDays)} onChange={(e) => set("termsDiscountDays", Number(e.target.value.replace(/\D/g, "") || "0"))} />
-              </Field>
-            </div>
-            <p className="text-xs text-muted-foreground">
-              Reads as <span className="font-medium text-foreground">{termsLabel(form.termsDays, form.termsDiscountPct || "0", form.termsDiscountDays)}</span>. Early-payment discounts taken post to 4580.
-            </p>
-          </fieldset>
+            <SheetField label="Net days" htmlFor="c-net">
+              <Input
+                id="c-net"
+                numeric
+                inputMode="numeric"
+                className="w-24"
+                value={String(form.termsDays)}
+                onChange={(e) => set("termsDays", Number(e.target.value.replace(/\D/g, "") || "0"))}
+              />
+            </SheetField>
+            <SheetField label="Discount %" htmlFor="c-pct">
+              <Input
+                id="c-pct"
+                numeric
+                inputMode="decimal"
+                className="w-24"
+                value={form.termsDiscountPct}
+                onChange={(e) => set("termsDiscountPct", e.target.value.replace(/[^\d.]/g, ""))}
+              />
+            </SheetField>
+            <SheetField label="If paid in" htmlFor="c-ddays">
+              <Input
+                id="c-ddays"
+                numeric
+                inputMode="numeric"
+                className="w-24"
+                value={String(form.termsDiscountDays)}
+                onChange={(e) => set("termsDiscountDays", Number(e.target.value.replace(/\D/g, "") || "0"))}
+              />
+            </SheetField>
+          </InsetGroup>
 
-          <Field label="Credit limit" htmlFor="c-limit" hint="optional">
-            <MoneyInput id="c-limit" value={creditLimit} onValueChange={setCreditLimit} />
-          </Field>
-          {customer !== null ? (
-            <div className="flex items-end gap-2 pb-1.5">
-              <Checkbox id="c-active" checked={form.active} onCheckedChange={(c) => set("active", c === true)} />
-              <Label htmlFor="c-active">Active</Label>
-            </div>
-          ) : null}
-          <Field label="Notes" htmlFor="c-notes" className="sm:col-span-2">
-            <Textarea id="c-notes" value={form.notes} onChange={(e) => set("notes", e.target.value)} rows={2} />
-          </Field>
-        </DialogBody>
-        <DialogFooter>
-          {problem ? <span className="mr-auto text-xs text-muted-foreground">{problem}</span> : null}
-          <Button variant="ghost" size="sm" onClick={onClose} disabled={pending}>
-            Cancel
-          </Button>
-          <Button size="sm" onClick={submit} disabled={pending || problem !== null}>
-            {customer === null ? "Add customer" : "Save customer"}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+          <InsetGroup>
+            <SheetField label="Credit limit" htmlFor="c-limit">
+              <MoneyInput id="c-limit" className="w-32" value={creditLimit} onValueChange={setCreditLimit} placeholder="None" />
+            </SheetField>
+            {customer !== null ? (
+              <SheetField label="Active" htmlFor="c-active">
+                <Checkbox id="c-active" checked={form.active} onCheckedChange={(c) => set("active", c === true)} />
+              </SheetField>
+            ) : null}
+          </InsetGroup>
+
+          <InsetGroup header={<Label htmlFor="c-notes">Notes</Label>}>
+            <Textarea
+              id="c-notes"
+              value={form.notes}
+              onChange={(e) => set("notes", e.target.value)}
+              rows={3}
+              className="rounded-none border-0 bg-transparent shadow-none focus-visible:shadow-[inset_0_0_0_2px_var(--blue)]"
+            />
+          </InsetGroup>
+
+          <SheetFooter problem={problem} pending={pending} onCancel={onClose} onSubmit={submit} submitLabel={customer === null ? "Add customer" : "Save customer"} />
+        </div>
+      </SheetContent>
+    </Sheet>
   );
 }
 
-export function Field({
-  label,
-  htmlFor,
-  hint,
-  required,
-  className,
-  children,
+/** A labelled field in a sheet, System Settings style: label left, control right. */
+export function SheetField({ label, htmlFor, children }: { label: string; htmlFor: string; children: React.ReactNode }) {
+  return (
+    <GroupRow label={label} htmlFor={htmlFor} className="[&>span:last-child]:text-label">
+      {children}
+    </GroupRow>
+  );
+}
+
+/** The sheet's closing row: a short reason the button is off, Cancel, and the one blue button. */
+export function SheetFooter({
+  problem,
+  pending,
+  onCancel,
+  onSubmit,
+  submitLabel,
 }: {
-  label: string;
-  htmlFor: string;
-  hint?: string;
-  required?: boolean;
-  className?: string;
-  children: React.ReactNode;
+  problem: string | null;
+  pending: boolean;
+  onCancel: () => void;
+  onSubmit: () => void;
+  submitLabel: string;
 }) {
   return (
-    <div className={`flex flex-col gap-1.5 ${className ?? ""}`}>
-      <Label htmlFor={htmlFor} hint={hint} required={required}>
-        {label}
-      </Label>
-      {children}
+    <div className="flex flex-wrap items-center justify-end gap-2 pt-5">
+      {problem ? <span className="mr-auto text-xs font-medium text-label2">{problem}</span> : null}
+      <Button variant="secondary" onClick={onCancel} disabled={pending}>
+        Cancel
+      </Button>
+      <Button onClick={onSubmit} disabled={pending || problem !== null}>
+        {submitLabel}
+      </Button>
     </div>
   );
 }

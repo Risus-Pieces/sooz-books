@@ -106,7 +106,9 @@ async function main(): Promise<void> {
           .count();
 
         const file = join(args.out, `${slug(route)}.${viewport.name}.png`);
-        await page.screenshot({ path: file, fullPage: true });
+        // caret: 'initial' — Playwright's default hides the caret by writing a style onto inputs,
+        // and on a page still hydrating React reports that style as a hydration mismatch.
+        await page.screenshot({ path: file, fullPage: true, caret: 'initial' });
 
         page.off('console', onConsole);
         page.off('pageerror', onPageError);

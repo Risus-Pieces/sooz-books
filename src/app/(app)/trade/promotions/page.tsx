@@ -1,16 +1,17 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { CalendarPlus, CalendarRange } from "lucide-react";
 
-import { longDate, percent, shortDate } from "@/components/trade/labels";
-import { PromoStatusBadge, Table, TableScroll, Td, Th } from "@/components/trade/parts";
-import { PromotionCalendar } from "@/components/trade/promotion-calendar";
-import { TradeWorkflow } from "@/components/trade/workflow";
+import { shortDate } from "@/components/trade/labels";
+import { PROMO_LABEL } from "@/components/trade/parts";
+import { PROMO_TINT, PromotionCalendar } from "@/components/trade/promotion-calendar";
+import { PageToolbar } from "@/components/shell/page-toolbar";
 import { Button } from "@/components/ui/button";
-import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
+import { IconBadge } from "@/components/ui/icon-badge";
+import { InsetGroup, ListRow } from "@/components/ui/inset-group";
 import { Money } from "@/components/ui/money";
-import { PageHeader } from "@/components/ui/page-header";
+import { StatTile } from "@/components/ui/stat-tile";
+import { ToolbarGroup, ToolbarLink } from "@/components/ui/toolbar";
 import { can } from "@/lib/auth/roles";
 import { requireUser } from "@/lib/auth/session";
 import { today } from "@/lib/dates";
@@ -22,8 +23,8 @@ export const metadata: Metadata = {
 };
 
 /**
- * Promotions on a calendar and in a register: what each was planned to cost, what has been
- * accrued month by month, what the distributor actually took for it, and the variance.
+ * Promotions on a calendar, then as a list: what each was planned to cost, what has been accrued,
+ * and what the distributor actually took for it.
  */
 export default async function PromotionsPage() {
   const user = await requireUser("/trade/promotions");
@@ -41,134 +42,91 @@ export default async function PromotionsPage() {
   );
 
   return (
-    <div className="flex flex-col gap-4">
-      <PageHeader
-        eyebrow="Trade"
+    <div className="flex flex-col gap-3.5 max-md:gap-3">
+      <PageToolbar
         title="Promotions"
-        description="Each promotion accrues its cost across its ship window, so trade spend lands in the month of the sales it paid for."
+        subtitle={
+          rows.length === 0 ? undefined : (
+            <>
+              {rows.length} · <Money cents={totals.planned} currency plain /> planned
+            </>
+          )
+        }
+        info={
+          <>
+            <p>Each promotion accrues its cost across its ship window, so trade spend lands in the month of the sales it paid for.</p>
+            <p>Variance is taken less accrued: positive means the distributor took more than was set aside.</p>
+          </>
+        }
         actions={
           canManage ? (
-            <Button asChild size="sm">
-              <Link href="/trade/promotions/new">
-                <CalendarPlus />
-                New promotion
-              </Link>
-            </Button>
-          ) : null
+            <ToolbarGroup>
+              <ToolbarLink href="/trade/promotions/new" glyph="plus" label="New promotion" />
+            </ToolbarGroup>
+          ) : undefined
         }
       />
 
       {rows.length === 0 ? (
-        <>
-          <Card>
-            <EmptyState
-              icon={<CalendarRange />}
-              title="No promotions planned"
-              description="A promotion is a deal agreed with a distributor: an MCB billback, a scan-down, slotting for a new item. Plan it here with its products and allowance, and it accrues itself month by month until the deductions arrive to be charged against it."
-              action={
-                canManage ? (
-                  <Button asChild size="sm">
-                    <Link href="/trade/promotions/new">Plan a promotion</Link>
-                  </Button>
-                ) : undefined
-              }
-            />
-          </Card>
-          <TradeWorkflow />
-        </>
+        <div className="rounded-2xl bg-card shadow-card max-md:rounded-[22px]">
+          <EmptyState
+            glyph="calendar"
+            title="No promotions planned"
+            description="A promotion is a deal agreed with a distributor: an MCB billback, a scan-down, slotting for a new item. Plan it here with its products and allowance, and it accrues itself month by month until the deductions arrive to be charged against it."
+            action={
+              canManage ? (
+                <Button asChild>
+                  <Link href="/trade/promotions/new">New promotion</Link>
+                </Button>
+              ) : undefined
+            }
+          />
+        </div>
       ) : (
         <>
-          <Card>
-            <CardHeader>
-              <div className="min-w-0">
-                <CardTitle>Calendar</CardTitle>
-                <CardDescription>Bars are the performance window; the rule beneath is the ship window the accrual follows. The purple line is today.</CardDescription>
-              </div>
-            </CardHeader>
-            <PromotionCalendar rows={rows} today={today()} />
-          </Card>
+          <div className="grid grid-cols-2 gap-3.5 max-md:gap-3 lg:grid-cols-4">
+            <StatTile label="Planned" badge={<IconBadge glyph="calendar" tint="gray" />} value={<Money cents={totals.planned} currency plain />} />
+            <StatTile label="Accrued" badge={<IconBadge glyph="hourglass" tint="cyan" />} value={<Money cents={totals.accrued} currency plain />} />
+            <StatTile label="Taken" badge={<IconBadge glyph="arrow-out" tint="orange" />} value={<Money cents={totals.deducted} currency plain />} />
+            <StatTile
+              label="Variance"
+              badge={<IconBadge glyph="split" tint={totals.variance > 0 ? "red" : "green"} />}
+              value={<Money cents={totals.variance} currency signed plain className={totals.variance > 0 ? "text-ink-red" : undefined} />}
+            />
+          </div>
 
-          <Card>
-            <CardHeader>
-              <div className="min-w-0">
-                <CardTitle>Plan, accrual and actual</CardTitle>
-                <CardDescription>Variance is taken less accrued: positive means the distributor took more than was set aside.</CardDescription>
-              </div>
-            </CardHeader>
-            <TableScroll>
-              <Table caption="Promotions" className="min-w-[64rem]">
-                <thead>
-                  <tr>
-                    <Th>Promotion</Th>
-                    <Th>Runs</Th>
-                    <Th>Status</Th>
-                    <Th align="right">Planned</Th>
-                    <Th align="right">Accrued</Th>
-                    <Th align="right">Taken</Th>
-                    <Th align="right">Still accrued</Th>
-                    <Th align="right">Variance</Th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {rows.map((r) => (
-                    <tr key={r.id} className="rule-row">
-                      <Td className="min-w-52">
-                        <Link href={`/trade/promotions/${r.id}`} className="text-primary hover:underline">
-                          {r.name}
-                        </Link>
-                        <span className="block text-2xs text-muted-foreground">
-                          {r.customerName ?? "No customer"} · {r.typeLabel}
-                          {r.authorizationNo ? ` · deal ${r.authorizationNo}` : ""}
-                        </span>
-                      </Td>
-                      <Td className="num text-xs whitespace-nowrap text-muted-foreground">
-                        {shortDate(r.startDate)} – {longDate(r.endDate)}
-                      </Td>
-                      <Td>
-                        <PromoStatusBadge status={r.status} />
-                      </Td>
-                      <Td align="right">
-                        <Money cents={r.plannedCents} plain />
-                      </Td>
-                      <Td align="right">
-                        <Money cents={r.accruedCents} plain zeroDash />
-                      </Td>
-                      <Td align="right">
-                        <Money cents={r.deductedCents} plain zeroDash />
-                      </Td>
-                      <Td align="right">
-                        <Money cents={r.openAccrualCents} plain zeroDash />
-                      </Td>
-                      <Td align="right" className="whitespace-nowrap">
-                        <Money cents={r.accrualVarianceCents} signed zeroDash plain={r.accrualVarianceCents <= 0} className={r.accrualVarianceCents > 0 ? "text-negative" : undefined} />
-                        {r.accrualVarianceRatio !== null ? <span className="num ml-1.5 text-2xs text-muted-foreground">{percent(r.accrualVarianceRatio)}</span> : null}
-                      </Td>
-                    </tr>
-                  ))}
-                  <tr>
-                    <Td className="rule-subtotal text-xs font-semibold text-muted-foreground" colSpan={3}>
-                      {rows.length} {rows.length === 1 ? "promotion" : "promotions"}
-                    </Td>
-                    <Td align="right" className="rule-subtotal rule-total font-semibold">
-                      <Money cents={totals.planned} plain />
-                    </Td>
-                    <Td align="right" className="rule-subtotal rule-total font-semibold">
-                      <Money cents={totals.accrued} plain />
-                    </Td>
-                    <Td align="right" className="rule-subtotal rule-total font-semibold">
-                      <Money cents={totals.deducted} plain />
-                    </Td>
-                    <Td align="right" className="rule-subtotal rule-total font-semibold">
-                      <Money cents={totals.open} plain />
-                    </Td>
-                    <Td align="right" className="rule-subtotal rule-total font-semibold">
-                      <Money cents={totals.variance} signed plain />
-                    </Td>
-                  </tr>
-                </tbody>
-              </Table>
-            </TableScroll>
-          </Card>
+          <section aria-labelledby="calendar" className="overflow-hidden rounded-2xl bg-card shadow-card max-md:rounded-[22px]">
+            <h2 id="calendar" className="px-5 pt-[18px] pb-2 text-lg font-semibold tracking-[-0.01em] max-md:px-4">
+              Calendar
+            </h2>
+            <PromotionCalendar rows={rows} today={today()} />
+          </section>
+
+          <InsetGroup header="All" separatorInset={63}>
+            {rows.map((r) => (
+              <ListRow
+                key={r.id}
+                href={`/trade/promotions/${r.id}`}
+                chevron
+                leading={<IconBadge glyph="megaphone" tint={PROMO_TINT[r.status] ?? "gray"} size="xl" className="rounded-full" />}
+                title={r.name}
+                subtitle={
+                  <>
+                    {r.customerName ?? "No customer"} · {r.typeLabel}
+                  </>
+                }
+                trailing={<Money cents={r.plannedCents} currency plain />}
+                detail={
+                  <>
+                    <span className="max-sm:hidden">
+                      {shortDate(r.startDate)} – {shortDate(r.endDate)} ·{" "}
+                    </span>
+                    {PROMO_LABEL[r.status] ?? r.status}
+                  </>
+                }
+              />
+            ))}
+          </InsetGroup>
         </>
       )}
     </div>

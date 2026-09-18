@@ -2,11 +2,12 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { Archive, CircleCheck, Copy, Plus, Upload } from "lucide-react";
 
 import { copyFromActuals, createVersion, importBudget, setVersionStatus } from "@/app/(app)/plan/actions";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Glyph } from "@/components/ui/glyph";
+import { ToolbarButton, ToolbarGroup } from "@/components/ui/toolbar";
 import {
   Dialog,
   DialogBody,
@@ -58,36 +59,23 @@ export function BudgetControls({
 
   return (
     <>
-      <div className="flex flex-wrap items-center gap-2">
-        {version !== null && version.status === "draft" ? (
-          <Button variant="secondary" size="sm" disabled={pending} onClick={() => status("active")}>
-            <CircleCheck />
-            Make active
-          </Button>
-        ) : null}
-        {version !== null && version.status !== "archived" ? (
-          <Button variant="ghost" size="sm" disabled={pending} onClick={() => status("archived")}>
-            <Archive />
-            Archive
-          </Button>
-        ) : null}
-        {editable ? (
-          <>
-            <Button variant="secondary" size="sm" onClick={() => setOpen("import")}>
-              <Upload />
-              Import CSV
-            </Button>
-            <Button variant="secondary" size="sm" onClick={() => setOpen("copy")}>
-              <Copy />
-              Copy from actuals
-            </Button>
-          </>
-        ) : null}
-        <Button size="sm" onClick={() => setOpen("new")}>
-          <Plus />
-          New budget
-        </Button>
-      </div>
+      {editable ? (
+        <ToolbarGroup>
+          <ToolbarButton glyph="import" label="Import CSV" onClick={() => setOpen("import")} />
+          <ToolbarButton glyph="refresh" label="Copy from actuals" onClick={() => setOpen("copy")} />
+        </ToolbarGroup>
+      ) : null}
+      {version !== null && version.status !== "archived" ? (
+        <ToolbarGroup>
+          {version.status === "draft" ? (
+            <ToolbarButton glyph="check-circle" label="Make active" disabled={pending} onClick={() => status("active")} />
+          ) : null}
+          <ToolbarButton glyph="tray" label="Archive" disabled={pending} onClick={() => status("archived")} />
+        </ToolbarGroup>
+      ) : null}
+      <ToolbarGroup>
+        <ToolbarButton glyph="plus" label="New budget" onClick={() => setOpen("new")} />
+      </ToolbarGroup>
 
       {open === "new" ? <NewVersionDialog defaultYear={defaultYear} onClose={() => setOpen(null)} /> : null}
       {open === "import" && version !== null ? <ImportDialog version={version} onClose={() => setOpen(null)} /> : null}
@@ -199,7 +187,7 @@ function ImportDialog({ version, onClose }: { version: BudgetVersionOption; onCl
               type="file"
               accept=".csv,text/csv"
               onChange={(e) => void readFile(e.target.files?.[0])}
-              className="text-xs file:mr-3 file:rounded-sm file:border file:border-border-strong file:bg-surface-raised file:px-2.5 file:py-1 file:text-xs file:font-medium"
+              className="text-xs file:mr-3 file:h-8 file:rounded-[8px] file:border-0 file:bg-ctl file:px-3 file:text-sm file:font-medium file:shadow-ctl"
             />
           </div>
           <div className="flex flex-col gap-1.5">
@@ -217,7 +205,7 @@ function ImportDialog({ version, onClose }: { version: BudgetVersionOption; onCl
             Clear this budget&apos;s existing lines first
           </label>
           {problems.length > 0 ? (
-            <ul className="flex max-h-40 flex-col gap-0.5 overflow-y-auto rounded-sm border border-negative/35 bg-negative/8 p-2.5 text-xs">
+            <ul className="flex max-h-40 flex-col gap-0.5 overflow-y-auto rounded-sm border border-tint-red/35 bg-tint-red/8 text-ink-red p-2.5 text-xs">
               {problems.map((p) => (
                 <li key={p}>{p}</li>
               ))}
@@ -227,7 +215,7 @@ function ImportDialog({ version, onClose }: { version: BudgetVersionOption; onCl
         <DialogFooter>
           <Button variant="ghost" size="sm" onClick={onClose} disabled={pending}>Cancel</Button>
           <Button size="sm" onClick={submit} disabled={pending || text.trim() === ""}>
-            <Upload />
+            <Glyph name="import" />
             Import
           </Button>
         </DialogFooter>
@@ -299,7 +287,7 @@ function CopyDialog({ version, onClose }: { version: BudgetVersionOption; onClos
         <DialogFooter>
           <Button variant="ghost" size="sm" onClick={onClose} disabled={pending}>Cancel</Button>
           <Button size="sm" onClick={submit} disabled={pending || bps === null || !/^\d{4}$/.test(sourceYear)}>
-            <Copy />
+            <Glyph name="refresh" />
             Copy actuals
           </Button>
         </DialogFooter>

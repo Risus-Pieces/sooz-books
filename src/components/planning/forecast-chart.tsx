@@ -1,119 +1,168 @@
-"use client";
-
 import * as React from "react";
-import {
-  Bar,
-  CartesianGrid,
-  Cell,
-  ComposedChart,
-  Line,
-  ReferenceLine,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from "recharts";
 
-import { formatCents } from "@/components/ui/money";
+import { axisMoney, dayNumber, dollars, shortDate } from "@/lib/ui/format";
+import { evenTicks, linear, round1 } from "@/lib/ui/scale";
 
-export interface ForecastChartPoint {
-  /** "Sep 22" — the Monday the week starts. */
-  label: string;
+export interface ForecastWeekPoint {
+  /** 'YYYY-MM-DD': the Sunday the week closes. */
+  weekEnd: string;
   closingCents: number;
-  netCents: number;
 }
 
-/** Whole-dollar tick labels: the axis is a scale, the table carries the cents. */
-function tick(cents: number): string {
-  const dollars = Math.round(cents / 100);
-  const abs = Math.abs(dollars);
-  const text = abs >= 10_000 ? `${Math.round(abs / 1000)}k` : abs.toLocaleString("en-US");
-  return `${dollars < 0 ? "−" : ""}$${text}`;
+export interface ForecastLineProps {
+  /** Today, 'YYYY-MM-DD': where the line starts. */
+  asOf: string;
+  /** Cash today. */
+  cashCents: number;
+  /** The thirteen weeks, oldest first. */
+  weeks: readonly ForecastWeekPoint[];
+  /** The date cash runs out at the trailing burn; draws the dotted burn line down to $0. */
+  cashOutDate: string | null;
+  /** viewBox width: 720 on a desktop card, 342 on a phone. */
+  width?: number;
+  height?: number;
+  compact?: boolean;
+  title?: string;
 }
+
+const axisText = { fontSize: 10.5, fontWeight: 500, fill: "var(--label2)", fontFamily: "inherit" } as const;
+const gridLine = { stroke: "var(--sep)", strokeWidth: 0.6 } as const;
+const zeroLine = { stroke: "var(--label3)", strokeWidth: 0.8 } as const;
 
 /**
- * Closing cash each week as a line, with the week's net movement as bars under
- * it. A week that closes below zero draws its point in the negative colour.
- * The domain always includes zero and never shrinks below a few dollars, so a
- * flat forecast reads as flat rather than as a magnified wobble.
+ * The thirteen-week forecast in the cash line's language: today's balance carried forward week by
+ * week by what is known (open invoices, open bills, expected movements) as a solid line over a soft
+ * fill, and beside it the trailing burn as a dotted orange line down to $0 on the cash-out date —
+ * what happens if nothing new comes in. A week that closes below zero draws its point in red.
  */
-export function ForecastChart({ data }: { data: readonly ForecastChartPoint[] }) {
-  const points = React.useMemo(() => [...data], [data]);
-  const values = points.flatMap((p) => [p.closingCents, p.netCents, 0]);
-  const min = Math.min(...values);
-  const max = Math.max(...values);
-  // Round the axis out to a whole 1-2-5 step of dollars, never less than $100 a step.
-  const span = Math.max(max - min, 40_000);
-  let step = 10_000;
-  for (const candidate of [1, 2, 5].flatMap((m) => [2, 3, 4, 5, 6, 7, 8].map((e) => m * 10 ** e)).sort((a, b) => a - b)) {
-    step = candidate;
-    if (span / candidate <= 5) break;
-  }
-  const domain: [number, number] = [Math.floor(min / step) * step, Math.ceil(max / step) * step + (max % step === 0 ? step : 0)];
-  const ticks = Array.from({ length: Math.round((domain[1] - domain[0]) / step) + 1 }, (_, i) => domain[0] + i * step);
+export function ForecastLine({
+  asOf,
+  cashCents,
+  weeks,
+  cashOutDate,
+  width = 720,
+  height = 210,
+  compact = false,
+  title = "Cash forecast, thirteen weeks",
+}: ForecastLineProps) {
+  if (weeks.length === 0) return null;
+  const id = `fcl-${width}-${height}-${weeks.length}`;
+  const points = [{ date: asOf, cents: cashCents }, ...weeks.map((w) => ({ date: w.weekEnd, cents: w.closingCents }))];
+  const d0 = dayNumber(asOf);
+  const dEnd = dayNumber(weeks[weeks.length - 1].weekEnd);
+
+  // The burn line: straight from today's cash to $0 on the cash-out date, cut at the horizon.
+  const dOut = cashOutDate ? dayNumber(cashOutDate) : null;
+  const burnEnd =
+    dOut === null || cashCents <= 0
+      ? null
+      : dOut <= dEnd
+        ? { day: Math.max(dOut, d0 + 1), cents: 0 }
+        : { day: dEnd, cents: Math.round(cashCents * (1 - (dEnd - d0) / Math.max(dOut - d0, 1))) };
+
+  const padTop = 30;
+  const padBottom = 22;
+  const labelGutter = compact ? 38 : 50;
+  const x0 = compact ? 12 : 22;
+  const x1 = width - labelGutter - (compact ? 8 : 16);
+  const y0 = height - padBottom;
+
+  const all = points.map((p) => p.cents);
+  const ticks = evenTicks(Math.min(0, ...all), Math.max(0, ...all), compact ? 3 : 4);
+  const y = linear(ticks.min, ticks.max, y0, padTop);
+  const x = linear(d0, Math.max(dEnd, d0 + 1), x0, x1);
+
+  const xy = points.map((p) => ({ x: round1(x(dayNumber(p.date))), y: round1(y(p.cents)), p }));
+  const line = xy.map((pt, i) => `${i === 0 ? "M" : "L"}${pt.x} ${pt.y}`).join("");
+  const base = round1(y(Math.max(0, ticks.min)));
+  const area = `${line}L${xy[xy.length - 1].x} ${base}L${xy[0].x} ${base}z`;
+  const today = xy[0];
+  const burn = burnEnd ? { x: round1(x(burnEnd.day)), y: round1(y(burnEnd.cents)) } : null;
+
+  // Week labels: every other week on a desktop, every fourth on a phone, never on top of today.
+  const every = compact ? 4 : 2;
+  // …and never under the cash-out pill.
+  const pillX = burnEnd && burnEnd.cents === 0 && cashOutDate ? x(burnEnd.day) : null;
+  const labelled = xy
+    .slice(1)
+    .filter((_, i) => (i + 1) % every === 0)
+    .filter((pt) => pillX === null || Math.abs(pt.x - pillX) > 44);
+
+  const desc = [
+    `Today: ${dollars(cashCents)}`,
+    ...weeks.map((w) => `Week to ${shortDate(w.weekEnd)}: ${dollars(w.closingCents)}`),
+    cashOutDate ? `At the trailing burn, cash reaches $0 on ${shortDate(cashOutDate)}.` : "",
+  ]
+    .filter(Boolean)
+    .join("; ");
 
   return (
-    <div className="h-56 w-full">
-      <ResponsiveContainer width="100%" height="100%">
-        <ComposedChart data={points} margin={{ top: 8, right: 8, bottom: 0, left: 4 }}>
-          <CartesianGrid strokeDasharray="2 4" stroke="var(--border)" vertical={false} />
-          <XAxis
-            dataKey="label"
-            tickLine={false}
-            axisLine={{ stroke: "var(--border-strong)" }}
-            tick={{ fontSize: 10, fill: "var(--muted-foreground)" }}
-            interval="preserveStartEnd"
-            minTickGap={8}
-          />
-          <YAxis
-            domain={domain}
-            tickLine={false}
-            axisLine={false}
-            width={56}
-            ticks={ticks}
-            tick={{ fontSize: 10, fill: "var(--muted-foreground)" }}
-            tickFormatter={tick}
-          />
-          <Tooltip
-            cursor={{ fill: "var(--muted)" }}
-            contentStyle={{
-              background: "var(--surface-raised)",
-              border: "1px solid var(--border-strong)",
-              borderRadius: 4,
-              fontSize: 12,
-            }}
-            labelStyle={{ color: "var(--muted-foreground)" }}
-            formatter={(value, name) => [
-              formatCents(Number(value), { currency: true }),
-              name === "closingCents" ? "Closing cash" : "Net for the week",
-            ]}
-            labelFormatter={(label) => `Week of ${String(label)}`}
-          />
-          <ReferenceLine y={0} stroke="var(--border-strong)" />
-          <Bar dataKey="netCents" barSize={14} radius={[2, 2, 0, 0]} isAnimationActive={false}>
-            {points.map((p) => (
-              <Cell key={p.label} fill={p.netCents < 0 ? "var(--negative)" : "var(--positive)"} fillOpacity={0.35} />
-            ))}
-          </Bar>
-          <Line
-            type="linear"
-            dataKey="closingCents"
-            stroke="var(--primary)"
+    <svg
+      viewBox={`0 0 ${width} ${height}`}
+      role="img"
+      aria-labelledby={`${id}-t ${id}-d`}
+      className="block h-auto w-full overflow-visible"
+    >
+      <title id={`${id}-t`}>{title}</title>
+      <desc id={`${id}-d`}>{desc}</desc>
+      <defs>
+        <linearGradient id={`${id}-fill`} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stopColor="var(--blue)" stopOpacity=".22" />
+          <stop offset="1" stopColor="var(--blue)" stopOpacity="0" />
+        </linearGradient>
+      </defs>
+
+      {ticks.values.map((v) => (
+        <g key={v}>
+          <line x1={4} x2={width - labelGutter + 2} y1={round1(y(v))} y2={round1(y(v))} {...(v === 0 ? zeroLine : gridLine)} />
+          <text x={width - labelGutter + 8} y={round1(y(v)) + 3.5} {...axisText}>
+            {axisMoney(v, ticks.step)}
+          </text>
+        </g>
+      ))}
+
+      {labelled.map((pt) => (
+        <text key={pt.p.date} x={pt.x} y={height - 5} textAnchor="middle" {...axisText}>
+          {shortDate(pt.p.date)}
+        </text>
+      ))}
+
+      <path d={area} fill={`url(#${id}-fill)`} />
+      {burn ? (
+        <>
+          <path
+            d={`M${today.x} ${today.y}L${burn.x} ${burn.y}`}
+            stroke="var(--orange)"
             strokeWidth={2}
-            isAnimationActive={false}
-            dot={(props: { cx?: number; cy?: number; index?: number; payload?: ForecastChartPoint }) => (
-              <circle
-                key={props.index}
-                cx={props.cx}
-                cy={props.cy}
-                r={2.5}
-                fill={props.payload !== undefined && props.payload.closingCents < 0 ? "var(--negative)" : "var(--primary)"}
-                stroke="none"
-              />
-            )}
+            strokeDasharray="3 4"
+            strokeLinecap="round"
+            fill="none"
           />
-        </ComposedChart>
-      </ResponsiveContainer>
-    </div>
+          {burnEnd && burnEnd.cents === 0 && cashOutDate ? (
+            <>
+              <circle cx={burn.x} cy={burn.y} r={4.5} fill="var(--orange)" stroke="var(--card)" strokeWidth={2} />
+              <g transform={`translate(${burn.x} ${round1(Math.min(burn.y + 22, y0 - 4))})`}>
+                <rect x={-27} y={-11} width={54} height={20} rx={10} fill="var(--card)" stroke="var(--sep)" strokeWidth={0.6} />
+                <text y={3.6} textAnchor="middle" fontSize={10.5} fontWeight={700} fill="var(--ink-orange)" fontFamily="inherit">
+                  {shortDate(cashOutDate)}
+                </text>
+              </g>
+            </>
+          ) : null}
+        </>
+      ) : null}
+      <path d={line} fill="none" stroke="var(--blue)" strokeWidth={2.2} strokeLinejoin="round" strokeLinecap="round" />
+      {xy.slice(1).map((pt) =>
+        pt.p.cents < 0 ? <circle key={pt.p.date} cx={pt.x} cy={pt.y} r={3.2} fill="var(--red)" stroke="var(--card)" strokeWidth={1.5} /> : null,
+      )}
+
+      <circle cx={today.x} cy={today.y} r={5} fill="var(--blue)" stroke="var(--card)" strokeWidth={2.5} />
+      <g transform={`translate(${today.x + 22} ${round1(Math.max(12, today.y - 20))})`}>
+        <rect x={-24} y={-11} width={48} height={20} rx={10} fill="var(--card)" stroke="var(--sep)" strokeWidth={0.6} />
+        <text y={3.6} textAnchor="middle" fontSize={10.5} fontWeight={600} fill="var(--ink-blue)" fontFamily="inherit">
+          Today
+        </text>
+      </g>
+    </svg>
   );
 }

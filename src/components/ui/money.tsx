@@ -20,6 +20,8 @@ export interface MoneyFormatOptions {
   signed?: boolean;
   /** Render an exact zero as an em dash, as a ledger leaves an empty cell ruled but blank. */
   zeroDash?: boolean;
+  /** Round to whole dollars and drop the cents — for captions and legends, never for a ledger figure. */
+  whole?: boolean;
 }
 
 /**
@@ -27,16 +29,16 @@ export interface MoneyFormatOptions {
  * with integer arithmetic and reassembled as text.
  */
 export function formatCents(cents: number, options: MoneyFormatOptions = {}): string {
-  const { parens = false, currency = false, signed = false, zeroDash = false } = options;
+  const { parens = false, currency = false, signed = false, zeroDash = false, whole = false } = options;
   const value = Math.round(cents);
 
   if (value === 0 && zeroDash) return EM_DASH;
 
   const negative = value < 0;
   const abs = Math.abs(value);
-  const dollars = groupInteger.format(Math.floor(abs / 100));
+  const dollars = groupInteger.format(whole ? Math.floor((abs + 50) / 100) : Math.floor(abs / 100));
   const remainder = String(abs % 100).padStart(2, "0");
-  const body = `${currency ? "$" : ""}${dollars}.${remainder}`;
+  const body = `${currency ? "$" : ""}${dollars}${whole ? "" : `.${remainder}`}`;
 
   if (negative) return parens ? `(${body})` : `${MINUS}${body}`;
   return signed ? `+${body}` : body;
@@ -56,19 +58,20 @@ export function Money({
   currency,
   signed,
   zeroDash,
+  whole,
   colorPositive,
   plain,
   className,
   ...props
 }: MoneyProps) {
   const value = Math.round(cents);
-  const text = formatCents(value, { parens, currency, signed, zeroDash });
+  const text = formatCents(value, { parens, currency, signed, zeroDash, whole });
   const tone = plain
     ? undefined
     : value < 0
-      ? "text-negative"
+      ? "text-ink-red"
       : colorPositive && value > 0
-        ? "text-positive"
+        ? "text-ink-green"
         : undefined;
 
   return (

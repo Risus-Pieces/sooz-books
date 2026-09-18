@@ -1,23 +1,9 @@
 import * as React from "react";
 import Link from "next/link";
-import { Lock } from "lucide-react";
 
 import { cn } from "@/lib/cn";
-
-const MONTH_ABBR = [
-  "Jan",
-  "Feb",
-  "Mar",
-  "Apr",
-  "May",
-  "Jun",
-  "Jul",
-  "Aug",
-  "Sep",
-  "Oct",
-  "Nov",
-  "Dec",
-];
+import { Glyph } from "@/components/ui/glyph";
+import { monthShort } from "@/lib/ui/format";
 
 export interface PeriodIndicatorProps {
   year: number;
@@ -30,48 +16,31 @@ export interface PeriodIndicatorProps {
 }
 
 /**
- * The working period, stamped at the top of every page the way a date stamp sits at the head of a
- * ledger sheet. A closed period is the one piece of chrome that must never be missed, so it carries
- * a lock rather than only a word.
+ * The working period: "Sep 2026 · Open". A closed period carries a lock, the one piece of chrome
+ * that must never be missed.
  */
 export function PeriodIndicator({ year, month, status, href, className }: PeriodIndicatorProps) {
   const closed = status === "closed";
-  const label = `${MONTH_ABBR[month - 1] ?? "—"} ${year}`;
-
   const body = (
     <>
-      <span className="eyebrow hidden sm:inline">Period</span>
-      <span className="num text-sm font-semibold tracking-tight whitespace-nowrap text-foreground">{label}</span>
-      <span
-        className={cn(
-          "inline-flex items-center gap-1 rounded-xs border px-1.5 py-px text-2xs font-semibold tracking-wide uppercase",
-          closed
-            ? "border-border-strong bg-muted text-muted-foreground"
-            : "border-info/35 bg-info/10 text-info",
-        )}
-      >
-        {closed ? <Lock className="size-2.5" aria-hidden /> : null}
-        {closed ? "Closed" : "Open"}
+      {closed ? <Glyph name="lock" size={12} className="text-label2" /> : null}
+      <span className="font-medium whitespace-nowrap">
+        {monthShort(month)} {year}
       </span>
+      <span aria-hidden className="size-[3px] rounded-full bg-label3" />
+      <span className={cn("font-medium", closed ? "text-label2" : "text-ink-green")}>{closed ? "Closed" : "Open"}</span>
     </>
   );
-
-  const shell = cn("flex items-center gap-2", className);
-
+  const shell = cn("inline-flex items-center gap-1.5 text-xs text-label2", className);
   if (!href) {
     return (
-      <div data-slot="period-indicator" className={shell}>
+      <span data-slot="period-indicator" className={shell}>
         {body}
-      </div>
+      </span>
     );
   }
-
   return (
-    <Link
-      data-slot="period-indicator"
-      href={href}
-      className={cn(shell, "-mx-1.5 rounded-sm px-1.5 py-1 transition-colors hover:bg-muted max-sm:min-h-10")}
-    >
+    <Link data-slot="period-indicator" href={href} className={cn(shell, "rounded-[6px] hover:text-label")}>
       {body}
     </Link>
   );

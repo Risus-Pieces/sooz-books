@@ -1,13 +1,13 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
-import { Banknote } from 'lucide-react';
 
 import { PaymentRegister } from '@/components/arap/registers';
-import { Badge } from '@/components/ui/badge';
+import { PageToolbar } from '@/components/shell/page-toolbar';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { EmptyState } from '@/components/ui/empty-state';
-import { PageHeader } from '@/components/ui/page-header';
+import { Money } from '@/components/ui/money';
+import { ToolbarGroup, ToolbarLink } from '@/components/ui/toolbar';
 import { can } from '@/lib/auth/roles';
 import { requireUser } from '@/lib/auth/session';
 
@@ -18,43 +18,63 @@ export const metadata: Metadata = { title: 'Bill payments' };
 export default async function PaymentsPage() {
   const [user, rows] = await Promise.all([requireUser('/purchases/payments'), paymentList()]);
   const canPay = can(user.role, 'ap.pay');
+  const live = rows.filter((r) => !r.void);
+  const paidCents = live.reduce((s, r) => s + r.amountCents, 0);
+  const prepaidCents = live.reduce((s, r) => s + r.amountCents - r.appliedCents, 0);
 
   return (
-    <div className="flex flex-col gap-5">
-      <PageHeader
-        eyebrow="Purchases"
-        title="Bill payments"
-        description="Money paid against vendor bills. Card payments are marked so they never count toward a 1099-NEC."
-        meta={<Badge tone="neutral">{rows.length}</Badge>}
+    <div className="flex flex-col gap-3.5 max-md:gap-3">
+      <PageToolbar
+        title="Payments"
+        subtitle={
+          rows.length > 0 ? (
+            <>
+              {rows.length} · <Money cents={paidCents} currency plain />
+            </>
+          ) : undefined
+        }
+        info={
+          <p>
+            Money paid against vendor bills. One payment can settle several bills from the same vendor; money paid
+            before the bill arrives is kept as a prepayment. Card payments are marked so they never count toward a
+            1099-NEC.
+          </p>
+        }
         actions={
           canPay ? (
-            <Button asChild size="sm">
-              <Link href="/purchases/payments/new">
-                <Banknote />
-                Pay bills
-              </Link>
-            </Button>
-          ) : null
+            <ToolbarGroup>
+              <ToolbarLink href="/purchases/payments/new" glyph="plus" label="Pay bills" />
+            </ToolbarGroup>
+          ) : undefined
         }
       />
-      <Card>
-        {rows.length === 0 ? (
+      {rows.length === 0 ? (
+        <Card>
           <EmptyState
-            icon={<Banknote />}
+            glyph="dollar"
             title="No bill payments yet"
-            description="Pay one bill or several from the same vendor in one payment, from a Relay account or a card. It clears the bills from payables; a payment made before the bill arrives is kept as a prepayment. A matching withdrawal in the bank review can be linked to its bill there instead."
+            description="Pay one bill or several from the same vendor in one payment, from a Relay account or a card. A matching withdrawal in the bank review can be linked to its bill there instead."
             action={
               canPay ? (
-                <Button asChild size="sm">
+                <Button asChild>
                   <Link href="/purchases/payments/new">Pay bills</Link>
                 </Button>
               ) : undefined
             }
           />
-        ) : (
-          <PaymentRegister rows={rows} />
-        )}
-      </Card>
+        </Card>
+      ) : (
+        <PaymentRegister
+          rows={rows}
+          footer={
+            prepaidCents > 0 ? (
+              <>
+                <Money cents={prepaidCents} currency plain /> held as prepayment
+              </>
+            ) : undefined
+          }
+        />
+      )}
     </div>
   );
 }

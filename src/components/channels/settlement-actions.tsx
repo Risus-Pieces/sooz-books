@@ -2,9 +2,9 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { BookCheck, Link2, Undo2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { Glyph } from "@/components/ui/glyph";
 import {
   Dialog,
   DialogBody,
@@ -72,9 +72,9 @@ export function PostSettlementButton({
 
   return (
     <>
-      <Button size="sm" onClick={() => setOpen(true)} disabled={disabled} title={disabledReason ?? undefined}>
-        <BookCheck />
-        Post to ledger
+      <Button onClick={() => setOpen(true)} disabled={disabled} title={disabledReason ?? undefined}>
+        <Glyph name="check" />
+        Post
       </Button>
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent size="sm">
@@ -89,7 +89,7 @@ export function PostSettlementButton({
           {needsTaxState || defaultTaxState !== null ? (
             <DialogBody className="flex flex-col gap-1.5">
               <Label htmlFor="tax-state" required={needsTaxState}>
-                State for sales tax the file names no state for
+                Tax state
               </Label>
               <Input
                 id="tax-state"
@@ -98,11 +98,10 @@ export function PostSettlementButton({
                 onChange={(event) => setState(event.target.value.toUpperCase())}
                 placeholder="TX"
                 className="w-28"
+                aria-describedby="tax-state-note"
                 disabled={pending}
               />
-              <p className="text-xs text-muted-foreground">
-                In-person Square sales are sourced to Texas unless they happened elsewhere.
-              </p>
+              <p id="tax-state-note" className="text-xs text-label2">In-person Square sales are sourced to Texas unless they happened elsewhere.</p>
             </DialogBody>
           ) : null}
           <DialogFooter>
@@ -139,8 +138,8 @@ export function UnpostSettlementButton({ payoutId, entryNo }: { payoutId: string
 
   return (
     <>
-      <Button variant="secondary" size="sm" onClick={() => setOpen(true)}>
-        <Undo2 />
+      <Button variant="secondary" onClick={() => setOpen(true)}>
+        <Glyph name="undo" />
         Unpost
       </Button>
       <Dialog open={open} onOpenChange={setOpen}>
@@ -192,7 +191,7 @@ export function LinkDepositButton({ payoutId, deposit }: { payoutId: string; dep
         })
       }
     >
-      <Link2 />
+      <Glyph name="link" />
       {pending ? "Linking…" : "Link"}
     </Button>
   );

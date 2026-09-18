@@ -2,10 +2,11 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { Upload } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Glyph } from "@/components/ui/glyph";
+import { ToolbarButton } from "@/components/ui/toolbar";
 import {
   Dialog,
   DialogBody,
@@ -28,7 +29,7 @@ import { formatUnits, type ChannelOption, type ProductToCreateInput, type Shipme
  * first, always: nothing is written until the preview has been read and every
  * unknown item has been confirmed.
  */
-export function ShipmentsImport({ channels, variant = "default" }: { channels: readonly ChannelOption[]; variant?: "default" | "secondary" }) {
+export function ShipmentsImport({ channels, variant = "default" }: { channels: readonly ChannelOption[]; variant?: "default" | "secondary" | "toolbar" }) {
   const router = useRouter();
   const [open, setOpen] = React.useState(false);
   const [file, setFile] = React.useState<File | null>(null);
@@ -89,10 +90,14 @@ export function ShipmentsImport({ channels, variant = "default" }: { channels: r
 
   return (
     <>
-      <Button size="sm" variant={variant} onClick={() => setOpen(true)}>
-        <Upload />
-        Import shipments
-      </Button>
+      {variant === "toolbar" ? (
+        <ToolbarButton glyph="import" label="Import shipments" onClick={() => setOpen(true)} />
+      ) : (
+        <Button variant={variant} onClick={() => setOpen(true)}>
+          <Glyph name="import" />
+          Import shipments
+        </Button>
+      )}
       <Dialog
         open={open}
         onOpenChange={(next) => {
@@ -141,8 +146,8 @@ export function ShipmentsImport({ channels, variant = "default" }: { channels: r
 
             {preview ? (
               <div className="flex flex-col gap-4">
-                <p className="text-xs text-muted-foreground">
-                  <span className="text-foreground">{preview.filename}</span> · {preview.rows.data} rows read,{" "}
+                <p className="text-xs text-label2">
+                  <span className="text-label">{preview.filename}</span> · {preview.rows.data} rows read,{" "}
                   {preview.rows.used} used, {preview.rows.excluded} excluded, {preview.rows.unreadable} unreadable
                 </p>
                 <BlockerList blockers={preview.blockers} />
@@ -158,7 +163,7 @@ export function ShipmentsImport({ channels, variant = "default" }: { channels: r
                 ) : null}
                 <UnknownItems items={preview.unknownItems} value={create} onChange={setCreate} />
                 {preview.lines.length > 0 ? (
-                  <div className="overflow-hidden rounded-sm border border-border">
+                  <div className="overflow-hidden rounded-[12px] bg-inset">
                     <TableScroll className="max-h-72">
                       <Table caption="Shipments to import" className="min-w-[34rem]">
                         <thead>
@@ -172,10 +177,10 @@ export function ShipmentsImport({ channels, variant = "default" }: { channels: r
                         </thead>
                         <tbody>
                           {preview.lines.map((l) => (
-                            <tr key={l.key} className="rule-row">
+                            <tr key={l.key} className="[&>td]:rule-row">
                               <Td className="num">{l.period}</Td>
                               <Td>
-                                {l.productSku && l.productSku !== l.label ? <span className="num mr-2 text-xs text-muted-foreground">{l.productSku}</span> : null}
+                                {l.productSku && l.productSku !== l.label ? <span className="num mr-2 text-xs text-label2">{l.productSku}</span> : null}
                                 {l.label}
                                 {l.productSku === null ? (
                                   <Badge tone="warning" size="sm" className="ml-2">
@@ -187,7 +192,7 @@ export function ShipmentsImport({ channels, variant = "default" }: { channels: r
                               <Td align="right" className="num">
                                 {formatUnits(l.units)}
                               </Td>
-                              <Td align="right" className="num text-muted-foreground">
+                              <Td align="right" className="num text-label2">
                                 {l.returns === 0 ? "—" : formatUnits(l.returns)}
                               </Td>
                             </tr>
@@ -204,7 +209,7 @@ export function ShipmentsImport({ channels, variant = "default" }: { channels: r
                       type="checkbox"
                       checked={replace}
                       onChange={(e) => setReplace(e.target.checked)}
-                      className="mt-0.5 size-3.5 accent-[var(--color-primary)]"
+                      className="mt-0.5 size-4 accent-[var(--blue)]"
                     />
                     <span>
                       Replace the shipments already imported for {clashes.map((c) => c.label).join(", ")}. Draft COGS for

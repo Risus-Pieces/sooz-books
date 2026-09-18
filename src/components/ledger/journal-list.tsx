@@ -1,440 +1,212 @@
-"use client";
-
 import * as React from "react";
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
-import { BookOpen, ChevronDown, ChevronRight, FilterX, Search } from "lucide-react";
 
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
-import { DateInput } from "@/components/ui/date-input";
+import { SplitView } from "@/components/ui/detail-pane";
 import { EmptyState } from "@/components/ui/empty-state";
-import { FilterDisclosure } from "@/components/ui/filter-disclosure";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { Glyph } from "@/components/ui/glyph";
+import { Dot, IconBadge } from "@/components/ui/icon-badge";
+import { InsetGroup, ListRow } from "@/components/ui/inset-group";
 import { Money } from "@/components/ui/money";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { cn } from "@/lib/cn";
+import { categoryForCode } from "@/lib/ui/categories";
+import { monthLong, shortDate } from "@/lib/ui/format";
 
-import { AccountCombobox } from "./account-combobox";
-import {
-  sourceLabel,
-  type AccountOption,
-  type JournalFilters,
-  type JournalLineRow,
-  type JournalRow,
-} from "./types";
-
-const ANY = "__any__";
+import { DetailSheet } from "./detail-sheet";
+import { EntryPreview } from "./entry-preview";
+import { journalQuery } from "./journal-query";
+import type { JournalFilters, JournalLineRow, JournalRow } from "./types";
+import { leadAccount, shortAccountName, sourceVisual } from "./visuals";
 
 export interface JournalListProps {
   rows: readonly JournalRow[];
-  /** The lines of every row on this page, so expanding one costs no round trip. */
+  /** The lines of every row on this page, so choosing one costs no round trip. */
   lines: Readonly<Record<string, JournalLineRow[]>>;
   filters: JournalFilters;
-  accounts: readonly AccountOption[];
-  sourceTypes: readonly string[];
   page: number;
   pageSize: number;
   total: number;
   /** Sum of debits over every entry the filter matches, not just this page. */
   totalDebitCents: number;
+  /** The entry the URL names, if any. */
+  selectedId: string | null;
+  canPost: boolean;
+  /** The year the books are in: month headers of other years carry theirs. */
+  currentYear: number;
+}
+
+interface MonthGroup {
+  key: string;
+  label: string;
+  rows: JournalRow[];
+}
+
+function byMonth(rows: readonly JournalRow[], currentYear: number): MonthGroup[] {
+  const groups: MonthGroup[] = [];
+  for (const row of rows) {
+    const key = row.date.slice(0, 7);
+    const last = groups[groups.length - 1];
+    if (last && last.key === key) {
+      last.rows.push(row);
+      continue;
+    }
+    const year = Number(key.slice(0, 4));
+    const month = Number(key.slice(5, 7));
+    groups.push({ key, label: year === currentYear ? monthLong(month) : `${monthLong(month)} ${year}`, rows: [row] });
+  }
+  return groups;
 }
 
 /**
- * The journal register: every entry, narrowed by whatever question is being
- * asked of it. Filtering and paging happen on the server — the register runs to
- * tens of thousands of rows within a year — so each control writes itself into
- * the URL, which also makes a filtered view something that can be shared.
+ * The journal register as a grouped list: one row per entry under its month, the chosen entry's
+ * flow and lines beside it on a desktop, in a sheet on a phone. Filtering and paging stay on the
+ * server, in the URL.
  */
 export function JournalList({
   rows,
   lines,
   filters,
-  accounts,
-  sourceTypes,
   page,
   pageSize,
   total,
   totalDebitCents,
+  selectedId,
+  canPost,
+  currentYear,
 }: JournalListProps) {
-  const router = useRouter();
-  const pathname = usePathname();
-  // Seeded from the filters the server matched on. The page remounts this
-  // component whenever those change, so the panel never drifts from the URL.
-  const [draft, setDraft] = React.useState<JournalFilters>(filters);
-  const [expanded, setExpanded] = React.useState<string | null>(null);
-
-  const apply = React.useCallback(
-    (next: JournalFilters, nextPage = 1) => {
-      const params = new URLSearchParams();
-      for (const [key, value] of Object.entries(next)) {
-        if (value !== "") params.set(key, value);
-      }
-      if (nextPage > 1) params.set("page", String(nextPage));
-      const query = params.toString();
-      router.push(query === "" ? pathname : `${pathname}?${query}`);
-    },
-    [pathname, router],
-  );
-
-  const set = React.useCallback(
-    <K extends keyof JournalFilters>(key: K, value: JournalFilters[K]) => {
-      setDraft((current) => ({ ...current, [key]: value }));
-    },
-    [],
-  );
-
   const active = Object.values(filters).some((value) => value !== "");
-  const lastPage = Math.max(1, Math.ceil(total / pageSize));
-  const firstRow = total === 0 ? 0 : (page - 1) * pageSize + 1;
-  const lastRow = Math.min(page * pageSize, total);
-  const filterSummary = `${active ? "Filtered · " : ""}${total === 1 ? "1 entry" : `${total} entries`}`;
+  const pageExtra: Record<string, string> = page > 1 ? { page: String(page) } : {};
+  const hrefFor = (id: string) => `/ledger?${journalQuery(filters, { ...pageExtra, entry: id })}`;
+  const closeQuery = journalQuery(filters, pageExtra);
+  const closeHref = closeQuery === "" ? "/ledger" : `/ledger?${closeQuery}`;
 
-  return (
-    <div className="flex flex-col gap-4">
-      <Card>
-        <FilterDisclosure triggerClassName="p-3" summary={filterSummary}>
-          <form
-            className="grid grid-cols-2 gap-3 p-3 max-sm:pt-0 md:grid-cols-2 xl:grid-cols-4"
-            onSubmit={(event) => {
-              event.preventDefault();
-              apply(draft);
-            }}
-          >
-            <Field label="From" half>
-              <DateInput value={draft.from} onValueChange={(value) => set("from", value)} />
-            </Field>
-            <Field label="To" half>
-              <DateInput value={draft.to} onValueChange={(value) => set("to", value)} />
-            </Field>
-            <Field label="Status">
-              <Select
-                value={draft.status === "" ? ANY : draft.status}
-                onValueChange={(value) => set("status", value === ANY ? "" : value)}
-              >
-                <SelectTrigger aria-label="Status">
-                  <SelectValue placeholder="Any status" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value={ANY}>Any status</SelectItem>
-                  <SelectItem value="posted">Posted</SelectItem>
-                  <SelectItem value="draft">Draft</SelectItem>
-                </SelectContent>
-              </Select>
-            </Field>
-            <Field label="Source">
-              <Select
-                value={draft.sourceType === "" ? ANY : draft.sourceType}
-                onValueChange={(value) => set("sourceType", value === ANY ? "" : value)}
-              >
-                <SelectTrigger aria-label="Source">
-                  <SelectValue placeholder="Any source" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value={ANY}>Any source</SelectItem>
-                  {sourceTypes.map((source) => (
-                    <SelectItem key={source} value={source}>
-                      {sourceLabel(source)}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </Field>
-            <Field label="Account">
-              <AccountCombobox
-                accounts={accounts}
-                value={draft.accountId === "" ? null : draft.accountId}
-                placeholder="Any account"
-                className="h-8"
-                onChange={(accountId) => set("accountId", accountId)}
-              />
-            </Field>
-            <Field label="Amount from" half>
-              <Input
-                numeric
-                inputMode="decimal"
-                placeholder="0.00"
-                value={draft.minAmount}
-                onChange={(event) => set("minAmount", event.target.value)}
-              />
-            </Field>
-            <Field label="Amount to" half>
-              <Input
-                numeric
-                inputMode="decimal"
-                placeholder="0.00"
-                value={draft.maxAmount}
-                onChange={(event) => set("maxAmount", event.target.value)}
-              />
-            </Field>
-            <Field label="Memo contains">
-              <Input
-                placeholder="Search memos"
-                value={draft.q}
-                onChange={(event) => set("q", event.target.value)}
-              />
-            </Field>
-
-            <div className="col-span-2 flex flex-wrap items-end gap-2 xl:col-span-4">
-              <Button type="submit" size="sm">
-                <Search />
-                Apply
+  if (rows.length === 0) {
+    return (
+      <div className="rounded-2xl bg-card shadow-card max-sm:rounded-[22px]">
+        <EmptyState
+          glyph={active ? "filter" : "book"}
+          title={active ? "No matching entries" : "No entries yet"}
+          description={
+            active
+              ? "Widen the date range or clear a filter."
+              : "Bank lines post here once they are approved in review, as do bills, invoices and payouts. Write an entry by hand for anything else."
+          }
+          action={
+            active ? (
+              <Button asChild variant="secondary">
+                <Link href="/ledger">Clear filters</Link>
               </Button>
-              {active ? (
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  onClick={() =>
-                    apply({
-                      from: "",
-                      to: "",
-                      status: "",
-                      sourceType: "",
-                      accountId: "",
-                      minAmount: "",
-                      maxAmount: "",
-                      q: "",
-                    })
-                  }
-                >
-                  <FilterX />
-                  Clear
-                </Button>
-              ) : null}
-              <p className="ml-auto text-xs text-muted-foreground">
-                {total === 0 ? "No entries" : `${firstRow}–${lastRow} of ${total}`}
-                {total === 0 ? null : (
-                  <>
-                    {" · "}
-                    <Money cents={totalDebitCents} currency plain className="text-xs" /> in debits
-                  </>
-                )}
-              </p>
-            </div>
-          </form>
-        </FilterDisclosure>
-      </Card>
-
-      <Card>
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-3xl border-separate border-spacing-0 text-sm">
-            <caption className="sr-only">Journal entries</caption>
-            <thead>
-              <tr>
-                <Th className="w-8" />
-                <Th className="w-20 text-right">Entry</Th>
-                <Th className="w-28">Date</Th>
-                <Th>Memo</Th>
-                <Th className="w-32">Source</Th>
-                <Th className="w-32 text-right">Debits</Th>
-                <Th className="w-24">Status</Th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.length === 0 ? (
-                <tr>
-                  <td colSpan={7}>
-                    <EmptyState
-                      icon={active ? undefined : <BookOpen />}
-                      title={active ? "No entry matches those filters" : "The journal is empty"}
-                      description={
-                        active
-                          ? "Widen the date range or clear a filter."
-                          : "Bank lines post here once they are approved in the review queue, as do bills, invoices and payouts. Write an entry by hand for anything else."
-                      }
-                      action={
-                        active ? undefined : (
-                          <Button asChild size="sm">
-                            <Link href="/banking/review">Open the review queue</Link>
-                          </Button>
-                        )
-                      }
-                      secondaryAction={
-                        <Button asChild size="sm" variant="secondary">
-                          <Link href="/ledger/new">New entry</Link>
-                        </Button>
-                      }
-                    />
-                  </td>
-                </tr>
-              ) : (
-                rows.map((row) => {
-                  const open = expanded === row.id;
-                  return (
-                    <React.Fragment key={row.id}>
-                      <tr className={cn("rule-row align-middle", open && "bg-primary/5")}>
-                        <Td>
-                          <button
-                            type="button"
-                            aria-expanded={open}
-                            aria-label={open ? `Hide lines of entry ${row.entryNo}` : `Show lines of entry ${row.entryNo}`}
-                            className="relative rounded-xs p-0.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground max-sm:after:absolute max-sm:after:-inset-3 max-sm:after:content-['']"
-                            onClick={() => setExpanded(open ? null : row.id)}
-                          >
-                            {open ? (
-                              <ChevronDown className="size-3.5" />
-                            ) : (
-                              <ChevronRight className="size-3.5" />
-                            )}
-                          </button>
-                        </Td>
-                        <Td className="num text-right">
-                          <Link href={`/ledger/${row.id}`} className="hover:underline">
-                            #{row.entryNo}
-                          </Link>
-                        </Td>
-                        <Td className="num">{row.date}</Td>
-                        <Td>
-                          <Link href={`/ledger/${row.id}`} className="hover:underline">
-                            {row.memo ?? <span className="text-muted-foreground">No memo</span>}
-                          </Link>
-                          {row.reversesEntryNo === null ? null : (
-                            <span className="ml-2 text-2xs text-muted-foreground">
-                              reverses #{row.reversesEntryNo}
-                            </span>
-                          )}
-                          {row.reversedByEntryNo === null ? null : (
-                            <span className="ml-2 text-2xs text-muted-foreground">
-                              reversed by #{row.reversedByEntryNo}
-                            </span>
-                          )}
-                        </Td>
-                        <Td className="text-xs text-muted-foreground">{sourceLabel(row.sourceType)}</Td>
-                        <Td className="text-right">
-                          <Money cents={row.debitCents} plain />
-                        </Td>
-                        <Td>
-                          <Badge tone={row.status === "posted" ? "neutral" : "warning"}>
-                            {row.status}
-                          </Badge>
-                        </Td>
-                      </tr>
-                      {open ? (
-                        <tr className="bg-surface-sunken/40">
-                          <td colSpan={7} className="rule-row px-3 py-2">
-                            <LineTable lines={lines[row.id] ?? []} />
-                          </td>
-                        </tr>
-                      ) : null}
-                    </React.Fragment>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
-        </div>
-
-        {lastPage > 1 ? (
-          <div className="flex items-center justify-between gap-3 border-t border-border px-4 py-2.5">
-            <Button
-              type="button"
-              variant="secondary"
-              size="sm"
-              disabled={page <= 1}
-              onClick={() => apply(filters, page - 1)}
-            >
-              Previous
-            </Button>
-            <span className="num text-xs text-muted-foreground">
-              Page {page} of {lastPage}
-            </span>
-            <Button
-              type="button"
-              variant="secondary"
-              size="sm"
-              disabled={page >= lastPage}
-              onClick={() => apply(filters, page + 1)}
-            >
-              Next
-            </Button>
-          </div>
-        ) : null}
-      </Card>
-    </div>
-  );
-}
-
-function LineTable({ lines }: { lines: readonly JournalLineRow[] }) {
-  if (lines.length === 0) {
-    return <p className="px-1 py-2 text-xs text-muted-foreground">This draft has no lines yet.</p>;
+            ) : canPost ? (
+              <Button asChild>
+                <Link href="/ledger/new">New entry</Link>
+              </Button>
+            ) : undefined
+          }
+        />
+      </div>
+    );
   }
 
-  return (
-    <table className="w-full border-separate border-spacing-0 text-sm">
-      <thead>
-        <tr>
-          <Th className="w-8 text-right">#</Th>
-          <Th>Account</Th>
-          <Th>Memo</Th>
-          <Th className="w-28">Channel</Th>
-          <Th className="w-28 text-right">Debit</Th>
-          <Th className="w-28 rule-gutter text-right">Credit</Th>
-        </tr>
-      </thead>
-      <tbody>
-        {lines.map((line) => (
-          <tr key={line.id} className="align-middle">
-            <Td className="num text-right text-xs text-muted-foreground">{line.lineNo}</Td>
-            <Td>
-              <span className="num mr-2 text-xs text-muted-foreground">{line.accountCode}</span>
-              {line.accountName}
-            </Td>
-            <Td className="text-xs text-muted-foreground">{line.memo ?? "—"}</Td>
-            <Td className="text-xs text-muted-foreground">{line.channelCode ?? "—"}</Td>
-            <Td className="text-right">
-              <Money cents={line.debitCents} plain zeroDash />
-            </Td>
-            <Td className="rule-gutter text-right">
-              <Money cents={line.creditCents} plain zeroDash />
-            </Td>
-          </tr>
-        ))}
-      </tbody>
-    </table>
-  );
-}
+  // A desktop always shows one entry beside the list; a phone only when one was chosen.
+  const shown = rows.find((row) => row.id === selectedId) ?? rows[0];
+  const groups = byMonth(rows, currentYear);
 
-function Field({
-  label,
-  children,
-  half = false,
-}: {
-  label: string;
-  children: React.ReactNode;
-  /** Takes half a row on a phone — dates and amounts pair up; everything else runs full width. */
-  half?: boolean;
-}) {
-  return (
-    <div className={cn("flex min-w-0 flex-col gap-1.5", !half && "max-md:col-span-2")}>
-      <Label>{label}</Label>
-      {children}
+  const row = (entry: JournalRow, variant: "plain" | "inset") => {
+    const entryLines = lines[entry.id] ?? [];
+    const lead = leadAccount(entryLines);
+    const category = lead ? categoryForCode(lead.accountCode) : null;
+    const source = sourceVisual(entry.sourceType);
+    return (
+      <ListRow
+        key={entry.id}
+        href={hrefFor(entry.id)}
+        selected={variant === "plain" && entry.id === shown.id}
+        leading={<IconBadge glyph={source.glyph} tint={source.tint} size={variant === "plain" ? "lg" : "xl"} />}
+        title={entry.memo ?? source.label}
+        trailing={<Money cents={entry.debitCents} currency plain />}
+        subtitle={
+          <>
+            <span className="num">#{entry.entryNo}</span>
+            {category && lead ? (
+              <>
+                <Dot tint={category.tint} size={7} />
+                <span className="truncate">{shortAccountName(lead.accountName)}</span>
+              </>
+            ) : null}
+            {entry.status === "draft" ? <Glyph name="pencil" size={12} className="text-ink-orange" label="Draft" /> : null}
+            {entry.reversedByEntryNo !== null ? <Glyph name="undo" size={12} label="Reversed" /> : null}
+          </>
+        }
+        detail={shortDate(entry.date)}
+      />
+    );
+  };
+
+  const lastPage = Math.max(1, Math.ceil(total / pageSize));
+  const firstRow = (page - 1) * pageSize + 1;
+  const lastRow = Math.min(page * pageSize, total);
+  const pageHref = (target: number) => {
+    const query = journalQuery(filters, target > 1 ? { page: String(target) } : {});
+    return query === "" ? "/ledger" : `/ledger?${query}`;
+  };
+
+  const footer = (
+    <div className="flex items-center justify-between gap-3 px-4 py-3 text-xs text-label2">
+      <span className="num">
+        {firstRow}–{lastRow} of {total} · <Money cents={totalDebitCents} currency plain />
+      </span>
+      {lastPage > 1 ? (
+        <span className="flex items-center gap-1.5">
+          <Button asChild variant="secondary" size="sm">
+            <Link href={pageHref(Math.max(1, page - 1))} aria-label="Previous page" aria-disabled={page <= 1} className={page <= 1 ? "pointer-events-none opacity-45" : undefined}>
+              <Glyph name="chevron-left" size={13} />
+            </Link>
+          </Button>
+          <span className="num">
+            {page} / {lastPage}
+          </span>
+          <Button asChild variant="secondary" size="sm">
+            <Link href={pageHref(Math.min(lastPage, page + 1))} aria-label="Next page" aria-disabled={page >= lastPage} className={page >= lastPage ? "pointer-events-none opacity-45" : undefined}>
+              <Glyph name="chevron-right" size={13} />
+            </Link>
+          </Button>
+        </span>
+      ) : null}
     </div>
   );
-}
 
-function Th({ className, children }: { className?: string; children?: React.ReactNode }) {
+  const preview = <EntryPreview row={shown} lines={lines[shown.id] ?? []} canPost={canPost} />;
+
   return (
-    <th
-      scope="col"
-      className={cn(
-        "rule-head bg-surface-sunken px-3 py-1.5 text-left text-2xs font-semibold tracking-wider text-muted-foreground uppercase",
-        className,
-      )}
-    >
-      {children}
-    </th>
-  );
-}
+    <>
+      {/* Desktop: the list pane and the entry beside it. */}
+      <SplitView
+        className="overflow-clip rounded-2xl bg-bg shadow-card max-lg:hidden"
+        listWidth={400}
+        list={
+          <div className="px-1.5 pb-2">
+            {groups.map((group) => (
+              <InsetGroup key={group.key} variant="plain" header={group.label} separatorInset={48}>
+                {group.rows.map((entry) => row(entry, "plain"))}
+              </InsetGroup>
+            ))}
+            {footer}
+          </div>
+        }
+        detail={preview}
+      />
 
-function Td({ className, children }: { className?: string; children?: React.ReactNode }) {
-  return <td className={cn("px-3 py-1.5 align-middle", className)}>{children}</td>;
+      {/* Phone and tablet: inset groups; a chosen entry rises in a sheet. */}
+      <div className="flex flex-col lg:hidden">
+        {groups.map((group) => (
+          <InsetGroup key={group.key} header={group.label} separatorInset={63} className="first:[&>div:first-child]:pt-1">
+            {group.rows.map((entry) => row(entry, "inset"))}
+          </InsetGroup>
+        ))}
+        {footer}
+        <DetailSheet selected={selectedId !== null} closeHref={closeHref} title={shown.memo ?? `Entry #${shown.entryNo}`}>
+          {preview}
+        </DetailSheet>
+      </div>
+    </>
+  );
 }

@@ -1,9 +1,9 @@
 "use client";
 
 import * as React from "react";
-import { Plus, Trash2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { Glyph } from "@/components/ui/glyph";
 import { Input } from "@/components/ui/input";
 import { formatCents } from "@/components/ui/money";
 import {
@@ -132,19 +132,19 @@ export function EntryLinesEditor({
   );
 
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full min-w-4xl border-separate border-spacing-0 text-sm">
+    <div>
+      <table className="w-full border-separate border-spacing-0 text-sm md:min-w-[860px]">
         <caption className="sr-only">Journal entry lines</caption>
-        <thead>
+        <thead className="max-md:sr-only">
           <tr>
-            <Th className="w-8 text-right">#</Th>
+            <Th className="w-10 pl-5 text-right">#</Th>
             <Th className="min-w-56">Account</Th>
             <Th className="w-32 text-right">Debit</Th>
-            <Th className="w-32 rule-gutter text-right">Credit</Th>
-            <Th className="min-w-48">Memo</Th>
+            <Th className="w-32 text-right">Credit</Th>
+            <Th className="min-w-44">Memo</Th>
             <Th className="w-36">Channel</Th>
             <Th className="w-40">Product</Th>
-            <Th className="w-8">
+            <Th className="w-10 pr-4">
               <span className="sr-only">Remove</span>
             </Th>
           </tr>
@@ -158,10 +158,14 @@ export function EntryLinesEditor({
                 <tr
                   onKeyDown={(event) => onRowKeyDown(event, line.key)}
                   onFocus={() => onFocusLine(line.key)}
-                  className={cn("align-middle", focusedKey === line.key && "bg-primary/5")}
+                  className={cn(
+                    "align-middle transition-colors",
+                    "max-md:mx-4 max-md:mb-2.5 max-md:grid max-md:grid-cols-2 max-md:gap-2 max-md:rounded-[14px] max-md:bg-inset max-md:p-3",
+                    focusedKey === line.key && "md:bg-tint-blue/[0.06]",
+                  )}
                 >
-                  <Td className="num text-right text-xs text-muted-foreground">{index + 1}</Td>
-                  <Td>
+                  <Td className="num pl-5 text-right text-xs text-label2 max-md:hidden">{index + 1}</Td>
+                  <Td className="max-md:col-span-2">
                     <AccountCombobox
                       accounts={accounts}
                       value={line.accountId}
@@ -172,7 +176,7 @@ export function EntryLinesEditor({
                         patchLine(line.key, (current) => ({ ...current, accountId }));
                         onAccountUsed(accountId);
                       }}
-                      className="h-7"
+                      className={cn(CELL, "md:h-8")}
                       id={`account-${line.key}`}
                       // The trigger is where Enter lands after a row is added.
                       triggerRef={(node) => registerTrigger(line.key, node)}
@@ -190,16 +194,15 @@ export function EntryLinesEditor({
                     line={line}
                     disabled={disabled}
                     invalid={amounts.error !== null}
-                    gutter
                     onChange={patchLine}
                   />
-                  <Td>
+                  <Td className="max-md:col-span-2">
                     <Input
                       value={line.memo}
                       disabled={disabled}
-                      placeholder="Line memo"
+                      placeholder="Memo"
                       aria-label={`Memo, line ${index + 1}`}
-                      className="h-7"
+                      className={CELL}
                       onChange={(event) =>
                         patchLine(line.key, (current) => ({ ...current, memo: event.target.value }))
                       }
@@ -235,7 +238,7 @@ export function EntryLinesEditor({
                       }
                     />
                   </Td>
-                  <Td className="text-right">
+                  <Td className="pr-4 text-right max-md:col-span-2 max-md:text-left">
                     <Button
                       type="button"
                       variant="ghost"
@@ -243,15 +246,17 @@ export function EntryLinesEditor({
                       disabled={disabled || (lines.length === 1 && isLineEmpty(line))}
                       aria-label={`Remove line ${index + 1}`}
                       onClick={() => removeLine(line.key)}
+                      className="text-label2 hover:text-ink-red max-md:w-full max-md:gap-1.5 max-md:text-sm"
                     >
-                      <Trash2 />
+                      <Glyph name="trash" size={15} />
+                      <span className="md:hidden">Remove</span>
                     </Button>
                   </Td>
                 </tr>
                 {error === undefined ? null : (
-                  <tr>
-                    <td />
-                    <td colSpan={7} className="pb-1 text-xs text-negative">
+                  <tr className="max-md:block max-md:px-4 max-md:pb-2">
+                    <td className="max-md:hidden" />
+                    <td colSpan={7} className="pb-1.5 text-xs font-medium text-ink-red max-md:block">
                       {error}
                     </td>
                   </tr>
@@ -260,31 +265,37 @@ export function EntryLinesEditor({
             );
           })}
         </tbody>
+        <tfoot className="max-md:hidden">
+          <tr>
+            <td />
+            <td className="px-1.5 py-2 text-xs font-semibold text-label2">Total</td>
+            <td className="num px-3.5 py-2 text-right font-bold">{formatCents(totals.debitCents)}</td>
+            <td className="num px-3.5 py-2 text-right font-bold">{formatCents(totals.creditCents)}</td>
+            <td colSpan={4} />
+          </tr>
+        </tfoot>
       </table>
 
-      <div className="pt-2">
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          disabled={disabled}
-          onClick={() => addLineAfter(null)}
-        >
-          <Plus />
+      <div className="hairline-t px-3 py-2 max-md:px-4">
+        <Button type="button" variant="ghost" size="sm" disabled={disabled} onClick={() => addLineAfter(null)} className="text-ink-blue">
+          <Glyph name="plus" size={14} />
           Add line
-          <span className="text-2xs text-muted-foreground">or press Enter</span>
+          <kbd className="ml-1 hidden rounded-[4px] bg-fill2 px-1 text-2xs font-medium text-label2 md:inline">⏎</kbd>
         </Button>
       </div>
     </div>
   );
 }
 
+/** A Numbers cell: no bezel until hovered or focused. */
+const CELL = "h-8 rounded-[6px] bg-transparent shadow-none hover:bg-fill2 max-md:bg-card max-md:shadow-ctl";
+
 function Th({ className, children }: { className?: string; children: React.ReactNode }) {
   return (
     <th
       scope="col"
       className={cn(
-        "rule-head px-1.5 pb-1 text-left text-2xs font-semibold tracking-wider text-muted-foreground uppercase",
+        "rule-head bg-card px-1.5 pt-1 pb-1.5 text-left text-xs font-semibold text-label2",
         className,
       )}
     >
@@ -294,7 +305,7 @@ function Th({ className, children }: { className?: string; children: React.React
 }
 
 function Td({ className, children }: { className?: string; children?: React.ReactNode }) {
-  return <td className={cn("px-1.5 py-1 align-middle", className)}>{children}</td>;
+  return <td className={cn("rule-row px-1.5 py-0.5 align-middle max-md:border-0 max-md:p-0", className)}>{children}</td>;
 }
 
 function AmountCell({
@@ -302,14 +313,12 @@ function AmountCell({
   line,
   disabled,
   invalid,
-  gutter,
   onChange,
 }: {
   side: AmountSide;
   line: DraftLineState;
   disabled: boolean;
   invalid: boolean;
-  gutter?: boolean;
   onChange: (key: string, patch: (line: DraftLineState) => DraftLineState) => void;
 }) {
   const value = side === "debit" ? line.debit : line.credit;
@@ -333,7 +342,8 @@ function AmountCell({
   }, [line, onChange, side, value]);
 
   return (
-    <td className={cn("px-1.5 py-1 align-middle", gutter && "rule-gutter")}>
+    <td className="rule-row px-1.5 py-0.5 align-middle max-md:border-0 max-md:p-0">
+      <span className="mb-1 block text-2xs font-medium text-label2 md:hidden">{side === "debit" ? "Debit" : "Credit"}</span>
       <Input
         numeric
         inputMode="decimal"
@@ -343,7 +353,7 @@ function AmountCell({
         invalid={invalid}
         aria-label={side === "debit" ? "Debit" : "Credit"}
         placeholder="0.00"
-        className="h-7"
+        className={cn(invalid ? "h-8 rounded-[6px]" : CELL, "font-medium")}
         onChange={(event) => onChange(line.key, (current) => setAmount(current, side, event.target.value))}
         onBlur={normalise}
       />
@@ -372,12 +382,12 @@ function DimensionSelect({
       disabled={disabled || options.length === 0}
       onValueChange={(next) => onChange(next === NONE ? null : next)}
     >
-      <SelectTrigger aria-label={label} className="h-7">
+      <SelectTrigger aria-label={label} className={CELL}>
         <SelectValue placeholder={placeholder} />
       </SelectTrigger>
       <SelectContent>
         <SelectItem value={NONE}>
-          <span className="text-muted-foreground">{placeholder}: none</span>
+          <span className="text-label2">No {placeholder.toLowerCase()}</span>
         </SelectItem>
         {options.map((option) => (
           <SelectItem key={option.value} value={option.value}>

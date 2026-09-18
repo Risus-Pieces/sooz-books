@@ -1,12 +1,12 @@
 "use client";
 
 import * as React from "react";
-import { ArrowLeftRight, FileCheck2, Link2, Plus, Trash2, TriangleAlert } from "lucide-react";
 
 import { AccountCombobox } from "@/components/ledger/account-combobox";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Glyph } from "@/components/ui/glyph";
 import {
   Dialog,
   DialogBody,
@@ -194,7 +194,7 @@ function SplitDialogBody({
               {lines.map((line, index) => (
                 <div
                   key={line.key}
-                  className="grid grid-cols-[minmax(0,1fr)_7.5rem_2rem] gap-x-2 gap-y-1 border-b border-border/60 pb-2"
+                  className="grid grid-cols-[minmax(0,1fr)_7.5rem_2rem] gap-x-2 gap-y-1 border-b border-sep/60 pb-2"
                 >
                   <AccountCombobox
                     accounts={accounts}
@@ -229,7 +229,7 @@ function SplitDialogBody({
                     disabled={lines.length <= 2}
                     onClick={() => setLines((current) => current.filter((l) => l.key !== line.key))}
                   >
-                    <Trash2 />
+                    <Glyph name="trash" />
                   </Button>
                 </div>
               ))}
@@ -247,19 +247,19 @@ function SplitDialogBody({
                     ]);
                   }}
                 >
-                  <Plus />
+                  <Glyph name="plus" />
                   Add line
                 </Button>
-                <p className="text-xs text-muted-foreground">
+                <p className="text-xs text-label2">
                   {remaining === 0 ? (
-                    <span className="text-positive">Fully allocated</span>
+                    <span className="text-ink-green">Fully allocated</span>
                   ) : remaining > 0 ? (
                     <>
-                      <Money cents={remaining} currency plain className="text-foreground" /> still to allocate
+                      <Money cents={remaining} currency plain className="text-label" /> still to allocate
                     </>
                   ) : (
                     <>
-                      <Money cents={-remaining} currency plain className="text-negative" /> over the transaction
+                      <Money cents={-remaining} currency plain className="text-ink-red" /> over the transaction
                     </>
                   )}
                 </p>
@@ -327,23 +327,23 @@ function TransferDialogBody({ row, onClose, onPosted }: TransferDialogProps) {
             </DialogHeader>
             <DialogBody className="p-0">
               {error !== null ? (
-                <p className="p-4 text-sm text-negative">{error}</p>
+                <p className="p-4 text-sm text-ink-red">{error}</p>
               ) : candidates === null ? (
-                <p className="p-4 text-sm text-muted-foreground">Looking for the other leg…</p>
+                <p className="p-4 text-sm text-label2">Looking for the other leg…</p>
               ) : candidates.length === 0 ? (
-                <p className="p-4 text-sm text-muted-foreground">
+                <p className="p-4 text-sm text-label2">
                   No unposted {row.amountCents < 0 ? "deposit" : "withdrawal"} of{" "}
                   <Money cents={Math.abs(row.amountCents)} currency plain /> on another account within ten days.
                   If this money went to or came from someone else, it is not a transfer: code it to an account instead.
                 </p>
               ) : (
-                <ul className="divide-y divide-border">
+                <ul className="divide-y divide-sep">
                   {candidates.map((candidate) => (
                     <li key={candidate.id} className="flex items-center gap-3 px-4 py-2">
-                      <span className="num w-14 shrink-0 text-xs text-muted-foreground">{shortDate(candidate.txnDate)}</span>
+                      <span className="num w-14 shrink-0 text-xs text-label2">{shortDate(candidate.txnDate)}</span>
                       <span className="min-w-0 flex-1">
                         <span className="block truncate text-sm">{candidate.payee}</span>
-                        <span className="num text-2xs text-muted-foreground">{candidate.bankLabel}</span>
+                        <span className="num text-2xs text-label2">{candidate.bankLabel}</span>
                       </span>
                       <Money cents={candidate.amountCents} signed colorPositive />
                       <Button
@@ -363,7 +363,7 @@ function TransferDialogBody({ row, onClose, onPosted }: TransferDialogProps) {
                           })
                         }
                       >
-                        <ArrowLeftRight />
+                        <Glyph name="transfer" />
                         Pair and post
                       </Button>
                     </li>
@@ -502,8 +502,8 @@ function MatchDialogBody({ request, onClose, onDone }: MatchDialogProps) {
             </DialogHeader>
             <DialogBody className="flex flex-col gap-4 p-0">
               {request.postAnyway !== null ? (
-                <p className="mx-4 mt-4 flex gap-2 rounded-sm border border-warning/35 bg-warning/8 p-2 text-xs text-warning">
-                  <TriangleAlert className="mt-0.5 size-3.5 shrink-0" aria-hidden />
+                <p className="mx-4 mt-4 flex gap-2 rounded-[10px] bg-tint-orange/14 px-3 py-2 text-xs text-ink-orange">
+                  <Glyph name="warning" size={14} className="mt-0.5 shrink-0" />
                   <span>
                     Not posted. An entry below already records this amount on ••{row.bankAccountMask}. Posting the
                     line as well would count the money twice.
@@ -511,36 +511,36 @@ function MatchDialogBody({ request, onClose, onDone }: MatchDialogProps) {
                 </p>
               ) : null}
               {error !== null ? (
-                <p className="p-4 text-sm text-negative">{error}</p>
+                <p className="p-4 text-sm text-ink-red">{error}</p>
               ) : options === null ? (
-                <p className="p-4 text-sm text-muted-foreground">Looking through the ledger…</p>
+                <p className="p-4 text-sm text-label2">Looking through the ledger…</p>
               ) : (
                 <>
                   <section aria-labelledby="match-booked" className="flex flex-col">
-                    <h3 id="match-booked" className="eyebrow px-4 pt-3 pb-1.5">
+                    <h3 id="match-booked" className="text-xs font-semibold text-label2 px-4 pt-3 pb-1.5">
                       Already in the ledger
                     </h3>
                     {options.booked.length === 0 ? (
-                      <p className="border-y border-border px-4 py-2.5 text-xs text-muted-foreground">
+                      <p className="border-y border-sep px-4 py-2.5 text-xs text-label2">
                         No unmatched entry on ••{row.bankAccountMask} for exactly this amount near this date.
                       </p>
                     ) : (
-                      <ul className="divide-y divide-border border-y border-border">
+                      <ul className="divide-y divide-sep border-y border-sep">
                         {options.booked.map((entry) => (
                           <li key={entry.entryId} className="flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-2">
-                            <span className="num w-14 shrink-0 text-xs text-muted-foreground">
+                            <span className="num w-14 shrink-0 text-xs text-label2">
                               {shortDate(entry.entryDate)}
                             </span>
                             <span className="min-w-0 flex-1">
                               <span className="block truncate text-sm">{bookedLabel(entry)}</span>
-                              <span className="block truncate text-2xs text-muted-foreground">
+                              <span className="block truncate text-2xs text-label2">
                                 <span className="num">#{entry.entryNo}</span> · {apart(entry.daysApart)}
                                 {entry.memo === null ? null : <> · {entry.memo}</>}
                               </span>
                             </span>
                             <Money cents={entry.amountCents} signed colorPositive />
                             <Button size="sm" variant="default" disabled={pending} onClick={() => link(entry)}>
-                              <Link2 />
+                              <Glyph name="link" />
                               Match
                             </Button>
                           </li>
@@ -549,19 +549,19 @@ function MatchDialogBody({ request, onClose, onDone }: MatchDialogProps) {
                     )}
                   </section>
                   <section aria-labelledby="match-docs" className="flex flex-col">
-                    <h3 id="match-docs" className="eyebrow px-4 pb-1.5">
+                    <h3 id="match-docs" className="text-xs font-semibold text-label2 px-4 pb-1.5">
                       Open {docNoun}s
                     </h3>
                     {options.documentsBlocked !== null ? (
-                      <p className="border-t border-border px-4 py-2.5 text-xs text-muted-foreground">
+                      <p className="border-t border-sep px-4 py-2.5 text-xs text-label2">
                         {options.documentsBlocked}
                       </p>
                     ) : options.documents.length === 0 ? (
-                      <p className="border-t border-border px-4 py-2.5 text-xs text-muted-foreground">
+                      <p className="border-t border-sep px-4 py-2.5 text-xs text-label2">
                         No open {docNoun} or set of {docNoun}s adds up to this amount.
                       </p>
                     ) : (
-                      <ul className="divide-y divide-border border-t border-border">
+                      <ul className="divide-y divide-sep border-t border-sep">
                         {options.documents.map((candidate) => (
                           <li
                             key={candidate.documents.map((doc) => doc.id).join(":")}
@@ -572,13 +572,13 @@ function MatchDialogBody({ request, onClose, onDone }: MatchDialogProps) {
                                 <span key={doc.id} className="flex min-w-0 items-baseline gap-2 text-sm">
                                   <span className="num shrink-0">{doc.docNo}</span>
                                   <span className="truncate">{doc.partyName}</span>
-                                  <span className="num shrink-0 text-2xs text-muted-foreground">
+                                  <span className="num shrink-0 text-2xs text-label2">
                                     due {shortDate(doc.dueDate)}
                                   </span>
                                   <Money cents={doc.balanceCents} plain className="ml-auto shrink-0 text-xs" />
                                 </span>
                               ))}
-                              <span className="block text-2xs text-muted-foreground">{candidate.reasons.join(" · ")}</span>
+                              <span className="block text-2xs text-label2">{candidate.reasons.join(" · ")}</span>
                             </span>
                             <Button
                               size="sm"
@@ -591,7 +591,7 @@ function MatchDialogBody({ request, onClose, onDone }: MatchDialogProps) {
                               }
                               onClick={() => record(candidate)}
                             >
-                              <FileCheck2 />
+                              <Glyph name="doc-text" />
                               {inflow ? "Record receipt" : "Record payment"}
                             </Button>
                           </li>
@@ -705,7 +705,7 @@ export function ConditionRows({
             disabled={conditions.length <= 1}
             onClick={() => onChange(conditions.filter((_, i) => i !== index))}
           >
-            <Trash2 />
+            <Glyph name="trash" />
           </Button>
         </div>
       ))}
@@ -716,19 +716,19 @@ export function ConditionRows({
           size="sm"
           onClick={() => onChange([...conditions, { field: "reference", op: "contains", value: "" }])}
         >
-          <Plus />
+          <Glyph name="plus" />
           Add condition
         </Button>
       </div>
-      <p className="text-2xs text-muted-foreground">Every condition must hold. Text tests ignore case; a pattern does not.</p>
+      <p className="text-2xs text-label2">Every condition must hold. Text tests ignore case; a pattern does not.</p>
     </div>
   );
 }
 
 export function AutoPostWarning() {
   return (
-    <p className="flex gap-2 rounded-sm border border-warning/35 bg-warning/8 p-2 text-xs text-warning">
-      <TriangleAlert className="mt-0.5 size-3.5 shrink-0" aria-hidden />
+    <p className="flex gap-2 rounded-[10px] bg-tint-orange/14 px-3 py-2 text-xs text-ink-orange">
+      <Glyph name="warning" size={14} className="mt-0.5 shrink-0" />
       <span>
         Matching transactions will post to the ledger on import with no one reviewing them. Only turn this on for payees
         whose coding never changes, such as bank fees or card-processor payouts.
@@ -927,11 +927,11 @@ export function ShortcutsDialog({ open, onClose }: { open: boolean; onClose: () 
                     <Kbd key={key}>{key}</Kbd>
                   ))}
                 </dt>
-                <dd className="text-muted-foreground">{label}</dd>
+                <dd className="text-label2">{label}</dd>
               </React.Fragment>
             ))}
           </dl>
-          <p className="mt-3 text-xs text-muted-foreground">
+          <p className="mt-3 text-xs text-label2">
             Shift-click selects a range. With several selected, <Badge size="sm">Enter</Badge> accepts them all after
             one confirmation.
           </p>

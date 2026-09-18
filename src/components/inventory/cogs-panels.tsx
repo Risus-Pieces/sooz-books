@@ -2,10 +2,10 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { Calculator, Send, Undo2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { DateInput } from "@/components/ui/date-input";
+import { Glyph } from "@/components/ui/glyph";
 import {
   Dialog,
   DialogBody,
@@ -26,17 +26,20 @@ export function DraftBatchButton({
   period,
   label,
   redraft = false,
+  compact = false,
 }: {
   period: string;
   label: string;
   redraft?: boolean;
+  /** The small size, for a list row. */
+  compact?: boolean;
 }) {
   const router = useRouter();
   const [pending, startTransition] = React.useTransition();
   return (
     <Button
-      size="sm"
-      variant={redraft ? "ghost" : "secondary"}
+      size={compact ? "sm" : "md"}
+      variant="secondary"
       disabled={pending}
       onClick={() =>
         startTransition(async () => {
@@ -53,8 +56,8 @@ export function DraftBatchButton({
         })
       }
     >
-      <Calculator />
-      {redraft ? "Redraft" : "Draft COGS"}
+      <Glyph name={redraft ? "refresh" : "doc"} />
+      {redraft ? "Redraft" : "Draft"}
     </Button>
   );
 }
@@ -76,8 +79,8 @@ export function PostBatchButton({ batchId, label, totalCents }: { batchId: strin
     });
   return (
     <>
-      <Button size="sm" onClick={() => setOpen(true)}>
-        <Send />
+      <Button onClick={() => setOpen(true)}>
+        <Glyph name="check" />
         Post COGS
       </Button>
       <Dialog open={open} onOpenChange={setOpen}>
@@ -121,8 +124,8 @@ export function ReverseBatchButton({ batchId, label, periodEnd }: { batchId: str
     });
   return (
     <>
-      <Button size="sm" variant="secondary" onClick={() => setOpen(true)}>
-        <Undo2 />
+      <Button variant="danger-quiet" onClick={() => setOpen(true)}>
+        <Glyph name="undo" />
         Reverse
       </Button>
       <Dialog open={open} onOpenChange={setOpen}>

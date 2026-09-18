@@ -1,8 +1,7 @@
 import * as React from "react";
 
-import { Badge } from "@/components/ui/badge";
-import { Card } from "@/components/ui/card";
-import { PageHeader } from "@/components/ui/page-header";
+import { PageToolbar } from "@/components/shell/page-toolbar";
+import { Pill } from "@/components/ui/pill";
 import { today } from "@/lib/dates";
 import {
   type ColumnMode,
@@ -11,7 +10,10 @@ import {
   datePresets,
   reportRequestToParams,
 } from "@/lib/reports/types";
+import { mediumDate, shortDate } from "@/lib/ui/format";
 
+import { ReportFileActions } from "./copy-report-button";
+import { RegisterMatrix } from "./register-matrix";
 import { ReportMatrix } from "./report-matrix";
 import { type ChannelOption, ReportToolbar } from "./report-toolbar";
 
@@ -22,7 +24,7 @@ export type ReportKind = "profit-loss" | "balance-sheet" | "trial-balance" | "ge
 export interface ReportSurfaceProps {
   report: Report;
   request: ReportRequest;
-  /** This page's own path, which the toolbar submits back to. */
+  /** This page's own path. */
   path: string;
   kind: ReportKind;
   channels: readonly ChannelOption[];
@@ -30,26 +32,34 @@ export interface ReportSurfaceProps {
   showCompare?: boolean;
   showPercent?: boolean;
   dense?: boolean;
+  /** The report's explanation: never on screen, behind the ⓘ. */
   description?: string;
-  /** Report-specific controls, rendered inside the toolbar form. */
+  /** The one chart the report opens with. */
+  summary?: React.ReactNode;
+  /** Report-specific controls, drawn in the options bar. */
   toolbarExtras?: React.ReactNode;
   /**
    * Filters this report has beyond `ReportRequest` — the register's account and
-   * source, for instance. They ride along on the preset links and the export URL,
-   * so changing the date range never silently drops them.
+   * source, for instance. They ride along on the export URL.
    */
   extraParams?: Readonly<Record<string, string>>;
 }
 
+/** "Jan 1 – Sep 18, 2026", or "Sep 18, 2026" for a single day. */
+function windowLabel(from: string, to: string): string {
+  if (from === to) return mediumDate(to);
+  if (from.slice(0, 4) !== to.slice(0, 4)) return `${mediumDate(from)} – ${mediumDate(to)}`;
+  return `${shortDate(from)} – ${mediumDate(to)}`;
+}
+
 /**
- * The frame every statement is rendered in: the header, the controls, the
- * matrix. Four report pages share it so that the date presets, the basis toggle
+ * The frame every statement is rendered in: the toolbar, the options bar, one summary chart and
+ * the Numbers-style table. The report pages share it so that the date presets, the basis control
  * and the export URL cannot drift apart between them.
  */
 export function ReportSurface({
   report,
   request,
-  path,
   kind,
   channels,
   columnModes,
@@ -57,21 +67,19 @@ export function ReportSurface({
   showPercent,
   dense,
   description,
+  summary,
   toolbarExtras,
   extraParams,
 }: ReportSurfaceProps) {
   const extras = Object.entries(extraParams ?? {});
 
-  const presets = datePresets(today()).map((preset) => {
-    const query = reportRequestToParams({ ...request, from: preset.from, to: preset.to });
-    for (const [key, value] of extras) query.set(key, value);
-    return {
-      key: preset.key,
-      label: preset.label,
-      href: `${path}?${query.toString()}`,
-      active: preset.from === request.from && preset.to === request.to,
-    };
-  });
+  const presets = datePresets(today()).map((preset) => ({
+    key: preset.key,
+    label: preset.label,
+    from: preset.from,
+    to: preset.to,
+    active: preset.from === request.from && preset.to === request.to,
+  }));
 
   const exportQuery = reportRequestToParams(request);
   exportQuery.set("report", kind);
@@ -82,38 +90,49 @@ export function ReportSurface({
   tsvQuery.set("format", "tsv");
 
   return (
-    <div className="flex flex-col gap-4">
-      <PageHeader
-        eyebrow="Reports"
+    <div className="flex flex-col gap-3.5 max-md:gap-3">
+      <PageToolbar
         title={report.meta.title}
-        description={description}
-        meta={
+        phoneTitle={kind === "cash-flow" ? "Cash Flow" : undefined}
+        back={{ href: "/reports", label: "Reports" }}
+        phoneTitleRow
+        subtitle={
           <>
-            <Badge tone="outline">{report.meta.subtitle}</Badge>
-            <Badge tone={report.meta.basis === "cash" ? "warning" : "neutral"}>
-              {report.meta.basis === "cash" ? "Cash basis" : "Accrual basis"}
-            </Badge>
+            <span className="num">{windowLabel(report.meta.from, report.meta.to)}</span>
+            {report.meta.basis === "cash" ? (
+              <Pill tone="orange" className="h-5 px-2 text-2xs">
+                Cash basis
+              </Pill>
+            ) : null}
           </>
         }
+        info={description ? <p>{description}</p> : undefined}
+        actions={<ReportFileActions csvHref={csvHref} copyHref={`${REPORT_EXPORT_PATH}?${tsvQuery.toString()}`} />}
       />
 
       <ReportToolbar
-        action={path}
         request={request}
         presets={presets}
         channels={channels}
         columnModes={columnModes}
         showCompare={showCompare}
         showPercent={showPercent}
-        exportHref={csvHref}
-        copyHref={`${REPORT_EXPORT_PATH}?${tsvQuery.toString()}`}
       >
         {toolbarExtras}
       </ReportToolbar>
 
-      <Card className="overflow-hidden">
-        <ReportMatrix report={report} dense={dense} />
-      </Card>
+      {summary}
+
+      {kind === "general-ledger" ? (
+        // On a phone the register is inset groups straight on the page, like the Journal.
+        <section className="overflow-clip rounded-2xl bg-card shadow-card max-sm:overflow-visible max-sm:rounded-none max-sm:bg-transparent max-sm:shadow-none">
+          <RegisterMatrix report={report} />
+        </section>
+      ) : (
+        <section className="overflow-clip rounded-2xl bg-card shadow-card max-sm:rounded-[22px]">
+          <ReportMatrix report={report} dense={dense} />
+        </section>
+      )}
     </div>
   );
 }

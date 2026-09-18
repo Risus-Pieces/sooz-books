@@ -75,11 +75,11 @@ test('flow 6: a draft in the month blocks the close; resolved, the month closes 
 
   // The draft check names what is wrong.
   await expect(task(page, DRAFT_TASK)).toContainText(/draft/i);
-  await expect(task(page, DRAFT_TASK).locator('p.text-negative')).toBeVisible();
+  await expect(task(page, DRAFT_TASK).locator('p.text-ink-red')).toBeVisible();
 
   // Every other blocking task still outstanding is skipped with a reason, so the draft is the
   // only thing standing in the way.
-  const standing = page.locator('p.eyebrow', { hasText: 'Standing in the way' }).locator('..').locator('li');
+  const standing = page.getByRole('list', { name: 'Standing in the way' }).getByRole('listitem');
   for (let guard = 0; guard < 20; guard += 1) {
     const labels = (await standing.allInnerTexts()).map((text) => text.trim()).filter((text) => text !== DRAFT_TASK);
     if (labels.length === 0) break;
@@ -110,7 +110,7 @@ test('flow 6: a draft in the month blocks the close; resolved, the month closes 
   await page.goto(`/close?month=${MONTH.key}`, { waitUntil: 'networkidle' });
   await rerun.click();
   await toast(page, 'Checks recorded');
-  await expect(page.getByText('Every blocking task is done or skipped with a reason.')).toBeVisible();
+  await expect(page.getByText('Ready to close', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: `Close ${monthLabel}` }).click();
   await toast(page, `${monthLabel} closed`);
   await expect(page.getByText(`${monthLabel} is closed`)).toBeVisible();
@@ -123,7 +123,7 @@ test('flow 6: a draft in the month blocks the close; resolved, the month closes 
 
   // --- Reopen it: this was a throwaway month --------------------------------------------------------
   await page.goto(`/close?month=${MONTH.key}`, { waitUntil: 'networkidle' });
-  const history = page.locator('tr').filter({ hasText: monthLabel });
+  const history = page.getByRole('region', { name: 'History' }).getByRole('listitem').filter({ hasText: monthLabel });
   await history.getByRole('button', { name: /Reopen/ }).click();
   const reopen = page.getByRole('dialog');
   await reopen.locator('#reopen-month').fill(MONTH.key);

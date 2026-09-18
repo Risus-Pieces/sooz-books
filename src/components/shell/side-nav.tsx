@@ -3,108 +3,96 @@
 import * as React from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { ChevronRight, PanelLeft, PanelLeftClose } from "lucide-react";
 
 import { cn } from "@/lib/cn";
+import { Glyph } from "@/components/ui/glyph";
+import { IconBadge } from "@/components/ui/icon-badge";
+import { Kbd } from "@/components/ui/keycap";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { NAV_GROUPS, isRouteActive, type NavSection } from "@/components/shell/nav";
+
+import { AccountMenu } from "./account-menu";
+import {
+  NAV_GROUPS,
+  activeChildHref,
+  activeSectionHref,
+  type NavSection,
+} from "./nav";
+import { useShell } from "./shell-context";
 
 export interface SideNavProps {
-  collapsed?: boolean;
-  onToggleCollapsed?: () => void;
-  /** `drawer` is the under-1024px presentation; it is never collapsed and has no rail toggle. */
+  /** `drawer` is the tablet presentation, opened over the content. */
   variant?: "rail" | "drawer";
   onNavigate?: () => void;
   className?: string;
 }
 
-const itemBase =
-  "relative flex items-center gap-2.5 rounded-sm text-sm transition-colors outline-none focus-visible:outline-offset-[-2px]";
-
-const activeRule =
-  "before:absolute before:top-1 before:bottom-1 before:left-0 before:w-0.5 before:rounded-full before:bg-sidebar-accent before:content-['']";
-
-export function SideNav({
-  collapsed = false,
-  onToggleCollapsed,
-  variant = "rail",
-  onNavigate,
-  className,
-}: SideNavProps) {
+/**
+ * The translucent sidebar: coloured System Settings badges, grouped Home · Review · Banking ·
+ * Business · Books, Settings and the company at the foot. The section you are in is filled blue;
+ * its pages are listed under it.
+ */
+export function SideNav({ variant = "rail", onNavigate, className }: SideNavProps) {
   const pathname = usePathname() ?? "";
-  const isRail = variant === "rail";
-  const isCollapsed = isRail && collapsed;
-
-  // A section the reader is inside opens itself; anything they open or close by hand overrides that.
-  const [overrides, setOverrides] = React.useState<Record<string, boolean>>({});
-
-  const isSectionOpen = React.useCallback(
-    (href: string) => overrides[href] ?? isRouteActive(pathname, href),
-    [overrides, pathname],
-  );
-
-  const toggleSection = React.useCallback(
-    (href: string) => {
-      setOverrides((current) => ({ ...current, [href]: !isSectionOpen(href) }));
-    },
-    [isSectionOpen],
-  );
+  const shell = useShell();
+  const active = activeSectionHref(pathname);
+  const groups = NAV_GROUPS.filter((g) => g.key !== "footer");
+  const footer = NAV_GROUPS.find((g) => g.key === "footer");
 
   return (
     <nav
       aria-label="Sections"
       data-slot="side-nav"
       className={cn(
-        "flex h-full flex-col bg-sidebar text-sidebar-foreground",
-        isRail && "border-r border-sidebar-border",
+        "flex h-full flex-col rounded-[18px] vibrancy px-2.5 pt-3 pb-2.5 text-label shadow-glass",
         className,
       )}
     >
-      <div
-        className={cn(
-          "flex h-12 shrink-0 items-center border-b border-sidebar-border",
-          isCollapsed ? "justify-center px-2" : "px-3",
-        )}
-      >
-        <Link
-          href="/dashboard"
-          onClick={onNavigate}
-          className="flex items-center gap-2.5 rounded-xs outline-none focus-visible:outline-offset-2"
-        >
-          <span className="grid size-7 shrink-0 place-items-center rounded-xs border border-sidebar-border text-sidebar-strong">
-            <span className="num text-[0.6875rem] font-semibold">SB</span>
-          </span>
-          {isCollapsed ? null : (
-            <span className="leading-[0.95]">
-              <span className="block text-[0.6875rem] font-bold tracking-[0.22em] text-sidebar-strong">
-                SOOZ
-              </span>
-              <span className="block text-[0.6875rem] font-bold tracking-[0.22em]">BOOKS</span>
-            </span>
-          )}
-        </Link>
+      <div className="flex h-7 shrink-0 items-center gap-2 pr-0.5 pl-2">
+        <span className="flex-1 truncate text-xs font-semibold text-label2">Sooz Books</span>
+        {variant === "rail" && shell ? (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                type="button"
+                onClick={shell.toggleSidebar}
+                aria-label="Hide sidebar"
+                className="grid h-7 w-8 place-items-center rounded-[8px] text-label2 transition-colors hover:bg-fill2 hover:text-label"
+              >
+                <Glyph name="sidebar" size={18} />
+              </button>
+            </TooltipTrigger>
+            <TooltipContent side="right">Hide sidebar</TooltipContent>
+          </Tooltip>
+        ) : null}
       </div>
 
-      <div className={cn("min-h-0 flex-1 overflow-y-auto py-2", isCollapsed ? "px-2" : "px-2")}>
-        {NAV_GROUPS.map((group, index) => (
-          <div key={group.label ?? `group-${index}`} className={index > 0 ? "mt-3" : undefined}>
-            {group.label && !isCollapsed ? (
-              <p className="px-2 pt-1 pb-1.5 text-[0.5625rem] font-semibold tracking-[0.16em] text-sidebar-foreground/60 uppercase">
-                {group.label}
-              </p>
-            ) : null}
-            {group.label && isCollapsed ? (
-              <div className="mx-2 mb-2 border-t border-sidebar-border" />
+      <button
+        type="button"
+        onClick={() => {
+          onNavigate?.();
+          shell?.openSearch();
+        }}
+        className="mx-1 mt-2.5 mb-2 flex h-7 shrink-0 items-center gap-1.5 rounded-[8px] bg-fill2 px-2 text-sm text-label2 transition-colors hover:bg-fill"
+      >
+        <Glyph name="search" size={14} />
+        <span className="flex-1 text-left">Search</span>
+        <Kbd className="bg-transparent shadow-none">⌘K</Kbd>
+      </button>
+
+      <div className="-mx-1 min-h-0 flex-1 overflow-y-auto px-1 [scrollbar-width:none]">
+        {groups.map((group) => (
+          <div key={group.key}>
+            {group.label ? (
+              <p className="px-2.5 pt-3.5 pb-1 text-2xs font-semibold text-label2">{group.label}</p>
             ) : null}
             <ul className="flex flex-col gap-px">
               {group.sections.map((section) => (
-                <SideNavSection
+                <SideNavItem
                   key={section.href}
                   section={section}
                   pathname={pathname}
-                  collapsed={isCollapsed}
-                  open={isSectionOpen(section.href)}
-                  onToggle={() => toggleSection(section.href)}
+                  active={active === section.href}
+                  count={section.count === "review" ? shell?.reviewCount : undefined}
                   onNavigate={onNavigate}
                 />
               ))}
@@ -113,112 +101,79 @@ export function SideNav({
         ))}
       </div>
 
-      {isRail && onToggleCollapsed ? (
-        <div className="shrink-0 border-t border-sidebar-border p-2">
-          <button
-            type="button"
-            onClick={onToggleCollapsed}
-            aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-            className={cn(
-              itemBase,
-              "h-8 w-full text-sidebar-foreground/80 hover:bg-sidebar-strong/8 hover:text-sidebar-strong",
-              isCollapsed ? "justify-center px-0" : "px-2",
-            )}
-          >
-            {collapsed ? <PanelLeft className="size-4" /> : <PanelLeftClose className="size-4" />}
-            {isCollapsed ? null : <span className="text-xs">Collapse</span>}
-          </button>
-        </div>
-      ) : null}
+      <div className="mt-2 shrink-0 hairline-t pt-2">
+        {footer ? (
+          <ul className="flex flex-col gap-px">
+            {footer.sections.map((section) => (
+              <SideNavItem
+                key={section.href}
+                section={section}
+                pathname={pathname}
+                active={active === section.href}
+                onNavigate={onNavigate}
+              />
+            ))}
+          </ul>
+        ) : null}
+        <AccountMenu account={shell?.account ?? null} period={shell?.period ?? null} className="mt-1" />
+      </div>
     </nav>
   );
 }
 
-interface SideNavSectionProps {
-  section: NavSection;
-  pathname: string;
-  collapsed: boolean;
-  open: boolean;
-  onToggle: () => void;
-  onNavigate?: () => void;
-}
-
-function SideNavSection({
+function SideNavItem({
   section,
   pathname,
-  collapsed,
-  open,
-  onToggle,
+  active,
+  count,
   onNavigate,
-}: SideNavSectionProps) {
-  const Icon = section.icon;
-  const active = isRouteActive(pathname, section.href);
-  const hasChildren = Boolean(section.children?.length);
-  const panelId = `nav-${section.href.replace(/\//g, "-")}`;
-
-  const link = (
-    <Link
-      href={section.href}
-      onClick={onNavigate}
-      aria-current={active ? "page" : undefined}
-      className={cn(
-        itemBase,
-        "h-8 flex-1 font-medium",
-        collapsed ? "justify-center px-0" : "px-2",
-        active
-          ? cn("bg-sidebar-strong/8 text-sidebar-strong", activeRule)
-          : "text-sidebar-foreground hover:bg-sidebar-strong/6 hover:text-sidebar-strong",
-      )}
-    >
-      <Icon className="size-4 shrink-0" />
-      {collapsed ? <span className="sr-only">{section.label}</span> : <span>{section.label}</span>}
-    </Link>
-  );
+}: {
+  section: NavSection;
+  pathname: string;
+  active: boolean;
+  count?: number;
+  onNavigate?: () => void;
+}) {
+  const child = active ? activeChildHref(pathname, section) : null;
+  const selected = active && child === null;
 
   return (
     <li>
-      <div className="flex items-center gap-px">
-        {collapsed ? (
-          <Tooltip>
-            <TooltipTrigger asChild>{link}</TooltipTrigger>
-            <TooltipContent side="right">{section.label}</TooltipContent>
-          </Tooltip>
-        ) : (
-          link
+      <Link
+        href={section.href}
+        onClick={onNavigate}
+        aria-current={selected ? "page" : undefined}
+        className={cn(
+          "flex h-[30px] items-center gap-[9px] rounded-[8px] pr-2 pl-1.5 text-sm font-medium outline-none transition-colors duration-150",
+          selected ? "bg-accent-fill text-white focus-ring-white" : active ? "bg-fill2 focus-ring-inset" : "hover:bg-fill2 focus-ring-inset",
         )}
-        {hasChildren && !collapsed ? (
-          <button
-            type="button"
-            onClick={onToggle}
-            aria-expanded={open}
-            aria-controls={panelId}
-            aria-label={`${open ? "Hide" : "Show"} ${section.label} pages`}
-            className="grid size-8 shrink-0 place-items-center rounded-sm text-sidebar-foreground/70 transition-colors hover:bg-sidebar-strong/8 hover:text-sidebar-strong"
-          >
-            <ChevronRight className={cn("size-3.5 transition-transform", open && "rotate-90")} />
-          </button>
+      >
+        <IconBadge glyph={section.glyph} tint={section.tint} />
+        <span className="min-w-0 flex-1 truncate">{section.label}</span>
+        {count !== undefined && count > 0 ? (
+          <span className={cn("num text-xs font-medium", selected ? "text-white/90" : "text-label2")}>
+            <span className="sr-only">, </span>
+            {count}
+            <span className="sr-only"> to review</span>
+          </span>
         ) : null}
-      </div>
-
-      {hasChildren && !collapsed && open ? (
-        <ul id={panelId} className="mt-px mb-1 ml-[1.0625rem] flex flex-col gap-px border-l border-sidebar-border pl-2">
-          {section.children?.map((child) => {
-            const childActive = isRouteActive(pathname, child.href);
+      </Link>
+      {active && section.children?.length ? (
+        <ul className="mt-px mb-1 flex flex-col gap-px">
+          {section.children.map((link) => {
+            const on = link.href === child;
             return (
-              <li key={child.href}>
+              <li key={link.href}>
                 <Link
-                  href={child.href}
+                  href={link.href}
                   onClick={onNavigate}
-                  aria-current={childActive ? "page" : undefined}
+                  aria-current={on ? "page" : undefined}
                   className={cn(
-                    itemBase,
-                    "h-7 px-2 text-xs",
-                    childActive
-                      ? "bg-sidebar-strong/8 text-sidebar-strong"
-                      : "text-sidebar-foreground/85 hover:bg-sidebar-strong/6 hover:text-sidebar-strong",
+                    "flex h-7 items-center rounded-[7px] pr-2 pl-[37px] text-[0.8125rem] outline-none transition-colors duration-150",
+                    on ? "bg-accent-fill font-medium text-white focus-ring-white" : "text-label2 hover:bg-fill2 hover:text-label focus-ring-inset",
                   )}
                 >
-                  {child.label}
+                  <span className="truncate">{link.label}</span>
                 </Link>
               </li>
             );

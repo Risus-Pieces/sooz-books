@@ -2,16 +2,14 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { Snowflake } from "lucide-react";
 
 import { freezeForecast } from "@/app/(app)/plan/actions";
-import { Button } from "@/components/ui/button";
 import { toast } from "@/components/ui/toast";
+import { ToolbarButton } from "@/components/ui/toolbar";
 
 /**
- * Freezes today's forecast so it can be scored against what the bank shows
- * happened. Refreezing the same day replaces that day's snapshot only when the
- * person says so.
+ * Freezes today's forecast so it can be scored against what the bank shows happened. Refreezing
+ * the same day replaces that day's snapshot only when the person says so.
  */
 export function FreezeForecastButton({ frozenToday }: { frozenToday: boolean }) {
   const router = useRouter();
@@ -33,9 +31,11 @@ export function FreezeForecastButton({ frozenToday }: { frozenToday: boolean }) 
   };
 
   return (
-    <Button variant="secondary" size="sm" disabled={pending} onClick={freeze}>
-      <Snowflake />
-      {frozenToday ? "Refreeze today" : "Freeze this forecast"}
-    </Button>
+    <ToolbarButton
+      glyph="clock"
+      label={frozenToday ? "Refreeze today" : "Freeze forecast"}
+      disabled={pending}
+      onClick={freeze}
+    />
   );
 }

@@ -2,20 +2,21 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { Lock, Scale, Send, Trash2 } from "lucide-react";
 
-import { Badge } from "@/components/ui/badge";
+import { FlowDiagram } from "@/components/charts";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card } from "@/components/ui/card";
 import { DateInput } from "@/components/ui/date-input";
+import { Glyph } from "@/components/ui/glyph";
+import { GroupRow, InsetGroup } from "@/components/ui/inset-group";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { formatCents, Money } from "@/components/ui/money";
+import { formatCents } from "@/components/ui/money";
+import { Pill } from "@/components/ui/pill";
 import { toast } from "@/components/ui/toast";
-import { cn } from "@/lib/cn";
 import { deleteDraftEntry, postEntry, saveDraftEntry } from "@/app/(app)/ledger/actions";
 
 import { rememberAccount } from "./account-combobox";
+import { BalanceGauge, BalanceVerdict } from "./balance-gauge";
 import { EntryLinesEditor } from "./entry-lines-editor";
 import {
   autoBalanceFor,
@@ -23,6 +24,7 @@ import {
   draftReadiness,
   entryTotals,
   isLineEmpty,
+  lineAmounts,
   postReadiness,
   seedLines,
   setAmount,
@@ -36,6 +38,7 @@ import type {
   EntrySeedLine,
   ProductOption,
 } from "./types";
+import { entryFlow } from "./visuals";
 
 export interface JournalEntryFormProps {
   accounts: readonly AccountOption[];
@@ -73,7 +76,6 @@ export function JournalEntryForm({
   channels,
   products,
   draftId,
-  draftEntryNo,
   initialDate,
   initialMemo,
   initialLines,
@@ -177,49 +179,60 @@ export function JournalEntryForm({
 
   const touched = lines.some((line) => !isLineEmpty(line));
 
-  return (
-    <div className="flex flex-col gap-4 pb-24">
-      <Card>
-        <CardHeader>
-          <CardTitle>{draftId === null ? "New journal entry" : `Draft #${draftEntryNo}`}</CardTitle>
-          {periodClosed ? (
-            <Badge tone="warning">
-              <Lock />
-              {periodOfDate(date)} is closed
-            </Badge>
-          ) : null}
-        </CardHeader>
-        <CardContent className="grid gap-4 sm:grid-cols-[10rem_1fr]">
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="entry-date" required>
-              Date
-            </Label>
-            <DateInput
-              id="entry-date"
-              value={date}
-              onValueChange={setDate}
-              disabled={pending}
-              invalid={date === ""}
-            />
-          </div>
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="entry-memo" hint="What this entry is for">
-              Memo
-            </Label>
-            <Input
-              id="entry-memo"
-              value={memo}
-              disabled={pending}
-              placeholder="e.g. Accrue September co-packer run"
-              onChange={(event) => setMemo(event.target.value)}
-            />
-          </div>
-        </CardContent>
-      </Card>
+  // What posting will do, drawn from the lines as they stand.
+  const flow = React.useMemo(() => {
+    const byId = new Map(accounts.map((account) => [account.id, account]));
+    return entryFlow(
+      lines.flatMap((line) => {
+        const account = line.accountId === null ? undefined : byId.get(line.accountId);
+        const amounts = lineAmounts(line);
+        if (account === undefined || amounts.error !== null) return [];
+        return [{ accountCode: account.code, accountName: account.name, ...amounts }];
+      }),
+    );
+  }, [accounts, lines]);
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Lines</CardTitle>
+  const reason = periodClosed
+    ? `${periodOfDate(date)} is closed. Post to an open month, or reopen that one first.`
+    : canPost
+      ? readiness.reason
+      : "Your role may not post to the ledger.";
+
+  return (
+    <div className="flex flex-col gap-3.5 max-md:gap-3">
+      <InsetGroup
+        headerAccessory={
+          periodClosed ? (
+            <Pill tone="orange" glyph="lock">
+              {periodOfDate(date)} is closed
+            </Pill>
+          ) : undefined
+        }
+      >
+        <GroupRow label="Date" htmlFor="entry-date">
+          <DateInput
+            id="entry-date"
+            value={date}
+            onValueChange={setDate}
+            disabled={pending}
+            invalid={date === ""}
+          />
+        </GroupRow>
+        <GroupRow label="Memo" htmlFor="entry-memo" className="[&>span:last-child]:flex-[3]">
+          <Input
+            id="entry-memo"
+            value={memo}
+            disabled={pending}
+            placeholder="What this entry is for"
+            className="w-full"
+            onChange={(event) => setMemo(event.target.value)}
+          />
+        </GroupRow>
+      </InsetGroup>
+
+      <Card className="overflow-hidden">
+        <header className="flex items-center gap-2 px-5 pt-4 pb-2 max-sm:px-4">
+          <h2 className="flex-1 text-lg font-semibold tracking-[-0.01em]">Lines</h2>
           <Button
             type="button"
             variant="secondary"
@@ -227,139 +240,61 @@ export function JournalEntryForm({
             disabled={pending || totals.balanced}
             onClick={autoBalance}
           >
-            <Scale />
+            <Glyph name="wand" size={14} />
             Auto-balance
-            {totals.balanced ? null : (
-              <span className="num text-2xs">
-                {formatCents(Math.abs(totals.differenceCents), { currency: true })}
-              </span>
-            )}
           </Button>
-        </CardHeader>
-        <div className="p-3">
-          <EntryLinesEditor
-            lines={lines}
-            onChange={setLines}
-            accounts={accounts}
-            channels={channels}
-            products={products}
-            totals={totals}
-            onAccountUsed={rememberAccount}
-            focusedKey={focusedKey}
-            onFocusLine={setFocusedKey}
-            disabled={pending}
-          />
-        </div>
+        </header>
+        <EntryLinesEditor
+          lines={lines}
+          onChange={setLines}
+          accounts={accounts}
+          channels={channels}
+          products={products}
+          totals={totals}
+          onAccountUsed={rememberAccount}
+          focusedKey={focusedKey}
+          onFocusLine={setFocusedKey}
+          disabled={pending}
+        />
       </Card>
 
-      <TotalsBar
-        totals={totals}
-        reason={
-          periodClosed
-            ? `${periodOfDate(date)} is closed. Post to an open period, or reopen that one first.`
-            : canPost
-              ? readiness.reason
-              : "Your role may not post to the ledger."
-        }
-        postable={postable}
-        pending={pending}
-        saveable={saveable.ready && !pending}
-        canDelete={draftId !== null}
-        touched={touched}
-        onPost={() => submit("post")}
-        onSaveDraft={() => submit("draft")}
-        onDelete={discard}
-      />
-    </div>
-  );
-}
+      {flow === null ? null : (
+        <Card className="px-5 py-[18px] max-sm:px-4">
+          <FlowDiagram from={flow.from} to={flow.to} />
+        </Card>
+      )}
 
-function TotalsBar({
-  totals,
-  reason,
-  postable,
-  pending,
-  saveable,
-  canDelete,
-  touched,
-  onPost,
-  onSaveDraft,
-  onDelete,
-}: {
-  totals: ReturnType<typeof entryTotals>;
-  reason: string | null;
-  postable: boolean;
-  pending: boolean;
-  saveable: boolean;
-  canDelete: boolean;
-  touched: boolean;
-  onPost: () => void;
-  onSaveDraft: () => void;
-  onDelete: () => void;
-}) {
-  return (
-    <div className="fixed inset-x-0 bottom-0 z-30 border-t border-border-strong bg-surface-raised/95 backdrop-blur">
-      <div className="mx-auto flex w-full max-w-[104rem] flex-wrap items-center justify-between gap-3 px-4 py-2.5 lg:px-6">
-        <dl className="flex items-center gap-5 text-sm">
-          <Total label="Debits" cents={totals.debitCents} />
-          <Total label="Credits" cents={totals.creditCents} />
-          <div className="flex flex-col leading-tight">
-            <dt className="eyebrow">Difference</dt>
-            <dd>
-              <Money
-                cents={totals.differenceCents}
-                currency
-                zeroDash
-                className={cn(
-                  "text-sm font-semibold",
-                  totals.balanced ? "text-positive" : "text-negative",
-                )}
-              />
-            </dd>
-          </div>
-          {totals.balanced && totals.amountLineCount >= 2 ? (
-            <Badge tone="positive">In balance</Badge>
-          ) : null}
-        </dl>
-
-        <div className="flex flex-wrap items-center gap-2">
-          {reason === null ? null : (
-            <span className="max-w-sm text-xs text-muted-foreground">{reason}</span>
-          )}
-          {canDelete ? (
-            <Button type="button" variant="danger-quiet" size="sm" disabled={pending} onClick={onDelete}>
-              <Trash2 />
+      <div className="flex flex-col gap-3 rounded-2xl bg-card px-5 py-3.5 shadow-card md:sticky md:bottom-3 md:z-20 md:flex-row md:items-center md:vibrancy md:shadow-glass max-sm:rounded-[22px] max-sm:px-4">
+        <div className="flex min-w-0 flex-1 flex-col gap-1">
+          <BalanceGauge debitCents={totals.debitCents} creditCents={totals.creditCents} className="md:max-w-[420px]" />
+          <p className="min-h-4 text-xs text-label2" aria-live="polite">
+            <BalanceVerdict debitCents={totals.debitCents} creditCents={totals.creditCents} />
+            {reason === null || reason === "The entry is out of balance." ? null : <> · {reason}</>}
+          </p>
+        </div>
+        <div className="flex flex-wrap items-center gap-2 max-md:[&>button]:flex-1">
+          {draftId !== null ? (
+            <Button type="button" variant="danger-quiet" disabled={pending} onClick={discard}>
+              <Glyph name="trash" size={15} />
               Delete draft
             </Button>
           ) : null}
           <Button
             type="button"
             variant="secondary"
-            size="sm"
-            disabled={!saveable || !touched}
-            onClick={onSaveDraft}
+            disabled={!(saveable.ready && !pending) || !touched}
+            onClick={() => submit("draft")}
           >
             Save draft
           </Button>
-          <Button type="button" size="sm" disabled={!postable} onClick={onPost}>
-            <Send />
+          <Button type="button" disabled={!postable} onClick={() => submit("post")}>
+            <Glyph name={totals.balanced ? "check" : "warning"} size={15} />
             {totals.balanced
               ? "Post entry"
               : `Out by ${formatCents(Math.abs(totals.differenceCents), { currency: true })}`}
           </Button>
         </div>
       </div>
-    </div>
-  );
-}
-
-function Total({ label, cents }: { label: string; cents: number }) {
-  return (
-    <div className="flex flex-col leading-tight">
-      <dt className="eyebrow">{label}</dt>
-      <dd>
-        <Money cents={cents} currency plain className="text-sm font-semibold" />
-      </dd>
     </div>
   );
 }

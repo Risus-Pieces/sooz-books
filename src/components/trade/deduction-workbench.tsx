@@ -2,10 +2,10 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { CircleCheck, Gavel } from "lucide-react";
 
 import { disputeDeductions, previewBulkValidation, validateDeductions } from "@/app/(app)/trade/actions";
 import { Button } from "@/components/ui/button";
+import { Glyph } from "@/components/ui/glyph";
 import { DateInput } from "@/components/ui/date-input";
 import {
   Dialog,
@@ -23,13 +23,13 @@ import { toast } from "@/components/ui/toast";
 
 import { DeductionTable } from "./deduction-table";
 import { longDate } from "./labels";
-import { EntryTable, Field, Refusals } from "./parts";
+import { EntryPreview, Field, Refusals } from "./parts";
 import type { BulkValidationView, DeductionRowView, DeductionTab } from "./types";
 
 const EMPTY: Record<DeductionTab, string> = {
-  open: "No deduction is waiting to be validated or disputed.",
-  disputed: "No dispute is open with a distributor.",
-  resolved: "Nothing has been validated, recovered or written off yet.",
+  open: "Nothing waiting",
+  disputed: "No open disputes",
+  resolved: "Nothing resolved yet",
 };
 
 /**
@@ -62,24 +62,24 @@ export function DeductionWorkbench({
   return (
     <>
       {selectable ? (
-        <div className="flex min-h-11 flex-wrap items-center justify-between gap-2 border-b border-border px-4 py-2">
-          <p className="text-xs text-muted-foreground">
+        <div className="flex min-h-12 flex-wrap items-center justify-between gap-2 hairline-b px-4 py-2">
+          <p className="text-sm font-semibold text-label2" aria-live="polite">
             {picked.length === 0 ? (
-              "Select deductions to validate or dispute them together."
+              "Select to act"
             ) : (
               <>
-                <span className="num text-foreground">{picked.length}</span> selected ·{" "}
-                <Money cents={openTotal} currency plain className="text-foreground" /> open
+                <span className="num text-label">{picked.length}</span> ·{" "}
+                <Money cents={openTotal} currency plain className="text-label" />
               </>
             )}
           </p>
           <div className="flex flex-wrap items-center gap-2">
             <Button size="sm" variant="secondary" disabled={picked.length === 0} onClick={() => setDialog("dispute")}>
-              <Gavel />
+              <Glyph name="flag" />
               Dispute
             </Button>
             <Button size="sm" disabled={picked.length === 0} onClick={() => setDialog("validate")}>
-              <CircleCheck />
+              <Glyph name="check" />
               Validate
             </Button>
           </div>
@@ -168,29 +168,25 @@ function BulkValidateDialog({
           <Field label="Date" htmlFor="bulk-validate-date" className="max-w-44">
             <DateInput id="bulk-validate-date" value={date} onValueChange={setDate} disabled={pending} />
           </Field>
-          {error !== null ? <p className="text-xs text-negative">{error}</p> : null}
-          {preview === null && error === null ? <p className="text-xs text-muted-foreground">Working out each entry…</p> : null}
+          {error !== null ? <p className="text-sm text-ink-red">{error}</p> : null}
+          {preview === null && error === null ? <p className="text-sm text-label2">Working out each entry…</p> : null}
           {preview !== null ? (
             <>
               {ready.length > 0 ? (
-                <ul className="flex flex-col">
-                  {ready.map((r) => (
-                    <li key={r.id} className="flex items-baseline justify-between gap-3 rule-row py-1 text-xs">
+                <ul className="flex flex-col overflow-hidden rounded-[12px] bg-card shadow-card">
+                  {ready.map((r, index) => (
+                    <li key={r.id} className={index > 0 ? "flex items-center justify-between gap-3 hairline-t px-3.5 py-2 text-sm" : "flex items-center justify-between gap-3 px-3.5 py-2 text-sm"}>
                       <span className="min-w-0">
-                        <span className="num text-foreground">{r.deductionNo}</span>
-                        <span className="text-muted-foreground"> → {r.destination}</span>
+                        <span className="num block font-semibold">{r.deductionNo}</span>
+                        <span className="block truncate text-xs text-label2">{r.destination}</span>
                       </span>
-                      <Money cents={r.amountCents} plain />
+                      <Money cents={r.amountCents} currency plain className="font-semibold" />
                     </li>
                   ))}
                 </ul>
               ) : null}
               <Refusals items={preview.refused.map((r) => ({ key: r.id, label: r.deductionNo, message: r.message }))} />
-              {preview.entry !== null ? (
-                <div className="rounded-md border border-border bg-surface">
-                  <EntryTable entry={preview.entry} caption="Combined validation entries" />
-                </div>
-              ) : null}
+              {preview.entry !== null ? <EntryPreview entry={preview.entry} caption="Combined validation entries" /> : null}
             </>
           ) : null}
         </DialogBody>
@@ -268,18 +264,16 @@ function BulkDisputeDialog({
           <Field label="Notes" htmlFor="bulk-dispute-notes" hint="what you sent as backup">
             <Textarea id="bulk-dispute-notes" value={notes} rows={3} maxLength={2000} onChange={(e) => setNotes(e.target.value)} disabled={pending} />
           </Field>
-          <ul className="flex flex-col">
-            {rows.map((r) => (
-              <li key={r.id} className="flex items-baseline justify-between gap-3 rule-row py-1 text-xs">
-                <span className="num text-foreground">{r.deductionNo}</span>
-                <span className="text-muted-foreground">
-                  {r.disputeDeadline === null ? "deadline set from its reason code" : `dispute by ${longDate(r.disputeDeadline)}`}
-                </span>
+          <ul className="flex flex-col overflow-hidden rounded-[12px] bg-card shadow-card">
+            {rows.map((r, index) => (
+              <li key={r.id} className={index > 0 ? "flex items-center justify-between gap-3 hairline-t px-3.5 py-2 text-sm" : "flex items-center justify-between gap-3 px-3.5 py-2 text-sm"}>
+                <span className="num font-semibold">{r.deductionNo}</span>
+                <span className="text-xs text-label2">{r.disputeDeadline === null ? "From reason code" : `By ${longDate(r.disputeDeadline)}`}</span>
               </li>
             ))}
           </ul>
           {closed.length > 0 ? (
-            <p className="text-xs text-warning">
+            <p className="text-sm text-ink-orange">
               {closed.length === 1 ? "One window has" : `${closed.length} windows have`} closed; those can only be written off or recovered and will be refused.
             </p>
           ) : null}

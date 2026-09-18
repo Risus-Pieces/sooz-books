@@ -1,11 +1,12 @@
 import * as React from "react";
-import { TriangleAlert } from "lucide-react";
 
 import { EmptyState } from "@/components/ui/empty-state";
+import { Glyph } from "@/components/ui/glyph";
 import { cn } from "@/lib/cn";
 import type { Report } from "@/lib/reports/types";
 
 import { ReportRowView } from "./report-row";
+import { ReportScroller } from "./report-scroller";
 
 export interface ReportMatrixProps {
   report: Report;
@@ -27,7 +28,7 @@ export interface ReportMatrixProps {
 export function ReportMatrix({
   report,
   dense,
-  emptyTitle = "Nothing posted in this range",
+  emptyTitle = "Nothing posted",
   emptyDescription = "Widen the dates or switch the basis. Bank lines reach the ledger once they are approved in the review queue.",
   className,
 }: ReportMatrixProps) {
@@ -47,10 +48,10 @@ export function ReportMatrix({
   return (
     <div className={cn("flex flex-col", className)}>
       {meta.warnings.length > 0 ? (
-        <ul className="flex flex-col gap-1.5 border-b border-border bg-warning/8 px-4 py-2.5">
+        <ul className="flex flex-col gap-1 hairline-b bg-[color-mix(in_srgb,var(--orange)_9%,var(--card))] px-5 py-2.5">
           {meta.warnings.map((warning) => (
-            <li key={warning} className="flex gap-2 text-xs text-foreground">
-              <TriangleAlert className="mt-0.5 size-3.5 shrink-0 text-warning" aria-hidden />
+            <li key={warning} className="flex gap-2 text-xs text-label">
+              <Glyph name="warning" size={13} className="mt-0.5 shrink-0 text-ink-orange" />
               <span className="leading-relaxed">{warning}</span>
             </li>
           ))}
@@ -58,45 +59,43 @@ export function ReportMatrix({
       ) : null}
 
       {hasFigures ? (
-        // The table scrolls inside its own box rather than with the page: that is
-        // what keeps the column heads and the account column in place while a
-        // hundred-line register moves under them.
-        <div className="relative w-full overflow-auto max-h-[max(20rem,calc(100dvh-17rem))]">
+        // The page scrolls, not the table: the column heads stick under the toolbar. Only a
+        // table wider than the card scrolls sideways, keeping the account column in place.
+        <ReportScroller>
           <table className="w-full border-separate border-spacing-0 text-sm">
             <caption className="sr-only">
               {meta.title}, {meta.subtitle}, {meta.basis} basis
             </caption>
-            <thead className="sticky top-0 z-20">
+            <thead className="sticky top-0 z-20 md:in-data-fit:top-[60px]">
               <tr>
                 <th
                   scope="col"
-                  className="sticky left-0 z-30 rule-head bg-surface px-2 py-2 text-left align-bottom"
+                  className="sticky left-0 z-30 rule-head bg-card py-2 pr-4 pl-5 text-left align-bottom text-xs font-semibold text-label2"
                 >
-                  <span className="eyebrow">Account</span>
+                  Account
                 </th>
                 {columns.map((column) => (
                   <th
                     key={column.key}
                     scope="col"
                     className={cn(
-                      "rule-head bg-surface px-3 py-2 align-bottom whitespace-nowrap",
+                      "rule-head bg-card px-3 py-2 align-bottom whitespace-nowrap last:pr-5",
                       column.kind === "text" || column.kind === "date"
                         ? "text-left"
                         : "text-right",
-                      column.emphasis && "bg-muted/35",
                       (column.group === "compare" || column.group === "variance") && "rule-gutter",
                     )}
                   >
                     <span
                       className={cn(
-                        "eyebrow block",
-                        column.emphasis && "text-foreground",
+                        "block text-xs font-semibold",
+                        column.emphasis ? "text-label" : "text-label2",
                       )}
                     >
                       {column.label}
                     </span>
                     {column.sublabel ? (
-                      <span className="block text-2xs font-normal normal-case text-muted-foreground max-sm:min-w-[6.5rem] max-sm:whitespace-normal">
+                      <span className="block text-2xs font-normal text-label2 max-sm:hidden">
                         {column.sublabel}
                       </span>
                     ) : null}
@@ -118,13 +117,14 @@ export function ReportMatrix({
             </tbody>
           </table>
           {hasDetail ? null : (
-            <p className="sticky left-0 max-w-[calc(100vw-2.125rem)] px-4 py-3 text-xs text-muted-foreground">
-              {emptyTitle}. {emptyDescription}
+            <p className="sticky left-0 flex max-w-[calc(100vw-2.125rem)] items-center gap-2 px-5 py-4 text-sm font-medium text-label2">
+              <Glyph name="doc" size={16} />
+              {emptyTitle}
             </p>
           )}
-        </div>
+        </ReportScroller>
       ) : (
-        <EmptyState title={emptyTitle} description={emptyDescription} />
+        <EmptyState glyph="chart" title={emptyTitle} description={emptyDescription} />
       )}
     </div>
   );

@@ -3,15 +3,18 @@
 import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Plus, Send, Trash2 } from "lucide-react";
 
+import { FlowDiagram } from "@/components/charts";
 import { AccountCombobox } from "@/components/ledger/account-combobox";
+import { PageToolbar } from "@/components/shell/page-toolbar";
 import type { AccountOption } from "@/components/ledger/types";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { DateInput } from "@/components/ui/date-input";
+import { Glyph } from "@/components/ui/glyph";
+import { InfoButton } from "@/components/ui/info-button";
+import { GroupRow, InsetGroup } from "@/components/ui/inset-group";
+import { Kbd } from "@/components/ui/keycap";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Money } from "@/components/ui/money";
 import {
   Select,
@@ -21,13 +24,14 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { toast } from "@/components/ui/toast";
-import { cn } from "@/lib/cn";
 import { addDays, isCalendarDate } from "@/lib/dates";
+import { CATEGORIES } from "@/lib/ui/categories";
 import { saveInvoice } from "@/app/(app)/sales/actions";
 
 import { extendCents, invoiceTotals, readMoney, scaledQuantity, termsLabel } from "./math";
 import { MoneyInput, centsOf, textOf } from "./money-input";
 import { PartyCombobox } from "./party-combobox";
+import { FormSection, Grid, GridFigure, GridRowNo, GridTd, GridTh, TotalRow, Totals, cellField, stackRow } from "./sheet-grid";
 import type { CustomerPick, InvoiceForm, Option } from "./types";
 
 const NONE = "__none__";
@@ -65,7 +69,6 @@ function isBlank(line: LineState): boolean {
 export interface InvoiceFormProps {
   /** The draft being edited; null for a new invoice. */
   invoiceId: string | null;
-  invoiceNo: string | null;
   customers: readonly CustomerPick[];
   revenueAccounts: readonly AccountOption[];
   products: readonly Option[];
@@ -73,6 +76,8 @@ export interface InvoiceFormProps {
   /** True when the due date was set by hand rather than from the terms. */
   dueDateOverridden: boolean;
   canManage: boolean;
+  /** The page's toolbar: the form draws it, so Save and Issue sit in it. */
+  toolbar: { title: string; back: { href: string; label: string }; info?: React.ReactNode; subtitle?: React.ReactNode };
 }
 
 /**
@@ -83,13 +88,13 @@ export interface InvoiceFormProps {
  */
 export function InvoiceFormView({
   invoiceId,
-  invoiceNo,
   customers,
   revenueAccounts,
   products,
   initial,
   dueDateOverridden,
   canManage,
+  toolbar,
 }: InvoiceFormProps) {
   const router = useRouter();
   const [pending, start] = React.useTransition();
@@ -210,51 +215,78 @@ export function InvoiceFormView({
     });
   };
 
+  const saveDisabled = pending || !canManage || customer === null || filled.length === 0;
+  const issueDisabled = pending || problem !== null;
+  const buttons = (phone: boolean) => (
+    <>
+      <Button
+        type="button"
+        variant="secondary"
+        className={phone ? "flex-1" : undefined}
+        disabled={saveDisabled}
+        onClick={() => submit("draft")}
+      >
+        Save draft
+      </Button>
+      <Button type="button" className={phone ? "flex-1" : undefined} disabled={issueDisabled} onClick={() => submit("issue")}>
+        <Glyph name="arrow-out" size={15} weight={2} />
+        Issue invoice
+      </Button>
+    </>
+  );
+
   return (
-    <div className="flex flex-col gap-4 pb-28">
-      <Card>
-        <CardHeader>
-          <CardTitle>{invoiceNo === null ? "New invoice" : `Draft ${invoiceNo}`}</CardTitle>
-          {customer ? (
-            <span className="text-xs text-muted-foreground">
-              Terms {termsLabel(customer.termsDays, customer.termsDiscountPct, customer.termsDiscountDays)}
-              {defaultAccount ? ` · sales to ${defaultAccount.code} ${defaultAccount.name}` : null}
-            </span>
-          ) : null}
-        </CardHeader>
-        <CardContent className="grid gap-4 sm:grid-cols-2 lg:grid-cols-[minmax(14rem,2fr)_10rem_10rem_minmax(8rem,1fr)]">
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="inv-customer" required>
-              Customer
-            </Label>
-            <PartyCombobox
-              id="inv-customer"
-              options={customers.map((c) => ({ id: c.id, name: c.name, note: termsLabel(c.termsDays, c.termsDiscountPct, c.termsDiscountDays) }))}
-              value={customerId}
-              onChange={setCustomerId}
-              placeholder="Choose a customer"
-              emptyText="No customer by that name."
+    <div className="flex flex-col gap-3.5 max-md:gap-3">
+      <PageToolbar
+        title={toolbar.title}
+        subtitle={toolbar.subtitle}
+        back={toolbar.back}
+        info={toolbar.info}
+        phoneTitleRow
+        actions={<div className="flex items-center gap-2 max-md:hidden">{buttons(false)}</div>}
+      />
+
+      <div className="grid gap-3.5 max-md:gap-3 lg:grid-cols-2">
+        <InsetGroup className="[&>div]:overflow-visible">
+          <GroupRow label="Customer" htmlFor="inv-customer">
+            <div className="flex w-64 flex-col items-end gap-1 max-sm:w-48">
+              <PartyCombobox
+                id="inv-customer"
+                options={customers.map((c) => ({ id: c.id, name: c.name, note: termsLabel(c.termsDays, c.termsDiscountPct, c.termsDiscountDays) }))}
+                value={customerId}
+                onChange={setCustomerId}
+                placeholder="Choose"
+                emptyText="No customer by that name."
+                disabled={pending}
+              />
+              {customers.length === 0 ? (
+                <Link href="/sales/customers?new=1" className="text-xs font-medium text-ink-blue hover:underline">
+                  Add customer
+                </Link>
+              ) : null}
+            </div>
+          </GroupRow>
+          <GroupRow label="PO" htmlFor="inv-po">
+            <Input id="inv-po" className="w-64 max-sm:w-48" value={poNumber} placeholder="Buyer’s PO" onChange={(e) => setPoNumber(e.target.value)} disabled={pending} />
+          </GroupRow>
+          <GroupRow label="Note" htmlFor="inv-memo">
+            <Input
+              id="inv-memo"
+              className="w-64 max-sm:w-48"
+              value={memo}
+              placeholder="Printed on the invoice"
+              onChange={(e) => setMemo(e.target.value)}
               disabled={pending}
             />
-            {customers.length === 0 ? (
-              <p className="text-xs text-muted-foreground">
-                No customers yet.{" "}
-                <Link href="/sales/customers?new=1" className="text-primary hover:underline">
-                  Add the first one
-                </Link>
-              </p>
-            ) : null}
-          </div>
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="inv-date" required>
-              Invoice date
-            </Label>
+          </GroupRow>
+        </InsetGroup>
+
+        <InsetGroup>
+          <GroupRow label="Date" htmlFor="inv-date">
             <DateInput id="inv-date" value={invoiceDate} onValueChange={setInvoiceDate} disabled={pending} />
-          </div>
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="inv-due" hint={dueTouched ? "set by hand" : "from terms"}>
-              Due
-            </Label>
+          </GroupRow>
+          <GroupRow label="Due" htmlFor="inv-due">
+            <span className="text-xs text-label2 max-sm:hidden">{dueTouched ? "Set by hand" : "From terms"}</span>
             <DateInput
               id="inv-due"
               value={effectiveDue}
@@ -264,282 +296,254 @@ export function InvoiceFormView({
               }}
               disabled={pending}
             />
-          </div>
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="inv-po" hint="the buyer's">
-              PO number
-            </Label>
-            <Input id="inv-po" value={poNumber} onChange={(e) => setPoNumber(e.target.value)} disabled={pending} />
-          </div>
-          <div className="flex flex-col gap-1.5 sm:col-span-2 lg:col-span-4">
-            <Label htmlFor="inv-memo" hint="printed on the invoice">
-              Note to customer
-            </Label>
-            <Input
-              id="inv-memo"
-              value={memo}
-              placeholder="e.g. Thank you — deliveries Tuesdays before 10am"
-              onChange={(e) => setMemo(e.target.value)}
-              disabled={pending}
-            />
-          </div>
-        </CardContent>
-      </Card>
+          </GroupRow>
+          <GroupRow label="Terms">
+            <span className="truncate">
+              {customer ? termsLabel(customer.termsDays, customer.termsDiscountPct, customer.termsDiscountDays) : "—"}
+            </span>
+          </GroupRow>
+          <GroupRow label="Sales to">
+            <span className="truncate">{defaultAccount ? `${defaultAccount.code} ${defaultAccount.name}` : "—"}</span>
+          </GroupRow>
+        </InsetGroup>
+      </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Lines</CardTitle>
-          <span className="text-xs text-muted-foreground">Enter adds a line · discounts post to 4510, never netted off sales</span>
-        </CardHeader>
-        <div className="relative overflow-x-auto p-3">
-          <table className="w-full min-w-[60rem] border-separate border-spacing-0 text-sm">
-            <caption className="sr-only">Invoice lines</caption>
-            <thead>
-              <tr>
-                <GridTh className="w-7 text-right">#</GridTh>
-                <GridTh className="min-w-52">Description</GridTh>
-                <GridTh className="w-40">Product</GridTh>
-                <GridTh className="w-20 text-right">Qty</GridTh>
-                <GridTh className="w-28 text-right">Unit price</GridTh>
-                <GridTh className="w-24 text-right">Discount</GridTh>
-                <GridTh className="w-24 text-right">Tax</GridTh>
-                <GridTh className="w-28 text-right">Amount</GridTh>
-                <GridTh className="w-52">Revenue account</GridTh>
-                <GridTh className="w-8">
-                  <span className="sr-only">Remove</span>
-                </GridTh>
-              </tr>
-            </thead>
-            <tbody>
-              {lines.map((line, index) => {
-                const qty = line.quantity.trim() === "" ? "1" : line.quantity;
-                const amount = extendCents(qty, centsOf(line.price));
-                const error = lineErrors.get(line.key);
-                return (
-                  <React.Fragment key={line.key}>
-                    <tr
-                      className="align-middle"
-                      onKeyDown={(event) => {
-                        if (event.key !== "Enter" || event.defaultPrevented) return;
-                        if ((event.target as HTMLElement).closest("[cmdk-root]") !== null) return;
-                        event.preventDefault();
-                        addAfter(line.key);
+      <FormSection
+        title="Lines"
+        accessory={
+          <InfoButton label="About lines">
+            <p>Enter adds a line. Discounts post to 4510, never netted off sales. A line with no revenue account uses the customer&rsquo;s channel.</p>
+          </InfoButton>
+        }
+      >
+        <Grid
+          caption="Invoice lines"
+          minWidth="min-w-[62rem]"
+          stack
+          head={
+            <>
+              <GridTh className="w-9" align="right">
+                <span className="sr-only">Line</span>
+              </GridTh>
+              <GridTh className="min-w-52">Description</GridTh>
+              <GridTh className="w-40">Product</GridTh>
+              <GridTh className="w-20" align="right">
+                Qty
+              </GridTh>
+              <GridTh className="w-28" align="right">
+                Price
+              </GridTh>
+              <GridTh className="w-24" align="right">
+                Discount
+              </GridTh>
+              <GridTh className="w-24" align="right">
+                Tax
+              </GridTh>
+              <GridTh className="w-28" align="right">
+                Amount
+              </GridTh>
+              <GridTh className="w-52">Revenue</GridTh>
+              <GridTh className="w-10">
+                <span className="sr-only">Remove</span>
+              </GridTh>
+            </>
+          }
+          after={
+            <button
+              type="button"
+              disabled={pending}
+              onClick={() => addAfter(null)}
+              className="flex h-10 w-full items-center gap-2 px-3 text-sm font-medium text-ink-blue transition-colors hover:bg-fill2 disabled:opacity-50 max-sm:h-11"
+            >
+              <Glyph name="plus" size={14} weight={2.2} />
+              Add line
+              <Kbd className="ml-1 max-sm:hidden">⏎</Kbd>
+            </button>
+          }
+        >
+          {lines.map((line, index) => {
+            const qty = line.quantity.trim() === "" ? "1" : line.quantity;
+            const amount = extendCents(qty, centsOf(line.price));
+            const error = lineErrors.get(line.key);
+            return (
+              <React.Fragment key={line.key}>
+                <tr
+                  className={stackRow}
+                  onKeyDown={(event) => {
+                    if (event.key !== "Enter" || event.defaultPrevented) return;
+                    if ((event.target as HTMLElement).closest("[cmdk-root]") !== null) return;
+                    event.preventDefault();
+                    addAfter(line.key);
+                  }}
+                >
+                  <GridRowNo n={index + 1} />
+                  <GridTd label="Description" className="max-md:order-1 max-md:col-span-6">
+                    <Input
+                      className={cellField}
+                      value={line.description}
+                      invalid={error === "Describe what was sold."}
+                      placeholder="Hibiscus ginger, case of 12"
+                      aria-label={`Description, line ${index + 1}`}
+                      disabled={pending}
+                      onChange={(e) => patch(line.key, { description: e.target.value })}
+                    />
+                  </GridTd>
+                  <GridTd label="Product" className="max-md:order-2 max-md:col-span-6">
+                    <Select
+                      value={line.productId ?? NONE}
+                      disabled={pending || products.length === 0}
+                      onValueChange={(next) => {
+                        const productId = next === NONE ? null : next;
+                        const product = products.find((p) => p.id === productId);
+                        patch(line.key, {
+                          productId,
+                          ...(product && line.description.trim() === "" ? { description: product.label } : {}),
+                        });
                       }}
                     >
-                      <GridTd className="num text-right text-xs text-muted-foreground">{index + 1}</GridTd>
-                      <GridTd>
-                        <Input
-                          className="h-7"
-                          value={line.description}
-                          invalid={error === "Describe what was sold."}
-                          placeholder="e.g. Hibiscus ginger, case of 12"
-                          aria-label={`Description, line ${index + 1}`}
-                          disabled={pending}
-                          onChange={(e) => patch(line.key, { description: e.target.value })}
-                        />
-                      </GridTd>
-                      <GridTd>
-                        <Select
-                          value={line.productId ?? NONE}
-                          disabled={pending || products.length === 0}
-                          onValueChange={(next) => {
-                            const productId = next === NONE ? null : next;
-                            const product = products.find((p) => p.id === productId);
-                            patch(line.key, {
-                              productId,
-                              ...(product && line.description.trim() === "" ? { description: product.label } : {}),
-                            });
-                          }}
-                        >
-                          <SelectTrigger className="h-7" aria-label={`Product, line ${index + 1}`}>
-                            <SelectValue placeholder={products.length === 0 ? "No products" : "Product"} />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value={NONE}>
-                              <span className="text-muted-foreground">No product</span>
-                            </SelectItem>
-                            {products.map((p) => (
-                              <SelectItem key={p.id} value={p.id}>
-                                {p.hint ? `${p.hint} · ` : ""}
-                                {p.label}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </GridTd>
-                      <GridTd>
-                        <Input
-                          numeric
-                          inputMode="decimal"
-                          className="h-7"
-                          value={line.quantity}
-                          invalid={scaledQuantity(qty) === null}
-                          aria-label={`Quantity, line ${index + 1}`}
-                          disabled={pending}
-                          onChange={(e) => patch(line.key, { quantity: e.target.value })}
-                        />
-                      </GridTd>
-                      <GridTd>
-                        <MoneyInput
-                          className="h-7"
-                          value={line.price}
-                          aria-label={`Unit price, line ${index + 1}`}
-                          disabled={pending}
-                          onValueChange={(price) => patch(line.key, { price })}
-                        />
-                      </GridTd>
-                      <GridTd>
-                        <MoneyInput
-                          className="h-7"
-                          value={line.discount}
-                          aria-label={`Discount, line ${index + 1}`}
-                          disabled={pending}
-                          onValueChange={(value) => patch(line.key, { discount: value })}
-                        />
-                      </GridTd>
-                      <GridTd>
-                        <MoneyInput
-                          className="h-7"
-                          value={line.tax}
-                          aria-label={`Sales tax, line ${index + 1}`}
-                          disabled={pending}
-                          onValueChange={(value) => patch(line.key, { tax: value })}
-                        />
-                      </GridTd>
-                      <GridTd className="text-right">
-                        {amount === null || isBlank(line) ? (
-                          <span className="text-muted-foreground">—</span>
-                        ) : (
-                          <Money cents={amount} plain />
-                        )}
-                      </GridTd>
-                      <GridTd>
-                        <AccountCombobox
-                          accounts={revenueAccounts}
-                          value={line.revenueAccountId}
-                          disabled={pending}
-                          invalid={error === "This customer has no sales channel, so choose the revenue account."}
-                          placeholder={defaultAccount ? `${defaultAccount.code} · channel default` : "Revenue account"}
-                          onChange={(revenueAccountId) => patch(line.key, { revenueAccountId })}
-                          className="h-7"
-                        />
-                      </GridTd>
-                      <GridTd className="text-right">
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon-sm"
-                          aria-label={`Remove line ${index + 1}`}
-                          disabled={pending || (lines.length === 1 && isBlank(line))}
-                          onClick={() =>
-                            setLines((current) => {
-                              const rest = current.filter((l) => l.key !== line.key);
-                              return rest.length === 0 ? [blankLine()] : rest;
-                            })
-                          }
-                        >
-                          <Trash2 />
-                        </Button>
-                      </GridTd>
-                    </tr>
-                    {error ? (
-                      <tr>
-                        <td />
-                        <td colSpan={9} className="pb-1 text-xs text-negative">
-                          {error}
-                        </td>
-                      </tr>
-                    ) : null}
-                  </React.Fragment>
-                );
-              })}
-            </tbody>
-          </table>
-          <div className="pt-2">
-            <Button type="button" variant="ghost" size="sm" disabled={pending} onClick={() => addAfter(null)}>
-              <Plus />
-              Add line
-              <span className="text-2xs text-muted-foreground">or press Enter</span>
-            </Button>
-          </div>
-        </div>
+                      <SelectTrigger className={cellField} aria-label={`Product, line ${index + 1}`}>
+                        <SelectValue placeholder={products.length === 0 ? "No products" : "Product"} />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value={NONE}>No product</SelectItem>
+                        {products.map((p) => (
+                          <SelectItem key={p.id} value={p.id}>
+                            {p.hint ? `${p.hint} · ` : ""}
+                            {p.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </GridTd>
+                  <GridTd label="Qty" className="max-md:order-3 max-md:col-span-2">
+                    <Input
+                      numeric
+                      inputMode="decimal"
+                      className={cellField}
+                      value={line.quantity}
+                      invalid={scaledQuantity(qty) === null}
+                      aria-label={`Quantity, line ${index + 1}`}
+                      disabled={pending}
+                      onChange={(e) => patch(line.key, { quantity: e.target.value })}
+                    />
+                  </GridTd>
+                  <GridTd label="Price" className="max-md:order-4 max-md:col-span-2">
+                    <MoneyInput
+                      className={cellField}
+                      value={line.price}
+                      aria-label={`Unit price, line ${index + 1}`}
+                      disabled={pending}
+                      onValueChange={(price) => patch(line.key, { price })}
+                    />
+                  </GridTd>
+                  <GridTd label="Discount" className="max-md:order-6 max-md:col-span-3">
+                    <MoneyInput
+                      className={cellField}
+                      value={line.discount}
+                      placeholder=""
+                      aria-label={`Discount, line ${index + 1}`}
+                      disabled={pending}
+                      onValueChange={(value) => patch(line.key, { discount: value })}
+                    />
+                  </GridTd>
+                  <GridTd label="Tax" className="max-md:order-7 max-md:col-span-3">
+                    <MoneyInput
+                      className={cellField}
+                      value={line.tax}
+                      placeholder=""
+                      aria-label={`Sales tax, line ${index + 1}`}
+                      disabled={pending}
+                      onValueChange={(value) => patch(line.key, { tax: value })}
+                    />
+                  </GridTd>
+                  <GridTd label="Amount" className="bg-fill2/50 max-md:order-5 max-md:col-span-2">
+                    <GridFigure>
+                      {amount === null || isBlank(line) ? <span className="text-label3">—</span> : <Money cents={amount} plain />}
+                    </GridFigure>
+                  </GridTd>
+                  <GridTd label="Revenue" className="max-md:order-8 max-md:col-span-6">
+                    <AccountCombobox
+                      accounts={revenueAccounts}
+                      value={line.revenueAccountId}
+                      disabled={pending}
+                      invalid={error === "This customer has no sales channel, so choose the revenue account."}
+                      placeholder={defaultAccount ? `${defaultAccount.code} · channel` : "Revenue account"}
+                      onChange={(revenueAccountId) => patch(line.key, { revenueAccountId })}
+                      className={cellField}
+                    />
+                  </GridTd>
+                  <GridTd className="text-center max-md:order-9 max-md:col-span-6 max-md:in-data-stack:flex max-md:justify-end">
+                    <button
+                      type="button"
+                      aria-label={`Remove line ${index + 1}`}
+                      disabled={pending || (lines.length === 1 && isBlank(line))}
+                      onClick={() =>
+                        setLines((current) => {
+                          const rest = current.filter((l) => l.key !== line.key);
+                          return rest.length === 0 ? [blankLine()] : rest;
+                        })
+                      }
+                      className="grid size-8 place-items-center rounded-full text-label3 transition-colors hover:bg-fill2 hover:text-ink-red disabled:opacity-30 max-sm:size-11 max-md:flex max-md:h-11 max-md:w-auto max-md:gap-1.5 max-md:px-3 max-md:text-sm max-md:font-medium max-md:text-ink-red"
+                    >
+                      <Glyph name="minus" size={14} weight={2.2} />
+                      <span className="md:hidden">Remove</span>
+                    </button>
+                  </GridTd>
+                </tr>
+                {error ? (
+                  <tr className="max-md:-mt-1 max-md:mb-2.5 max-md:block">
+                    <td className="max-md:hidden" />
+                    <td colSpan={9} className="border-b-[0.5px] border-sep px-2.5 py-1.5 text-xs font-medium text-ink-red max-md:block max-md:border-0 max-md:px-3">
+                      {error}
+                    </td>
+                  </tr>
+                ) : null}
+              </React.Fragment>
+            );
+          })}
+        </Grid>
 
-        <div className="flex justify-end border-t border-border p-4">
-          <dl className="grid w-full max-w-xs grid-cols-[1fr_8rem] items-center gap-y-1.5 text-sm [&>dd]:pl-4">
-            <dt className="text-muted-foreground">Subtotal</dt>
-            <dd className="text-right">
-              <Money cents={totals.subtotalCents} plain />
-            </dd>
-            <dt className="text-muted-foreground">
-              <label htmlFor="inv-discount">Invoice discount</label>
-            </dt>
-            <dd>
-              <MoneyInput id="inv-discount" className="h-7" value={discount} onValueChange={setDiscount} disabled={pending} />
-            </dd>
-            <dt className="text-muted-foreground">
-              <label htmlFor="inv-shipping">Shipping</label>
-            </dt>
-            <dd>
-              <MoneyInput id="inv-shipping" className="h-7" value={shipping} onValueChange={setShipping} disabled={pending} />
-            </dd>
-            <dt className="text-muted-foreground">All discounts</dt>
-            <dd className="text-right">
-              <Money cents={-totals.discountCents} plain zeroDash />
-            </dd>
-            <dt className="text-muted-foreground">Sales tax</dt>
-            <dd className="text-right">
-              <Money cents={totals.taxCents} plain zeroDash />
-            </dd>
-            <dt className="rule-subtotal pt-1.5 font-semibold">Total</dt>
-            <dd className="rule-subtotal rule-total pt-1.5 pb-0.5 text-right">
-              <Money cents={totals.totalCents} currency plain className="font-semibold" />
-            </dd>
-          </dl>
+        <div className="mt-4 grid gap-5 lg:grid-cols-[minmax(0,1fr)_20rem] lg:items-start">
+          <div className="min-w-0 rounded-[12px] bg-inset px-4 py-3.5 max-lg:order-last">
+            <p className="mb-2.5 text-xs font-semibold text-label2">Issuing posts</p>
+            <FlowDiagram
+              from={{ label: customer === null ? "Sales" : (defaultAccount?.name ?? "Sales"), glyph: CATEGORIES.revenue.glyph, tint: CATEGORIES.revenue.tint }}
+              to={[{ label: "Receivables", glyph: CATEGORIES.receivables.glyph, tint: CATEGORIES.receivables.tint, cents: totals.totalCents }]}
+              className="[&_span.bg-card]:bg-inset"
+            />
+          </div>
+          <div className="flex flex-col gap-2">
+            <Totals>
+              <TotalRow label="Subtotal">
+                <Money cents={totals.subtotalCents} plain />
+              </TotalRow>
+              <TotalRow label="Invoice discount" htmlFor="inv-discount">
+                <MoneyInput id="inv-discount" className="h-7 w-28" value={discount} onValueChange={setDiscount} disabled={pending} />
+              </TotalRow>
+              <TotalRow label="Shipping" htmlFor="inv-shipping">
+                <MoneyInput id="inv-shipping" className="h-7 w-28" value={shipping} onValueChange={setShipping} disabled={pending} />
+              </TotalRow>
+              <TotalRow label="All discounts">
+                <Money cents={-totals.discountCents} plain zeroDash />
+              </TotalRow>
+              <TotalRow label="Sales tax">
+                <Money cents={totals.taxCents} plain zeroDash />
+              </TotalRow>
+              <TotalRow label="Total" strong>
+                <Money cents={totals.totalCents} currency plain />
+              </TotalRow>
+            </Totals>
+            {problem === null ? null : (
+              <p role="status" className="flex items-center justify-end gap-1.5 text-xs font-medium text-label2">
+                <Glyph name="info" size={13} />
+                {problem}
+              </p>
+            )}
+          </div>
         </div>
-      </Card>
+      </FormSection>
 
-      <div className="fixed inset-x-0 bottom-0 z-30 border-t border-border-strong bg-surface-raised/95 backdrop-blur">
-        <div className="mx-auto flex w-full max-w-[104rem] flex-wrap items-center justify-between gap-3 px-4 py-2.5 lg:px-6">
-          <div className="flex items-baseline gap-2 text-sm">
-            <span className="eyebrow">Total</span>
-            <Money cents={totals.totalCents} currency plain className="font-semibold" />
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            {problem === null ? null : <span className="max-w-sm text-xs text-muted-foreground">{problem}</span>}
-            <Button
-              type="button"
-              variant="secondary"
-              size="sm"
-              disabled={pending || !canManage || customer === null || filled.length === 0}
-              onClick={() => submit("draft")}
-            >
-              Save draft
-            </Button>
-            <Button type="button" size="sm" disabled={pending || problem !== null} onClick={() => submit("issue")}>
-              <Send />
-              Issue invoice
-            </Button>
-          </div>
-        </div>
-      </div>
+      <div className="flex gap-2 rounded-[22px] bg-card p-3 shadow-card md:hidden">{buttons(true)}</div>
     </div>
   );
-}
-
-function GridTh({ className, children }: { className?: string; children: React.ReactNode }) {
-  return (
-    <th
-      scope="col"
-      className={cn(
-        "rule-head px-1.5 pb-1 text-left text-2xs font-semibold tracking-wider text-muted-foreground uppercase",
-        className,
-      )}
-    >
-      {children}
-    </th>
-  );
-}
-
-function GridTd({ className, children }: { className?: string; children?: React.ReactNode }) {
-  return <td className={cn("px-1.5 py-1 align-middle", className)}>{children}</td>;
 }

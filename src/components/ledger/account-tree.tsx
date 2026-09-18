@@ -3,12 +3,9 @@
 import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Pencil, Plus, RotateCcw, Search, XCircle } from "lucide-react";
 
-import { Badge } from "@/components/ui/badge";
+import { PageToolbar } from "@/components/shell/page-toolbar";
 import { Button } from "@/components/ui/button";
-import { Card, CardHeader, CardTitle, CardToolbar } from "@/components/ui/card";
-import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
   DialogBody,
@@ -18,10 +15,19 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { EmptyState } from "@/components/ui/empty-state";
-import { Input } from "@/components/ui/input";
+import { Glyph } from "@/components/ui/glyph";
+import { CategoryBadge } from "@/components/ui/icon-badge";
+import { InsetGroup } from "@/components/ui/inset-group";
 import { Label } from "@/components/ui/label";
 import { Money } from "@/components/ui/money";
+import { SearchField } from "@/components/ui/search-field";
 import {
   Select,
   SelectContent,
@@ -30,7 +36,9 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { toast } from "@/components/ui/toast";
+import { ToolbarButton, ToolbarGroup } from "@/components/ui/toolbar";
 import { cn } from "@/lib/cn";
+import { categoryFor } from "@/lib/ui/categories";
 import {
   deactivateLedgerAccount,
   reactivateLedgerAccount,
@@ -45,17 +53,17 @@ export interface AccountTreeProps {
   canManage: boolean;
 }
 
-const TYPE_LABEL: Record<AccountTreeRow["type"], string> = {
-  asset: "Asset",
-  liability: "Liability",
-  equity: "Equity",
-  revenue: "Revenue",
-  expense: "Expense",
-};
+const TYPES: ReadonlyArray<{ type: AccountTreeRow["type"]; label: string }> = [
+  { type: "asset", label: "Assets" },
+  { type: "liability", label: "Liabilities" },
+  { type: "equity", label: "Equity" },
+  { type: "revenue", label: "Revenue" },
+  { type: "expense", label: "Expenses" },
+];
 
 /**
- * The chart of accounts, nested as it reads on a statement, with the posted
- * balance beside each account.
+ * The chart of accounts as an outline: one group per statement section, each account under its
+ * parent with its category badge and posted balance. Parents fold.
  *
  * Search keeps the shape rather than flattening it: a match drags its parents
  * along, because "6120 Meta & Google Ads" means something different depending on
@@ -64,6 +72,7 @@ const TYPE_LABEL: Record<AccountTreeRow["type"], string> = {
 export function AccountTree({ accounts, canManage }: AccountTreeProps) {
   const [query, setQuery] = React.useState("");
   const [showInactive, setShowInactive] = React.useState(false);
+  const [collapsed, setCollapsed] = React.useState<ReadonlySet<string>>(() => new Set());
   // `null` means no dialog; a row means edit it; `"new"` means create one.
   const [editing, setEditing] = React.useState<AccountTreeRow | "new" | null>(null);
   const [retiring, setRetiring] = React.useState<AccountTreeRow | null>(null);
@@ -74,8 +83,9 @@ export function AccountTree({ accounts, canManage }: AccountTreeProps) {
     return map;
   }, [accounts]);
 
+  const needle = query.trim().toLowerCase();
+
   const visible = React.useMemo(() => {
-    const needle = query.trim().toLowerCase();
     const matches = accounts.filter((account) => {
       if (!showInactive && !account.active) return false;
       if (needle === "") return true;
@@ -86,150 +96,115 @@ export function AccountTree({ accounts, canManage }: AccountTreeProps) {
       );
     });
 
-    if (needle === "") return matches;
-
-    // Pull in the ancestors of every match so the indent still means something.
     const keep = new Set(matches.map((account) => account.id));
-    for (const account of matches) {
-      let parentId = account.parentId;
-      while (parentId !== null && !keep.has(parentId)) {
-        keep.add(parentId);
-        parentId = byId.get(parentId)?.parentId ?? null;
+    if (needle !== "") {
+      // Pull in the ancestors of every match so the indent still means something.
+      for (const account of matches) {
+        let parentId = account.parentId;
+        while (parentId !== null && !keep.has(parentId)) {
+          keep.add(parentId);
+          parentId = byId.get(parentId)?.parentId ?? null;
+        }
       }
     }
-    return accounts.filter((account) => keep.has(account.id));
-  }, [accounts, byId, query, showInactive]);
+
+    // A folded parent hides everything under it (never while searching).
+    const hidden = (account: AccountTreeRow): boolean => {
+      if (needle !== "") return false;
+      let parentId = account.parentId;
+      while (parentId !== null) {
+        if (collapsed.has(parentId)) return true;
+        parentId = byId.get(parentId)?.parentId ?? null;
+      }
+      return false;
+    };
+    return accounts.filter((account) => keep.has(account.id) && !hidden(account));
+  }, [accounts, byId, collapsed, needle, showInactive]);
 
   const inactiveCount = accounts.filter((account) => !account.active).length;
+  const activeCount = accounts.length - inactiveCount;
+
+  const toggle = (id: string) =>
+    setCollapsed((current) => {
+      const next = new Set(current);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
 
   return (
-    <div className="flex flex-col gap-4">
-      <Card>
-        <CardHeader>
-          <CardTitle>
-            {visible.length} of {accounts.length} accounts
-          </CardTitle>
-          <CardToolbar className="flex-wrap gap-3">
-            <div className="relative">
-              <Search className="pointer-events-none absolute top-1/2 left-2 size-3.5 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                value={query}
-                placeholder="Filter by code or name"
-                aria-label="Filter accounts"
-                className="w-56 pl-7"
-                onChange={(event) => setQuery(event.target.value)}
+    <>
+      <PageToolbar
+        title="Chart of accounts"
+        back={{ href: "/ledger", label: "Journal" }}
+        phoneTitleRow
+        subtitle={<span className="num">{activeCount}</span>}
+        info={
+          <p>
+            Every account the ledger can post to, nested as it reads on a statement. Balances are posted, accrual, as
+            of today. Accounts are retired, never deleted.
+          </p>
+        }
+        search={
+          <SearchField
+            appearance="toolbar"
+            value={query}
+            aria-label="Filter accounts"
+            onChange={(event) => setQuery(event.target.value)}
+          />
+        }
+        actions={
+          <ToolbarGroup>
+            {inactiveCount > 0 ? (
+              <ToolbarButton
+                glyph="xmark-circle"
+                label={showInactive ? `Hide inactive (${inactiveCount})` : `Show inactive (${inactiveCount})`}
+                tone={showInactive ? "accent" : "default"}
+                aria-pressed={showInactive}
+                onClick={() => setShowInactive((value) => !value)}
               />
-            </div>
-            <label className="flex items-center gap-2 text-xs text-muted-foreground">
-              <Checkbox
-                checked={showInactive}
-                onCheckedChange={(checked) => setShowInactive(checked === true)}
-              />
-              Show inactive
-              {inactiveCount > 0 ? <span className="num">({inactiveCount})</span> : null}
-            </label>
-            {canManage ? (
-              <Button size="sm" onClick={() => setEditing("new")}>
-                <Plus />
-                New account
-              </Button>
             ) : null}
-          </CardToolbar>
-        </CardHeader>
+            {canManage ? <ToolbarButton glyph="plus" label="New account" onClick={() => setEditing("new")} /> : null}
+          </ToolbarGroup>
+        }
+      />
 
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[62rem] border-separate border-spacing-0 text-sm">
-            <caption className="sr-only">Chart of accounts</caption>
-            <thead>
-              <tr>
-                <Th className="w-20">Code</Th>
-                <Th>Name</Th>
-                <Th className="w-28">Type</Th>
-                <Th className="w-36">Subtype</Th>
-                <Th className="w-32 text-right">Balance</Th>
-                <Th className="w-24 text-right">Lines</Th>
-                <Th className="w-28 text-right">
-                  <span className="sr-only">Actions</span>
-                </Th>
-              </tr>
-            </thead>
-            <tbody>
-              {visible.length === 0 ? (
-                <tr>
-                  <td colSpan={7}>
-                    <EmptyState
-                      title="No account matches"
-                      description="Try a different code, name or subtype."
-                    />
-                  </td>
-                </tr>
-              ) : (
-                visible.map((account) => (
-                  <tr
-                    key={account.id}
-                    className={cn("rule-row align-middle", !account.active && "opacity-60")}
-                  >
-                    <Td className="num text-xs text-muted-foreground">{account.code}</Td>
-                    <Td>
-                      <span
-                        className="inline-flex items-center gap-2"
-                        style={{ paddingLeft: `${account.depth * 1.15}rem` }}
-                      >
-                        <Link
-                          href={`/ledger?accountId=${account.id}`}
-                          className={cn(
-                            "hover:underline",
-                            account.childCount > 0 && "font-semibold",
-                          )}
-                        >
-                          {account.name}
-                        </Link>
-                        {account.isControl ? <Badge tone="info">Control</Badge> : null}
-                        {account.isBank ? <Badge tone="neutral">Bank</Badge> : null}
-                        {account.active ? null : <Badge tone="warning">Inactive</Badge>}
-                      </span>
-                    </Td>
-                    <Td className="text-xs text-muted-foreground">{TYPE_LABEL[account.type]}</Td>
-                    <Td className="text-xs text-muted-foreground">{account.subtype ?? "—"}</Td>
-                    <Td className="text-right">
-                      <Money cents={account.balanceCents} zeroDash />
-                    </Td>
-                    <Td className="num text-right text-xs text-muted-foreground">
-                      {account.postedLineCount === 0 ? "—" : account.postedLineCount}
-                    </Td>
-                    <Td className="text-right">
-                      {canManage ? (
-                        <div className="flex justify-end gap-1">
-                          <Button
-                            variant="ghost"
-                            size="icon-sm"
-                            aria-label={`Edit ${account.code}`}
-                            onClick={() => setEditing(account)}
-                          >
-                            <Pencil />
-                          </Button>
-                          {account.active ? (
-                            <Button
-                              variant="ghost"
-                              size="icon-sm"
-                              aria-label={`Retire ${account.code}`}
-                              onClick={() => setRetiring(account)}
-                            >
-                              <XCircle />
-                            </Button>
-                          ) : (
-                            <ReactivateButton account={account} />
-                          )}
-                        </div>
-                      ) : null}
-                    </Td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
+      {visible.length === 0 ? (
+        <div className="rounded-2xl bg-card shadow-card">
+          <EmptyState glyph="search" title="No matching account" />
         </div>
-      </Card>
+      ) : (
+        <div className="mx-auto flex w-full max-w-[880px] flex-col">
+          {TYPES.map(({ type, label }) => {
+            const rows = visible.filter((account) => account.type === type);
+            if (rows.length === 0) return null;
+            const total = accounts
+              .filter((account) => account.type === type && account.depth === 0)
+              .reduce((sum, account) => sum + account.balanceCents, 0);
+            return (
+              <InsetGroup
+                key={type}
+                header={label}
+                headerAccessory={<Money cents={total} currency plain className="text-sm font-semibold text-label2" />}
+                separatorInset={16}
+                className="min-w-0 [&>div:first-child]:max-lg:pt-3"
+              >
+                {rows.map((account) => (
+                  <AccountRow
+                    key={account.id}
+                    account={account}
+                    open={!collapsed.has(account.id) || needle !== ""}
+                    onToggle={() => toggle(account.id)}
+                    canManage={canManage}
+                    onEdit={() => setEditing(account)}
+                    onRetire={() => setRetiring(account)}
+                  />
+                ))}
+              </InsetGroup>
+            );
+          })}
+        </div>
+      )}
 
       {/* Each dialog is mounted fresh for the row it was opened on — its fields
           are seeded once from that row rather than reset whenever it closes. */}
@@ -249,21 +224,112 @@ export function AccountTree({ accounts, canManage }: AccountTreeProps) {
           onClose={() => setRetiring(null)}
         />
       ) : null}
+    </>
+  );
+}
+
+function AccountRow({
+  account,
+  open,
+  onToggle,
+  canManage,
+  onEdit,
+  onRetire,
+}: {
+  account: AccountTreeRow;
+  open: boolean;
+  onToggle: () => void;
+  canManage: boolean;
+  onEdit: () => void;
+  onRetire: () => void;
+}) {
+  const category = categoryFor(account);
+  const parent = account.childCount > 0;
+  return (
+    <div
+      className={cn(
+        "relative flex min-h-11 items-center gap-2 py-1.5 pr-2 pl-3",
+        "before:pointer-events-none before:absolute before:top-0 before:right-0 before:border-t-[0.5px] before:border-sep first:before:hidden",
+        !account.active && "opacity-60",
+      )}
+      style={{ paddingLeft: `${12 + account.depth * 20}px` }}
+    >
+      {parent ? (
+        <button
+          type="button"
+          aria-expanded={open}
+          aria-label={open ? `Fold ${account.code}` : `Unfold ${account.code}`}
+          onClick={onToggle}
+          className="relative grid size-5 shrink-0 place-items-center rounded-[5px] text-label2 hover:bg-fill2 hover:text-label max-sm:after:absolute max-sm:after:-inset-3 max-sm:after:content-['']"
+        >
+          <Glyph name="chevron-right" size={11} weight={2.4} className={cn("transition-transform duration-150", open && "rotate-90")} />
+        </button>
+      ) : (
+        <span aria-hidden className="size-5 shrink-0" />
+      )}
+      <Link
+        href={`/ledger?accountId=${account.id}`}
+        className="flex min-w-0 flex-1 items-center gap-2.5 rounded-[6px] outline-none hover:text-ink-blue focus-visible:ring-2 focus-visible:ring-tint-blue/50"
+      >
+        <CategoryBadge category={category} size={parent ? "md" : "sm"} />
+        <span className="min-w-0 flex-1">
+          <span className="flex min-w-0 items-baseline gap-1.5">
+            <span className={cn("truncate text-sm max-sm:text-lg", parent ? "font-semibold" : "font-medium")}>
+              {account.name}
+            </span>
+            <span className="num shrink-0 text-xs text-label2 max-sm:hidden">{account.code}</span>
+          </span>
+          <span className={cn("flex gap-1.5 text-2xs font-medium text-label2 max-sm:text-xs", !(account.isControl || account.isBank || !account.active) && "sm:hidden")}>
+            <span className="num sm:hidden">{account.code}</span>
+            {account.isControl ? <span>Control</span> : null}
+            {account.isBank ? <span>Bank feed</span> : null}
+            {account.active ? null : <span>Inactive</span>}
+          </span>
+        </span>
+      </Link>
+      <span className={cn("shrink-0 text-right text-sm", parent ? "font-semibold" : "font-medium")}>
+        {account.balanceCents === 0 ? (
+          <span className="text-label2">—</span>
+        ) : (
+          <Money cents={account.balanceCents} currency />
+        )}
+      </span>
+      {canManage ? (
+        <DropdownMenu>
+          <DropdownMenuTrigger
+            aria-label={`Actions for ${account.code}`}
+            className="relative grid size-7 shrink-0 place-items-center rounded-full text-label2 hover:bg-fill2 hover:text-label data-[state=open]:bg-fill2 max-sm:size-9"
+          >
+            <Glyph name="ellipsis" size={16} />
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem onSelect={onEdit}>
+              <Glyph name="pencil" size={14} />
+              Edit {account.code}
+            </DropdownMenuItem>
+            {account.active ? (
+              <DropdownMenuItem onSelect={onRetire} className="text-ink-red">
+                <Glyph name="xmark-circle" size={14} />
+                Retire {account.code}
+              </DropdownMenuItem>
+            ) : (
+              <ReactivateItem account={account} />
+            )}
+          </DropdownMenuContent>
+        </DropdownMenu>
+      ) : null}
     </div>
   );
 }
 
-function ReactivateButton({ account }: { account: AccountTreeRow }) {
+function ReactivateItem({ account }: { account: AccountTreeRow }) {
   const router = useRouter();
   const [pending, startTransition] = React.useTransition();
 
   return (
-    <Button
-      variant="ghost"
-      size="icon-sm"
+    <DropdownMenuItem
       disabled={pending}
-      aria-label={`Reactivate ${account.code}`}
-      onClick={() =>
+      onSelect={() =>
         startTransition(async () => {
           const result = await reactivateLedgerAccount(account.id);
           if (!result.ok) {
@@ -275,8 +341,9 @@ function ReactivateButton({ account }: { account: AccountTreeRow }) {
         })
       }
     >
-      <RotateCcw />
-    </Button>
+      <Glyph name="undo" size={14} />
+      Reactivate {account.code}
+    </DropdownMenuItem>
   );
 }
 
@@ -353,25 +420,24 @@ function RetireDialog({
                   ))}
                 </SelectContent>
               </Select>
-              <p className="text-xs text-muted-foreground">
+              <p className="text-xs text-label2">
                 {account.code} carries {account.postedLineCount}{" "}
                 {account.postedLineCount === 1 ? "posted line" : "posted lines"}. The successor is
                 written into its description so the reporting can be followed.
               </p>
             </div>
           ) : (
-            <p className="text-xs text-muted-foreground">
+            <p className="text-xs text-label2">
               Nothing has ever posted to {account.code}, so it can be retired outright.
             </p>
           )}
         </DialogBody>
         <DialogFooter>
-          <Button variant="ghost" size="sm" disabled={pending} onClick={onClose}>
+          <Button variant="ghost" disabled={pending} onClick={onClose}>
             Cancel
           </Button>
           <Button
             variant="danger"
-            size="sm"
             disabled={pending || (needsSuccessor && successor === null)}
             onClick={submit}
           >
@@ -381,22 +447,4 @@ function RetireDialog({
       </DialogContent>
     </Dialog>
   );
-}
-
-function Th({ className, children }: { className?: string; children?: React.ReactNode }) {
-  return (
-    <th
-      scope="col"
-      className={cn(
-        "rule-head bg-surface-sunken px-3 py-1.5 text-left text-2xs font-semibold tracking-wider text-muted-foreground uppercase",
-        className,
-      )}
-    >
-      {children}
-    </th>
-  );
-}
-
-function Td({ className, children }: { className?: string; children?: React.ReactNode }) {
-  return <td className={cn("px-3 py-1.5 align-middle", className)}>{children}</td>;
 }

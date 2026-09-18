@@ -8,9 +8,10 @@
 import { sql } from 'drizzle-orm';
 
 import { db } from '@/db/client';
-import { type CalendarDate, periodOf, today } from '@/lib/dates';
+import { type CalendarDate, addDays, monthEnd, monthStart, periodOf, today } from '@/lib/dates';
 import { ACCOUNTS } from '@/lib/ledger/coa';
 import { listPeriods } from '@/lib/ledger/periods';
+import { actualCashFlows, cashPosition } from '@/lib/planning/cash-position';
 import { type CashForecast, buildCashForecast } from '@/lib/planning/forecast';
 
 function cents(value: unknown): number {
@@ -242,4 +243,78 @@ export async function closeStatus(): Promise<CloseStatus> {
 
 export async function runwayForecast(): Promise<CashForecast> {
   return buildCashForecast();
+}
+
+/* ------------------------------------------------------------ the charts */
+
+/** The first day the books have money in them: the earliest opening date or bank line. */
+async function booksStart(): Promise<CalendarDate | null> {
+  const [row] = await db.execute<{ first: string | null }>(sql`
+    select least((select min(txn_date) from bank_transactions),
+                 (select min(opening_date) from bank_accounts where opening_balance_cents <> 0))::text as first
+  `);
+  return row?.first ?? null;
+}
+
+export interface CashSeriesPoint {
+  date: CalendarDate;
+  cents: number;
+}
+
+/**
+ * Cash at each month end since the books began, then today — measured by `cashPosition`, the same
+ * figure the runway uses, so the line ends exactly on the cash total above it.
+ */
+export async function cashSeries(asOf: CalendarDate = today()): Promise<CashSeriesPoint[]> {
+  const first = await booksStart();
+  if (first === null) return [{ date: asOf, cents: (await cashPosition(asOf)).cashCents }];
+  const points: CashSeriesPoint[] = [];
+  let end = monthEnd(first);
+  while (end < asOf) {
+    points.push({ date: end, cents: (await cashPosition(end)).cashCents });
+    end = monthEnd(addDays(end, 1));
+  }
+  points.push({ date: asOf, cents: (await cashPosition(asOf)).cashCents });
+  return points;
+}
+
+export interface MonthFlow {
+  year: number;
+  month: number;
+  /** Money in from the owners or lenders (member contributions, loans). */
+  founderCents: number;
+  /** Operating money in: sales deposits, refunds. */
+  salesCents: number;
+  /** Money out, operating and financing, as a positive number. */
+  spendCents: number;
+}
+
+/**
+ * Money in and out by month since the books began, on the same terms as the burn rate: transfers
+ * between Sooz's own accounts are dropped, a flow's class comes from its posted entry or, while it
+ * waits in review, from its suggested account.
+ */
+export async function monthlyFlows(asOf: CalendarDate = today()): Promise<MonthFlow[]> {
+  const first = await booksStart();
+  const start = monthStart(first ?? asOf);
+  const flows = await actualCashFlows(addDays(start, -1), asOf);
+  const months: MonthFlow[] = [];
+  let cursor = start;
+  while (cursor <= asOf) {
+    const { year, month } = periodOf(cursor);
+    months.push({ year, month, founderCents: 0, salesCents: 0, spendCents: 0 });
+    cursor = addDays(monthEnd(cursor), 1);
+  }
+  const index = new Map(months.map((m, i) => [`${m.year}-${m.month}`, i]));
+  for (const flow of flows) {
+    if (flow.cls === 'transfer') continue;
+    const { year, month } = periodOf(flow.date);
+    const i = index.get(`${year}-${month}`);
+    if (i === undefined) continue;
+    const m = months[i];
+    if (flow.amountCents < 0) m.spendCents += -flow.amountCents;
+    else if (flow.cls === 'financing') m.founderCents += flow.amountCents;
+    else m.salesCents += flow.amountCents;
+  }
+  return months;
 }

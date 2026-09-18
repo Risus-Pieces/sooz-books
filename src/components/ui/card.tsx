@@ -2,28 +2,23 @@ import * as React from "react";
 
 import { cn } from "@/lib/cn";
 
+/** A reading surface on the grouped background: white (or raised grey), 16px radius, no border. */
 export function Card({ className, ...props }: React.ComponentPropsWithRef<"section">) {
   return (
     <section
       data-slot="card"
-      className={cn(
-        "rounded-md border border-border bg-surface text-foreground shadow-raised",
-        className,
-      )}
+      className={cn("rounded-2xl bg-card text-label shadow-card max-sm:rounded-[22px]", className)}
       {...props}
     />
   );
 }
 
-/** Header sits above the content on a solid rule — the head of a ledger column. */
+/** The card's title row: a headline, an optional ⓘ and trailing controls. No rule under it. */
 export function CardHeader({ className, ...props }: React.ComponentPropsWithRef<"header">) {
   return (
     <header
       data-slot="card-header"
-      className={cn(
-        "flex flex-wrap items-center justify-between gap-3 rule-head px-4 py-2.5",
-        className,
-      )}
+      className={cn("flex flex-wrap items-center justify-between gap-2 px-5 pt-4 pb-2.5 max-sm:px-4", className)}
       {...props}
     />
   );
@@ -33,16 +28,15 @@ export function CardTitle({ className, ...props }: React.ComponentPropsWithRef<"
   return (
     <h2
       data-slot="card-title"
-      className={cn("text-sm leading-tight font-semibold tracking-tight text-foreground", className)}
+      className={cn("text-lg leading-tight font-semibold tracking-[-0.01em] text-label", className)}
       {...props}
     />
   );
 }
 
+/** One short line at most; explanations belong in an <InfoButton/>. */
 export function CardDescription({ className, ...props }: React.ComponentPropsWithRef<"p">) {
-  return (
-    <p data-slot="card-description" className={cn("text-xs text-pretty text-muted-foreground", className)} {...props} />
-  );
+  return <p data-slot="card-description" className={cn("text-xs text-label2", className)} {...props} />;
 }
 
 export function CardToolbar({ className, ...props }: React.ComponentPropsWithRef<"div">) {
@@ -50,14 +44,14 @@ export function CardToolbar({ className, ...props }: React.ComponentPropsWithRef
 }
 
 export function CardContent({ className, ...props }: React.ComponentPropsWithRef<"div">) {
-  return <div data-slot="card-content" className={cn("p-4", className)} {...props} />;
+  return <div data-slot="card-content" className={cn("px-5 pt-1 pb-5 max-sm:px-4 max-sm:pb-4", className)} {...props} />;
 }
 
 export function CardFooter({ className, ...props }: React.ComponentPropsWithRef<"footer">) {
   return (
     <footer
       data-slot="card-footer"
-      className={cn("flex items-center justify-between gap-3 border-t border-border px-4 py-2.5", className)}
+      className={cn("flex items-center justify-between gap-3 hairline-t px-5 py-3 max-sm:px-4", className)}
       {...props}
     />
   );

@@ -2,9 +2,10 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { Factory, Plus } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { Glyph } from "@/components/ui/glyph";
+import { ToolbarButton } from "@/components/ui/toolbar";
 import { DateInput, todayIso } from "@/components/ui/date-input";
 import {
   Dialog,
@@ -29,7 +30,8 @@ export interface NewRunDialogProps {
   /** Suggested run number, e.g. the next in sequence. */
   suggestedRunNo: string;
   defaultOpen?: boolean;
-  trigger?: "button" | "none";
+  /** A button (empty state), a toolbar item, or nothing (opened by `defaultOpen`). */
+  trigger?: "button" | "toolbar" | "none";
 }
 
 /**
@@ -105,17 +107,19 @@ export function NewRunDialog({ products, vendors, suggestedRunNo, defaultOpen = 
   return (
     <>
       {trigger === "button" ? (
-        <Button size="sm" onClick={() => setOpen(true)}>
-          <Factory />
-          New production run
+        <Button onClick={() => setOpen(true)}>
+          <Glyph name="plus" />
+          New run
         </Button>
+      ) : trigger === "toolbar" ? (
+        <ToolbarButton glyph="plus" label="New production run" onClick={() => setOpen(true)} />
       ) : null}
       <Dialog open={open} onOpenChange={close}>
         <DialogContent size="md">
           <form onSubmit={submit} className="flex min-h-0 flex-col">
             <DialogHeader>
               <DialogTitle>New production run</DialogTitle>
-              <DialogDescription>
+              <DialogDescription className="sr-only">
                 One batch the co-packer makes. Attach its costs and record its output on the run once they are known.
               </DialogDescription>
             </DialogHeader>
@@ -129,21 +133,15 @@ export function NewRunDialog({ products, vendors, suggestedRunNo, defaultOpen = 
 
               <div className="flex flex-col gap-2 sm:col-span-2">
                 {addingProduct ? (
-                  <div className="flex flex-col gap-3 rounded-sm border border-border bg-surface-sunken/50 p-3">
+                  <div className="flex flex-col gap-3 rounded-[12px] bg-inset p-3">
                     <div className="flex items-baseline justify-between gap-2">
-                      <p className="eyebrow">New product</p>
+                      <p className="text-sm font-semibold">New product</p>
                       {productList.length > 0 ? (
-                        <button type="button" className="text-xs text-primary hover:underline" onClick={() => setAddingProduct(false)}>
-                          Choose an existing product
+                        <button type="button" className="text-xs font-medium text-ink-blue hover:underline" onClick={() => setAddingProduct(false)}>
+                          Choose existing
                         </button>
                       ) : null}
                     </div>
-                    {productList.length === 0 ? (
-                      <p className="text-xs text-muted-foreground">
-                        No products are set up yet. Add the SKU this run makes; it is used on every COGS and margin line
-                        from here on.
-                      </p>
-                    ) : null}
                     <div className="grid gap-3 sm:grid-cols-[1fr_2fr_6rem]">
                       <Field id="new-sku" label="SKU" required>
                         <Input id="new-sku" value={sku} onChange={(e) => setSku(e.target.value)} className="num uppercase" placeholder="MB-POUCH" autoComplete="off" />
@@ -157,7 +155,7 @@ export function NewRunDialog({ products, vendors, suggestedRunNo, defaultOpen = 
                     </div>
                     <div>
                       <Button type="button" size="sm" variant="secondary" disabled={pending || sku.trim() === "" || name.trim() === ""} onClick={addProduct}>
-                        <Plus />
+                        <Glyph name="plus" />
                         Add product
                       </Button>
                     </div>
@@ -168,8 +166,8 @@ export function NewRunDialog({ products, vendors, suggestedRunNo, defaultOpen = 
                     label="Product"
                     required
                     note={
-                      <button type="button" className="text-primary hover:underline" onClick={() => setAddingProduct(true)}>
-                        Add a product that is not listed
+                      <button type="button" className="font-medium text-ink-blue hover:underline" onClick={() => setAddingProduct(true)}>
+                        New product
                       </button>
                     }
                   >
@@ -188,7 +186,7 @@ export function NewRunDialog({ products, vendors, suggestedRunNo, defaultOpen = 
                 id="run-coman"
                 label="Co-packer"
                 className="sm:col-span-2"
-                note={coMen.length === 0 ? "No vendor is marked as a co-manufacturer yet; choose any vendor or leave it blank." : undefined}
+                
               >
                 <NativeSelect id="run-coman" value={vendorId} onChange={(e) => setVendorId(e.target.value)}>
                   <option value="">Not recorded</option>
