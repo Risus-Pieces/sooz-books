@@ -23,7 +23,9 @@ value_of() {
   sed -n "s/^$1=\"\{0,1\}\([^\"]*\)\"\{0,1\}$/\1/p" .env.local | tail -1
 }
 
-vercel link --yes --project sooz-books >/dev/null
+# The account belongs to more than one team, and a non-interactive link must name one.
+VERCEL_SCOPE="${VERCEL_SCOPE:-boxuanzhao1128-7935s-projects}"
+vercel link --yes --project sooz-books --scope "$VERCEL_SCOPE"
 
 set_env() {
   local name="$1" value="$2"
