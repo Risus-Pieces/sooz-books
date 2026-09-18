@@ -1,0 +1,14 @@
+Name,Id,Email,Financial Status,Paid at,Fulfillment Status,Currency,Subtotal,Shipping,Taxes,Total,Discount Code,Discount Amount,Created at,Lineitem quantity,Lineitem name,Lineitem price,Lineitem sku,Lineitem discount,Refunded Amount,Tax 1 Name,Tax 1 Value,Payment Method,Source
+#1001,6118240321793,jo.reyes@example.com,paid,2026-09-10 09:14:22 -0400,fulfilled,USD,109.00,0.00,9.45,118.45,FALL15,20.00,2026-09-10 09:13:58 -0400,2,Sooz Chili Crisp — 7 oz,39.00,SOOZ-CC-7OZ,12.40,0.00,NY State Tax,9.45,Shopify Payments,web
+#1001,,,,,,,,,,,,,,1,Sooz Garlic Crunch — 6 oz,51.00,SOOZ-GC-6OZ,7.60,,,,,
+#1002,6118240354561,m.okafor@example.com,refunded,2026-09-10 11:02:47 -0400,restocked,USD,58.00,4.95,1.25,64.20,,0.00,2026-09-10 11:02:20 -0400,1,Sooz Sampler Box,58.00,SOOZ-BOX-SMP,0.00,64.20,TX State Tax,1.25,Shopify Payments,web
+#1003,6118240399617,dana.li@example.com,paid,2026-09-10 16:38:11 -0400,fulfilled,USD,193.50,0.00,19.40,212.90,FALL10,21.50,2026-09-10 16:37:44 -0400,5,"Sooz Chili Crisp, 7 oz (5-pack)",29.00,SOOZ-CC-7OZ,14.50,0.00,CA State Tax,19.40,Shopify Payments,web
+#1003,,,,,,,,,,,,,,1,Sooz Tote Bag,45.00,SOOZ-MERCH-TOTE,4.50,,,,,
+#1003,,,,,,,,,,,,,,1,Sooz Sticker Pack,25.00,SOOZ-MERCH-STK,2.50,,,,,
+#1004,6118240441345,p.novak@example.com,paid,2026-09-11 08:21:55 -0400,fulfilled,USD,42.00,2.00,3.65,47.65,,0.00,2026-09-11 08:21:30 -0400,1,Sooz Garlic Crunch — 6 oz,42.00,SOOZ-GC-6OZ,0.00,0.00,IL State Tax,3.65,Shopify Payments,web
+#1005,6118240487425,r.tremblay@example.ca,paid,2026-09-11 13:47:03 -0400,fulfilled,CAD,371.45,0.00,27.83,412.80,VIP5,19.55,2026-09-11 13:46:31 -0400,4,Sooz Chili Crisp — 7 oz,52.77,SOOZ-CC-7OZ,10.55,0.00,GST/HST,27.83,Shopify Payments,web
+#1005,,,,,,,,,,,,,,1,Sooz Gift Set,179.92,SOOZ-GIFT-SET,9.00,,,,,
+#1006,6118240523265,a.haddad@example.com,paid,2026-09-11 19:05:41 -0400,fulfilled,USD,80.00,0.00,9.00,89.00,WELCOME5,5.00,2026-09-11 19:05:12 -0400,1,Sooz Sampler Box,85.00,SOOZ-BOX-SMP,5.00,0.00,WA State Tax,9.00,shop_pay_installments,web
+#1007,6118240566273,k.mensah@example.com,paid,2026-09-12 07:33:19 -0400,fulfilled,USD,144.58,0.00,11.72,156.30,AUTO-SHOPAPP,5.42,2026-09-12 07:32:50 -0400,3,Sooz Chili Crisp — 7 oz,34.00,SOOZ-CC-7OZ,3.68,0.00,CA State Tax,11.72,Shopify Payments,shop_app
+#1007,,,,,,,,,,,,,,1,Sooz Garlic Crunch — 6 oz,48.00,SOOZ-GC-6OZ,1.74,,,,,
+#0987,6118237114881,t.delgado@example.com,refunded,2026-09-02 10:55:08 -0400,restocked,USD,49.00,0.00,5.30,54.30,,0.00,2026-09-02 10:54:40 -0400,1,Sooz Garlic Crunch — 6 oz,49.00,SOOZ-GC-6OZ,0.00,54.30,AZ State Tax,5.30,Shopify Payments,web

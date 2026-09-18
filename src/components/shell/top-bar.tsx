@@ -41,7 +41,7 @@ export function TopBar({
           type="button"
           onClick={onOpenNav}
           aria-label="Open navigation"
-          className="-ml-1 grid size-8 shrink-0 place-items-center rounded-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground lg:hidden"
+          className="-ml-1 grid size-8 shrink-0 place-items-center rounded-sm text-muted-foreground max-sm:size-10 transition-colors hover:bg-muted hover:text-foreground lg:hidden"
         >
           <PanelLeft className="size-4" />
         </button>
@@ -49,13 +49,13 @@ export function TopBar({
 
       <div className="min-w-0 flex-1">{period}</div>
 
-      <div className="flex shrink-0 items-center gap-1.5">
+      <div className="flex shrink-0 items-center gap-1 sm:gap-1.5">
         {actions}
         <GlobalSearch targets={searchTargets} />
         <ThemeToggle />
         {user ? (
           <>
-            <span aria-hidden className="mx-0.5 h-5 w-px bg-border" />
+            <span aria-hidden className="mx-0.5 hidden h-5 w-px bg-border sm:block" />
             {user}
           </>
         ) : null}

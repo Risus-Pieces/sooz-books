@@ -24,6 +24,7 @@ import { Money } from "@/components/ui/money";
 import { toast } from "@/components/ui/toast";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/cn";
+import { isLedgerReversible, ownedEntryMessage } from "@/lib/ledger/ownership";
 import { reverseJournalEntry } from "@/app/(app)/ledger/actions";
 
 import { AuditDiff } from "./audit-diff";
@@ -80,7 +81,15 @@ export function EntryDetail({ entry, lines, audit, canPost }: EntryDetailProps) 
               </Link>
             </Button>
             {entry.status === "posted" && entry.reversedById === null ? (
-              <ReverseAction entryId={entry.id} entryNo={entry.entryNo} date={entry.date} canPost={canPost} />
+              <ReverseAction
+                entryId={entry.id}
+                entryNo={entry.entryNo}
+                date={entry.date}
+                canPost={canPost}
+                ownedBy={
+                  entry.sourceType === "reversal" || isLedgerReversible(entry.sourceType) ? null : entry.sourceType
+                }
+              />
             ) : null}
           </div>
         </CardHeader>
@@ -247,11 +256,14 @@ function ReverseAction({
   entryNo,
   date,
   canPost,
+  ownedBy,
 }: {
   entryId: string;
   entryNo: number;
   date: string;
   canPost: boolean;
+  /** The source type of the module that must reverse this entry; null when the ledger may. */
+  ownedBy: string | null;
 }) {
   const router = useRouter();
   const [open, setOpen] = React.useState(false);
@@ -259,7 +271,7 @@ function ReverseAction({
   const [memo, setMemo] = React.useState("");
   const [pending, startTransition] = React.useTransition();
 
-  if (!canPost) {
+  if (!canPost || ownedBy !== null) {
     return (
       <Tooltip>
         <TooltipTrigger asChild>
@@ -270,7 +282,9 @@ function ReverseAction({
             </Button>
           </span>
         </TooltipTrigger>
-        <TooltipContent>Your role may not post to the ledger.</TooltipContent>
+        <TooltipContent className="max-w-72">
+          {ownedBy !== null ? ownedEntryMessage(entryNo, ownedBy) : "Your role may not post to the ledger."}
+        </TooltipContent>
       </Tooltip>
     );
   }

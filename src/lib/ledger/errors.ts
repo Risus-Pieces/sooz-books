@@ -9,6 +9,8 @@
  * string the caller would have to parse back apart.
  */
 
+import { ownedEntryMessage } from './ownership';
+
 export type LedgerErrorCode =
   | 'unbalanced_entry'
   | 'invalid_amount'
@@ -23,6 +25,7 @@ export type LedgerErrorCode =
   | 'entry_not_posted'
   | 'entry_immutable'
   | 'already_reversed'
+  | 'entry_owned'
   | 'account_in_use'
   | 'duplicate_account'
   | 'not_permitted';
@@ -260,6 +263,23 @@ export class AlreadyReversedError extends LedgerError {
       `Entry #${entryNo} was already reversed` +
         (reversedByEntryNo === null ? '.' : ` by #${reversedByEntryNo}.`),
     );
+  }
+}
+
+/**
+ * The entry belongs to a module (a bank row, a receipt, a settlement, a COGS
+ * batch …) that keeps its own record of it. Reversing it from the ledger would
+ * leave that record saying "posted", so only the owning module may reverse it.
+ */
+export class OwnedEntryError extends LedgerError {
+  readonly code = 'entry_owned';
+
+  constructor(
+    readonly entryId: string | null,
+    readonly entryNo: number | null,
+    readonly sourceType: string,
+  ) {
+    super(ownedEntryMessage(entryNo, sourceType));
   }
 }
 

@@ -164,7 +164,7 @@ export function DataTable<TData extends RowData>({
             <tr>
               <td colSpan={table.getAllLeafColumns().length} className="p-0">
                 {emptyState ?? (
-                  <p className="px-3 py-10 text-center text-xs text-muted-foreground">Nothing to show yet.</p>
+                  <p className="sticky left-0 max-w-[calc(100vw-2.125rem)] px-3 py-10 text-center text-xs text-muted-foreground">Nothing to show yet.</p>
                 )}
               </td>
             </tr>

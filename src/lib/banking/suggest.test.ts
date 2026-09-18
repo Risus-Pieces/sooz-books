@@ -412,7 +412,11 @@ interface Pipeline {
   readonly idByCode: ReadonlyMap<string, string>;
 }
 
-async function runPipeline(): Promise<Pipeline> {
+/**
+ * `history: 'none'` runs without payee history — what the rules and the vendor index decide
+ * alone, independent of which rows the live books have posted so far.
+ */
+async function runPipeline(options: { history?: 'live' | 'none' } = {}): Promise<Pipeline> {
   const { sql } = await import('@/db/client');
 
   const bankRows = await sql<Array<{ id: string; mask: string | null }>>`
@@ -431,7 +435,8 @@ async function runPipeline(): Promise<Pipeline> {
   const loaded = await loadCategorizationRules();
   const engine = createRuleEngine(loaded.rules);
   const vendors = await loadVendorIndex();
-  const history = await loadPayeeHistory({ asOf: '2026-09-30' });
+  const history: PayeeHistory =
+    options.history === 'none' ? new Map() : await loadPayeeHistory({ asOf: '2026-09-30' });
 
   const txns = RELAY_ROWS.map((entry) => toTxn(entry, bankAccountIdByMask));
   const results = suggestBatch(
@@ -582,7 +587,9 @@ describe.skipIf(!DATABASE_URL || RELAY_ROWS.length === 0)('the pipeline over the
   }, 60_000);
 
   it('leaves only the genuinely undecidable rows for review', async () => {
-    const { results, accountCodeById } = await runPipeline();
+    // Rules and vendors alone: once Square deposits are posted, payee history also (rightly)
+    // suggests 1150 for Square's one-cent verification credit, which is not what this pins.
+    const { results, accountCodeById } = await runPipeline({ history: 'none' });
 
     const undecided = results.filter((r) => r.suggestion === null);
     expect(

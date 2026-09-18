@@ -46,7 +46,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
  */
 function AccountChip({ user }: { user: AuthedUser }) {
   return (
-    <div className="flex items-center gap-2">
+    <div className="flex items-center gap-1 sm:gap-2">
       <div className="hidden min-w-0 flex-col items-end leading-tight sm:flex">
         <span className="max-w-44 truncate text-xs font-medium text-foreground">
           {user.fullName ?? user.email}

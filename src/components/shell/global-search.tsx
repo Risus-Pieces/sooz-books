@@ -88,8 +88,9 @@ export function GlobalSearch({ targets, className }: GlobalSearchProps) {
       <button
         type="button"
         onClick={() => setOpen(true)}
+        aria-label="Search"
         className={cn(
-          "flex h-8 items-center gap-2 rounded-sm border border-border-strong bg-surface-raised px-2.5 text-sm text-muted-foreground transition-colors hover:border-ring hover:text-foreground",
+          "flex h-8 items-center gap-2 rounded-sm border border-border-strong bg-surface-raised px-2.5 max-sm:h-10 max-sm:w-10 max-sm:justify-center max-sm:px-0 text-sm text-muted-foreground transition-colors hover:border-ring hover:text-foreground",
           className,
         )}
       >

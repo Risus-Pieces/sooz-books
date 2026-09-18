@@ -1,0 +1,10 @@
+settlement-id	settlement-start-date	settlement-end-date	deposit-date	total-amount	currency	transaction-type	order-id	merchant-order-id	adjustment-id	shipment-id	marketplace-name	amount-type	amount-description	amount	fulfillment-id	posted-date	posted-date-time	order-item-code	merchant-order-item-id	merchant-adjustment-item-id	sku	quantity-purchased	promotion-id
+22558491999	2026-03-16 09:14:27 UTC	2026-03-30 09:14:27 UTC	2026-04-01 09:14:27 UTC	0.00	USD																		
+22558491999						Order	113-1122334-4556677	113-1122334-4556677		DkR8x4Yrn	Amazon.com	ItemPrice	Principal	59.98	AFN	2026-03-20	2026-03-20 12:02:44 UTC	119330028417751			SOOZ-GRAN-12PK	2	
+22558491999						Order	113-1122334-4556677	113-1122334-4556677		DkR8x4Yrn	Amazon.com	ItemPrice	Tax	4.95	AFN	2026-03-20	2026-03-20 12:02:44 UTC	119330028417751			SOOZ-GRAN-12PK	2	
+22558491999						Order	113-1122334-4556677	113-1122334-4556677		DkR8x4Yrn	Amazon.com	ItemWithheldTax	MarketplaceFacilitatorTax-Principal	-4.95	AFN	2026-03-20	2026-03-20 12:02:44 UTC	119330028417751			SOOZ-GRAN-12PK	2	
+22558491999						Order	113-1122334-4556677	113-1122334-4556677		DkR8x4Yrn	Amazon.com	ItemFees	Commission	-9.00	AFN	2026-03-20	2026-03-20 12:02:44 UTC	119330028417751			SOOZ-GRAN-12PK	2	
+22558491999						Order	113-1122334-4556677	113-1122334-4556677		DkR8x4Yrn	Amazon.com	ItemFees	FBAPerUnitFulfillmentFee	-11.68	AFN	2026-03-20	2026-03-20 12:02:44 UTC	119330028417751			SOOZ-GRAN-12PK	2	
+22558491999						ServiceFee						other-transaction	Subscription	-39.99		2026-03-16	2026-03-16 09:15:00 UTC						
+22558491999						other-transaction						other-transaction	Previous Reserve Amount Balance	189.55		2026-03-16	2026-03-16 09:14:31 UTC						
+22558491999						other-transaction						other-transaction	Current Reserve Amount	-188.86		2026-03-30	2026-03-30 09:14:31 UTC					

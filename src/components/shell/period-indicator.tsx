@@ -41,7 +41,7 @@ export function PeriodIndicator({ year, month, status, href, className }: Period
   const body = (
     <>
       <span className="eyebrow hidden sm:inline">Period</span>
-      <span className="num text-sm font-semibold tracking-tight text-foreground">{label}</span>
+      <span className="num text-sm font-semibold tracking-tight whitespace-nowrap text-foreground">{label}</span>
       <span
         className={cn(
           "inline-flex items-center gap-1 rounded-xs border px-1.5 py-px text-2xs font-semibold tracking-wide uppercase",
@@ -70,7 +70,7 @@ export function PeriodIndicator({ year, month, status, href, className }: Period
     <Link
       data-slot="period-indicator"
       href={href}
-      className={cn(shell, "-mx-1.5 rounded-sm px-1.5 py-1 transition-colors hover:bg-muted")}
+      className={cn(shell, "-mx-1.5 rounded-sm px-1.5 py-1 transition-colors hover:bg-muted max-sm:min-h-10")}
     >
       {body}
     </Link>

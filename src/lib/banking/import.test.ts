@@ -130,7 +130,7 @@ const SEPT_PARTIAL = 'Relay (Partial) 2026-09-01 #9726.csv';
  * test that imports nine months of statements, and a timeout here would look
  * like a bug in the importer rather than what it is.
  */
-const ONE_IMPORT = 30_000;
+const ONE_IMPORT = 90_000;
 const MANY_IMPORTS = 240_000;
 
 /**

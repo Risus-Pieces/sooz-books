@@ -23,7 +23,13 @@ export function EmptyState({
   return (
     <div
       data-slot="empty-state"
-      className={cn("flex flex-col items-center justify-center px-6 py-12 text-center", className)}
+      className={cn(
+        "flex flex-col items-center justify-center px-6 py-12 text-center",
+        // Inside a table wider than a phone, centre on what is visible rather than on the full
+        // scroll width, which would push the message and its button off the right edge.
+        "[td_&]:sticky [td_&]:left-0 [td_&]:max-w-[calc(100vw-2.125rem)]",
+        className,
+      )}
       {...props}
     >
       {icon ? (
@@ -33,7 +39,7 @@ export function EmptyState({
       ) : null}
       <p className="text-sm font-semibold text-foreground">{title}</p>
       {description ? (
-        <p className="mt-1 max-w-sm text-xs leading-relaxed text-muted-foreground">{description}</p>
+        <p className="mt-1 max-w-sm text-xs leading-relaxed text-pretty text-muted-foreground">{description}</p>
       ) : null}
       {action || secondaryAction ? (
         <div className="mt-4 flex flex-wrap items-center justify-center gap-2">

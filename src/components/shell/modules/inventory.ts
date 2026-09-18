@@ -8,16 +8,17 @@ import type { NavModule } from "./types";
  * end in the rail, the breadcrumbs and the command palette at once.
  */
 export const inventoryNav: NavModule = {
-  shipped: false,
+  shipped: true,
   section: {
     label: "Inventory",
     href: "/inventory",
     icon: Package,
     children: [
-    { label: "Valuation", href: "/inventory/valuation" },
-    { label: "Production Runs", href: "/inventory/production" },
-    { label: "COGS", href: "/inventory/cogs" },
-    { label: "Adjustments", href: "/inventory/adjustments" },
+      { label: "Valuation", href: "/inventory/valuation" },
+      { label: "Production Runs", href: "/inventory/production" },
+      { label: "COGS", href: "/inventory/cogs" },
+      { label: "Adjustments", href: "/inventory/adjustments" },
+      { label: "Gross Margin", href: "/reports/margin" },
     ],
   },
 };

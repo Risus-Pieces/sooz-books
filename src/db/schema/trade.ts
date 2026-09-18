@@ -77,6 +77,11 @@ export const deductionTreatmentEnum = pgEnum('deduction_treatment', [
   'cogs',
   'expense',
   'ar_payment',
+  // 0035_trade_engine.sql
+  'accrual',
+  'billing_correction',
+  'recovery',
+  'suspense',
 ]);
 
 export type PromoType = (typeof promoTypeEnum.enumValues)[number];
@@ -103,6 +108,14 @@ export const deductionReasonCodes = pgTable('deduction_reason_codes', {
   typicallyValid: boolean('typically_valid').notNull().default(true),
   notes: text('notes'),
   active: boolean('active').notNull().default(true),
+  /** Issuer of the code: GEN | X12 | KEHE | UNFI | DPI. `code` is `<source>:<source_code>`. */
+  sourceSystem: text('source_system').notNull().default('GEN'),
+  /** The code verbatim, as the distributor prints it. */
+  sourceCode: text('source_code'),
+  /** Counts toward the trade-spend KPI (fines and claims do not). */
+  isTradeSpend: boolean('is_trade_spend').notNull().default(true),
+  /** Surrogate key for the audit trail; `code` stays the natural key. */
+  id: uuid('id').notNull().defaultRandom(),
 });
 
 /** A planned trade promotion: what was authorized, accrued and actually spent. */
@@ -150,6 +163,8 @@ export const promotionProducts = pgTable(
       .references(() => products.id),
     plannedUnits: numeric('planned_units', { precision: 14, scale: 2, mode: 'string' }),
     allowancePerUnitCents: bigint('allowance_per_unit_cents', { mode: 'number' }),
+    /** Surrogate key for the audit trail. */
+    id: uuid('id').notNull().defaultRandom(),
   },
   (t) => [primaryKey({ name: 'promotion_products_pkey', columns: [t.promotionId, t.productId] })],
 );
@@ -182,11 +197,22 @@ export const remittances = pgTable(
     warnings: jsonb('warnings').$type<ImportIssue[]>().notNull().default([]),
     importedBy: uuid('imported_by').references(() => appUsers.id),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    // 0035_trade_engine.sql — the payment identity (§5.2 level 2) and its entry.
+    sourceSystem: text('source_system'),
+    paymentNumber: text('payment_number'),
+    regionDc: text('region_dc'),
+    paymentMethod: text('payment_method'),
+    adviceNumber: text('advice_number'),
+    repaymentsCents: bigint('repayments_cents', { mode: 'number' }).notNull().default(0),
+    journalEntryId: uuid('journal_entry_id').references(() => journalEntries.id),
   },
   (t) => [
-    uniqueIndex('remittance_hash_idx')
+    index('remittance_hash_idx')
       .on(t.customerId, t.fileHash)
       .where(sql`${t.fileHash} is not null`),
+    uniqueIndex('remittances_payment_key_idx')
+      .on(t.sourceSystem, sql`coalesce(${t.regionDc}, '')`, t.paymentNumber)
+      .where(sql`${t.paymentNumber} is not null`),
   ],
 );
 
@@ -208,6 +234,17 @@ export const remittanceLines = pgTable(
     reasonCode: text('reason_code').references(() => deductionReasonCodes.code),
     description: text('description'),
     raw: jsonb('raw').$type<RawImportRow>(),
+    // 0035_trade_engine.sql
+    lineType: text('line_type', {
+      enum: ['INVOICE', 'DEDUCTION', 'CREDIT', 'DISCOUNT', 'REPAYMENT', 'UNAPPLIED'],
+    })
+      .notNull()
+      .default('INVOICE'),
+    documentNumber: text('document_number'),
+    sourceReasonCode: text('source_reason_code'),
+    dealNumber: text('deal_number'),
+    invoiceDate: date('invoice_date', { mode: 'string' }),
+    sourceRowNumber: integer('source_row_number'),
   },
   (t) => [unique('remittance_lines_remittance_id_line_no_key').on(t.remittanceId, t.lineNo)],
 );
@@ -251,6 +288,13 @@ export const deductions = pgTable(
     resolvedBy: uuid('resolved_by').references(() => appUsers.id),
     assignedTo: uuid('assigned_to').references(() => appUsers.id),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    // 0035_trade_engine.sql
+    /** The distributor's code verbatim, kept even when it maps to no reason code. */
+    sourceReasonCode: text('source_reason_code'),
+    dealNumber: text('deal_number'),
+    invoiceDate: date('invoice_date', { mode: 'string' }),
+    /** Where the deduction currently sits in the ledger. */
+    accountId: uuid('account_id').references(() => accounts.id),
   },
   (t) => [
     index('deductions_customer_idx').on(t.customerId),

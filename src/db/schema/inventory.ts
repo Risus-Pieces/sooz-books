@@ -110,10 +110,15 @@ export const productionRuns = pgTable(
     peasyWorkOrderId: text('peasy_work_order_id'),
     notes: text('notes'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    /** The reclassification into Finished Goods that costing posted (0027). */
+    costEntryId: uuid('cost_entry_id').references(() => journalEntries.id),
+    /** Total landed cost less unit cost x good units, booked to 5050 at costing (0027). */
+    roundingVarianceCents: bigint('rounding_variance_cents', { mode: 'number' }).notNull().default(0),
   },
   (t) => [
     index('production_runs_product_idx').on(t.productId),
     index('production_runs_date_idx').on(t.runDate),
+    check('production_runs_status_check', sql`${t.status} in ('open', 'costed', 'closed')`),
   ],
 );
 
@@ -132,6 +137,8 @@ export const landedCosts = pgTable(
     amountCents: bigint('amount_cents', { mode: 'number' }).notNull(),
     allocationBasis: text('allocation_basis', { enum: ['units', 'value', 'manual'] }),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    /** Where costing relieves this cost from: the bill line's account, or the stock it came out of (0027). */
+    sourceAccountId: uuid('source_account_id').references(() => accounts.id),
   },
   (t) => [
     index('landed_costs_run_idx').on(t.productionRunId),
@@ -307,6 +314,7 @@ export const cogsBatches = pgTable(
       .on(t.periodYear, t.periodMonth)
       .where(sql`${t.status} = 'posted'`),
     check('cogs_batches_period_month_check', sql`${t.periodMonth} >= 1 and ${t.periodMonth} <= 12`),
+    check('cogs_batches_status_check', sql`${t.status} in ('draft', 'posted', 'reversed')`),
   ],
 );
 
@@ -360,8 +368,19 @@ export const inventoryAdjustments = pgTable(
     journalEntryId: uuid('journal_entry_id').references(() => journalEntries.id),
     createdBy: uuid('created_by').references(() => appUsers.id),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    /** The inventory account the adjustment moved (0027). */
+    inventoryAccountId: uuid('inventory_account_id').references(() => accounts.id),
+    stage: text('stage', { enum: ['raw', 'packaging', 'wip', 'finished', 'in_transit'] })
+      .notNull()
+      .default('finished'),
   },
-  (t) => [index('inventory_adjustments_date_idx').on(t.adjustmentDate)],
+  (t) => [
+    index('inventory_adjustments_date_idx').on(t.adjustmentDate),
+    check(
+      'inventory_adjustments_stage_check',
+      sql`${t.stage} in ('raw', 'packaging', 'wip', 'finished', 'in_transit')`,
+    ),
+  ],
 );
 
 /**
@@ -382,7 +401,22 @@ export const inventoryTieouts = pgTable('inventory_tieouts', {
   resolved: boolean('resolved').notNull().default(false),
   createdBy: uuid('created_by').references(() => appUsers.id),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  /** The Peasy snapshot compared, and the per-stage detail behind the variance (0027). */
+  snapshotImportId: uuid('snapshot_import_id').references(() => inventoryImports.id, {
+    onDelete: 'set null',
+  }),
+  snapshotDate: date('snapshot_date', { mode: 'string' }),
+  byStage: jsonb('by_stage').$type<TieoutStageDetail[]>().notNull().default([]),
 });
+
+/** One stage's line in a tie-out: Peasy's value against the ledger account that carries it. */
+export interface TieoutStageDetail {
+  stage: string;
+  accountCode: string | null;
+  snapshotValueCents: number;
+  ledgerValueCents: number;
+  varianceCents: number;
+}
 
 /**
  * Posted revenue and COGS by product, channel and month, read straight off the

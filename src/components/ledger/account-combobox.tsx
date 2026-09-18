@@ -156,7 +156,7 @@ export function AccountCombobox({
         disabled={disabled}
         aria-invalid={invalid || undefined}
         className={cn(
-          "flex h-7 w-full items-center justify-between gap-1.5 rounded-sm border border-border-strong bg-surface-raised px-2 text-sm text-foreground transition-colors data-[state=open]:border-ring disabled:cursor-not-allowed disabled:bg-muted disabled:text-muted-foreground",
+          "flex h-7 w-full items-center justify-between gap-1.5 rounded-sm border border-border-strong bg-surface-raised px-2 text-sm max-sm:h-10 text-foreground transition-colors data-[state=open]:border-ring disabled:cursor-not-allowed disabled:bg-muted disabled:text-muted-foreground",
           invalid && "border-negative",
           className,
         )}

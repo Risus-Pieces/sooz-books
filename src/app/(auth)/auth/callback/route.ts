@@ -19,7 +19,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   const origin = request.nextUrl.origin;
 
   const failure = params.get('error_description') ?? params.get('error');
-  if (failure) return NextResponse.redirect(loginUrl(origin, failure));
+  if (failure) return NextResponse.redirect(loginUrl(origin, readableFailure(failure)));
 
   const code = params.get('code');
   const tokenHash = params.get('token_hash');
@@ -57,6 +57,18 @@ function loginUrl(origin: string, message: string): URL {
   const url = new URL('/login', origin);
   url.searchParams.set('error', message);
   return url;
+}
+
+/**
+ * What Supabase reports when a sign-up arrives here refused. The invite-only trigger on
+ * `auth.users` aborts the insert, and Supabase words that as a generic database failure —
+ * true, and useless to the person reading it.
+ */
+function readableFailure(message: string): string {
+  if (/database error saving new user/i.test(message)) {
+    return 'Sign-up is by invitation only. Ask the owner of these books to invite this email address.';
+  }
+  return expired(message);
 }
 
 function expired(message: string): string {

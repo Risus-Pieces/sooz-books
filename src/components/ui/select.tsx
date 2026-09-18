@@ -21,7 +21,7 @@ function SelectTrigger({
       data-slot="select-trigger"
       aria-invalid={invalid || undefined}
       className={cn(
-        "flex h-8 w-full items-center justify-between gap-2 rounded-sm border border-border-strong bg-surface-raised px-2.5 text-sm text-foreground transition-colors data-[state=open]:border-ring data-[placeholder]:text-muted-foreground/80 disabled:cursor-not-allowed disabled:bg-muted disabled:text-muted-foreground [&>span]:truncate",
+        "flex h-8 w-full items-center max-sm:h-10 justify-between gap-2 rounded-sm border border-border-strong bg-surface-raised px-2.5 text-sm text-foreground transition-colors data-[state=open]:border-ring data-[placeholder]:text-muted-foreground/80 disabled:cursor-not-allowed disabled:bg-muted disabled:text-muted-foreground [&>span]:truncate",
         invalid && "border-negative",
         className,
       )}

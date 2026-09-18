@@ -81,7 +81,12 @@ export function ReportRowView({ row, columns, basis, grandTotal, dense }: Report
   const padding = dense ? "py-0.5" : "py-1";
   const isHeader = HEADER_STYLES.has(row.style);
   const rule = cn(RULE[row.style], grandTotal && "rule-total");
-  const tinted = row.style === "section" ? "bg-surface-sunken/60" : "bg-surface";
+  // The sticky label cell must be opaque so figures scrolling under it stay hidden, and it
+  // must match the row's own tint exactly rather than stack a second translucent layer on it.
+  const tinted =
+    row.style === "section"
+      ? "bg-[color-mix(in_oklab,var(--color-surface-sunken)_60%,var(--color-surface))]"
+      : "bg-surface";
 
   const label = (
     <span className={LABEL[row.style]}>
@@ -102,7 +107,9 @@ export function ReportRowView({ row, columns, basis, grandTotal, dense }: Report
         scope="row"
         style={{ paddingLeft: `${8 + row.level * 14}px` }}
         className={cn(
-          "sticky left-0 z-10 max-w-[30rem] truncate pr-4 text-left font-normal",
+          // On a phone the label wraps inside a narrower column, so the figures are on screen
+          // without scrolling; from `sm` up it keeps to one truncated line.
+          "sticky left-0 z-10 max-w-[30rem] truncate pr-4 text-left font-normal max-sm:max-w-[11rem] max-sm:min-w-[8.5rem] max-sm:whitespace-normal",
           padding,
           tinted,
           row.style === "error" && "bg-negative/10",
@@ -124,7 +131,7 @@ export function ReportRowView({ row, columns, basis, grandTotal, dense }: Report
           label
         )}
         {row.note ? (
-          <span className="ml-2 text-2xs text-muted-foreground italic">{row.note}</span>
+          <span className="ml-2 text-2xs text-muted-foreground italic max-sm:ml-0 max-sm:block">{row.note}</span>
         ) : null}
       </th>
 

@@ -8,7 +8,7 @@ import type { NavModule } from "./types";
  * end in the rail, the breadcrumbs and the command palette at once.
  */
 export const salesNav: NavModule = {
-  shipped: false,
+  shipped: true,
   section: {
     label: "Sales",
     href: "/sales",

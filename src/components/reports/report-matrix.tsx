@@ -28,7 +28,7 @@ export function ReportMatrix({
   report,
   dense,
   emptyTitle = "Nothing posted in this range",
-  emptyDescription = "Widen the dates, or switch the basis, and the statement will fill in.",
+  emptyDescription = "Widen the dates or switch the basis. Bank lines reach the ledger once they are approved in the review queue.",
   className,
 }: ReportMatrixProps) {
   const { columns, rows, meta } = report;
@@ -41,6 +41,8 @@ export function ReportMatrix({
   );
 
   const hasFigures = rows.some((row) => row.style !== "section" && row.style !== "spacer");
+  // A statement can be all structure — headings and zero totals — with no account behind it.
+  const hasDetail = rows.some((row) => row.style === "detail");
 
   return (
     <div className={cn("flex flex-col", className)}>
@@ -94,7 +96,7 @@ export function ReportMatrix({
                       {column.label}
                     </span>
                     {column.sublabel ? (
-                      <span className="block text-2xs font-normal normal-case text-muted-foreground">
+                      <span className="block text-2xs font-normal normal-case text-muted-foreground max-sm:min-w-[6.5rem] max-sm:whitespace-normal">
                         {column.sublabel}
                       </span>
                     ) : null}
@@ -115,6 +117,11 @@ export function ReportMatrix({
               ))}
             </tbody>
           </table>
+          {hasDetail ? null : (
+            <p className="sticky left-0 max-w-[calc(100vw-2.125rem)] px-4 py-3 text-xs text-muted-foreground">
+              {emptyTitle}. {emptyDescription}
+            </p>
+          )}
         </div>
       ) : (
         <EmptyState title={emptyTitle} description={emptyDescription} />

@@ -8,14 +8,14 @@ import type { NavModule } from "./types";
  * end in the rail, the breadcrumbs and the command palette at once.
  */
 export const channelsNav: NavModule = {
-  shipped: false,
+  shipped: true,
   section: {
     label: "Channels",
     href: "/channels",
     icon: Store,
     children: [
-    { label: "Payouts", href: "/channels/payouts" },
-    { label: "Sales Tax", href: "/channels/sales-tax" },
+      { label: "Payouts", href: "/channels/payouts" },
+      { label: "Sales Tax", href: "/channels/sales-tax" },
     ],
   },
 };

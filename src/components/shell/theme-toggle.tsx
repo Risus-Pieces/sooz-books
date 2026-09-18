@@ -27,7 +27,7 @@ export function ThemeToggle({ className }: { className?: string }) {
       <DropdownMenuTrigger
         aria-label="Change theme"
         className={cn(
-          "grid size-8 place-items-center rounded-sm border border-transparent text-muted-foreground transition-colors hover:bg-muted hover:text-foreground data-[state=open]:bg-muted",
+          "grid size-8 place-items-center rounded-sm border border-transparent max-sm:size-10 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground data-[state=open]:bg-muted",
           className,
         )}
       >

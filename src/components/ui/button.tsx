@@ -22,11 +22,13 @@ const buttonVariants = cva(
         link: "h-auto border-transparent bg-transparent p-0 text-primary underline decoration-primary/40 underline-offset-4 hover:decoration-primary",
       },
       size: {
-        sm: "h-7 px-2.5 text-xs [&_svg]:size-3.5",
-        md: "h-8 px-3 text-sm [&_svg]:size-4",
-        lg: "h-9 px-4 text-sm [&_svg]:size-4",
-        icon: "size-8 [&_svg]:size-4",
-        "icon-sm": "size-7 [&_svg]:size-3.5",
+        // Below the `sm` breakpoint every size grows to a 40px touch target. The `max-sm:`
+        // prefix keeps that from overriding a caller's own height on a desktop screen.
+        sm: "h-7 px-2.5 text-xs max-sm:h-10 max-sm:px-3 [&_svg]:size-3.5",
+        md: "h-8 px-3 text-sm max-sm:h-10 [&_svg]:size-4",
+        lg: "h-9 px-4 text-sm max-sm:h-10 [&_svg]:size-4",
+        icon: "size-8 max-sm:size-10 [&_svg]:size-4",
+        "icon-sm": "size-7 max-sm:size-10 [&_svg]:size-3.5",
       },
     },
     defaultVariants: { variant: "default", size: "md" },

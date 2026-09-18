@@ -9,7 +9,7 @@ import { journalEntries, journalLines } from '@/db/schema';
 
 import { balancesByAccount, trialBalance, trialBalanceTotals } from './balances';
 import { ACCOUNTS } from './coa';
-import { AlreadyReversedError, EntryNotFoundError, EntryNotPostedError } from './errors';
+import { AlreadyReversedError, EntryNotFoundError, EntryNotPostedError, OwnedEntryError } from './errors';
 import { closePeriod } from './periods';
 import { type DraftLine, type LedgerDb, postJournalEntry } from './post';
 import { reverseEntry } from './reverse';
@@ -216,10 +216,15 @@ describe.skipIf(!hasDatabase)('reverseEntry', () => {
           { userId: null, tx },
         );
 
+        // Only the module that owns the invoice may reverse it; the ledger screen may not.
+        await expect(
+          tx.transaction((sp) => reverseEntry(invoice.entryId, { userId: null, tx: sp })),
+        ).rejects.toBeInstanceOf(OwnedEntryError);
         const reversal = await reverseEntry(invoice.entryId, {
           memo: 'Invoice 2002 voided',
           userId: null,
           tx,
+          owner: 'invoice',
         });
 
         const [mirrorRow] = await tx

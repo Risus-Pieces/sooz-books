@@ -4,10 +4,10 @@
  * goes through here: there is no edit and no delete.
  */
 
-import { and, asc, eq } from 'drizzle-orm';
+import { and, asc, eq, sql } from 'drizzle-orm';
 
 import { withActor } from '@/db/client';
-import { journalEntries, journalLines } from '@/db/schema';
+import { bankTransactions, journalEntries, journalLines } from '@/db/schema';
 import { type CalendarDate, isCalendarDate, periodOf } from '@/lib/dates';
 
 import {
@@ -15,7 +15,9 @@ import {
   EntryNotFoundError,
   EntryNotPostedError,
   InvalidDateError,
+  OwnedEntryError,
 } from './errors';
+import { isLedgerReversible } from './ownership';
 import { earliestOpenPeriod, isPeriodOpen, periodStart } from './periods';
 import { type DraftLine, type LedgerDb, postJournalEntry } from './post';
 
@@ -25,7 +27,18 @@ export interface ReverseOptions {
   memo?: string;
   userId: string | null;
   tx?: LedgerDb;
+  /**
+   * The source type of the entries the calling module owns — `'bank'` for the
+   * banking engine, `'receipt'` for receipts, and so on. An entry whose source
+   * is not in `LEDGER_REVERSIBLE_SOURCES` is reversed only when the caller owns
+   * it, so the module's own record (a bank row, a paid invoice) changes in the
+   * same transaction. Left out by the ledger screen.
+   */
+  owner?: string;
 }
+
+/** Bank rows linked to an existing entry (not posted by the bank feed) carry this `matched_type`. */
+export const ENTRY_MATCH_TYPE = 'entry';
 
 export interface ReversalResult {
   entryId: string;
@@ -81,7 +94,9 @@ export async function reverseEntry(
         entryDate: journalEntries.entryDate,
         memo: journalEntries.memo,
         status: journalEntries.status,
+        sourceType: journalEntries.sourceType,
         sourceId: journalEntries.sourceId,
+        reversesId: journalEntries.reversesId,
         reversedById: journalEntries.reversedById,
       })
       .from(journalEntries)
@@ -90,6 +105,15 @@ export async function reverseEntry(
 
     if (original === undefined) throw new EntryNotFoundError(entryId);
     if (original.status !== 'posted') throw new EntryNotPostedError(entryId, original.status);
+
+    // An entry a module keeps a record of is that module's to reverse. A reversal
+    // is judged by what it reversed: re-instating a bank posting from the ledger
+    // would book the cash again while its row sits back in review.
+    const governing = await governingSourceType(tx, original.sourceType, original.reversesId);
+    const owned = !isLedgerReversible(governing);
+    if (owned && options.owner !== original.sourceType) {
+      throw new OwnedEntryError(original.id, original.entryNo, governing);
+    }
 
     // `reverses_id` on the mirror is the authoritative record of the pair: it is
     // written when the reversal is inserted and can never change afterwards.
@@ -150,6 +174,8 @@ export async function reverseEntry(
       productId: line.productId,
     }));
 
+    // The database checks the same ownership (0041); this tells it who is asking.
+    if (owned) await tx.execute(sql`select set_config('app.reversal_owner', ${original.sourceType}, true)`);
     const posted = await postJournalEntry(
       {
         date,
@@ -161,6 +187,22 @@ export async function reverseEntry(
       },
       { userId: options.userId, tx },
     );
+    if (owned) await tx.execute(sql`select set_config('app.reversal_owner', '', true)`);
+
+    // A bank row linked to this entry (rather than posted by it) was only
+    // claiming it as the ledger record of its money. With the entry undone, the
+    // money is unrecorded again, so the row goes back to review.
+    await tx
+      .update(bankTransactions)
+      .set({
+        status: 'unreviewed',
+        matchedType: null,
+        matchedId: null,
+        journalEntryId: null,
+        reviewedBy: null,
+        reviewedAt: null,
+      })
+      .where(and(eq(bankTransactions.journalEntryId, original.id), eq(bankTransactions.matchedType, ENTRY_MATCH_TYPE)));
 
     // Linking the reversal is the one field the immutability trigger lets
     // through — but only while the original's own period is still open, because
@@ -186,4 +228,23 @@ export async function reverseEntry(
   };
 
   return options.tx ? work(options.tx) : withActor(options.userId, work);
+}
+
+/**
+ * The source type that decides who may reverse an entry: its own, or for a
+ * reversal, that of the entry at the root of the chain it undoes.
+ */
+async function governingSourceType(tx: LedgerDb, sourceType: string, reversesId: string | null): Promise<string> {
+  let type = sourceType;
+  let next = reversesId;
+  for (let hops = 0; type === 'reversal' && next !== null && hops < 64; hops += 1) {
+    const [row] = await tx
+      .select({ sourceType: journalEntries.sourceType, reversesId: journalEntries.reversesId })
+      .from(journalEntries)
+      .where(eq(journalEntries.id, next));
+    if (row === undefined) break;
+    type = row.sourceType;
+    next = row.reversesId;
+  }
+  return type;
 }

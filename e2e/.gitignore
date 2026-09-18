@@ -1,0 +1,2 @@
+# Session state for the E2E account, written by auth.setup.ts. Never commit it.
+.auth/

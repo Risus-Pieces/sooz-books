@@ -485,7 +485,7 @@ describe.skipIf(!hasDatabase)('cash basis restatement', () => {
         const paid = await receipt(books, 'CB-R-7', '2032-03-25', 60_000, [
           { invoiceId: inv, amountCents: 60_000 },
         ]);
-        await reverseEntry(paid, { date: '2032-04-02', userId: null, tx });
+        await reverseEntry(paid, { date: '2032-04-02', userId: null, tx, owner: 'receipt' });
 
         expect((await balances(books, 'cash', MAR))(ACCOUNTS.SALES_DISTRIBUTOR)).toBe(60_000);
         const april = await balances(books, 'cash', APR);

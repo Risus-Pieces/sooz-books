@@ -122,7 +122,7 @@ export const budgetLines = pgTable(
       t.channelId,
       t.year,
       t.month,
-    ),
+    ).nullsNotDistinct(),
     index('budget_lines_period_idx').on(t.versionId, t.year, t.month),
     check('budget_lines_month_check', sql`${t.month} >= 1 and ${t.month} <= 12`),
   ],

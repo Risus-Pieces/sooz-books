@@ -8,14 +8,14 @@ import type { NavModule } from "./types";
  * end in the rail, the breadcrumbs and the command palette at once.
  */
 export const planNav: NavModule = {
-  shipped: false,
+  shipped: true,
   section: {
     label: "Plan",
     href: "/plan",
     icon: TrendingUp,
     children: [
-    { label: "Budget", href: "/plan/budget" },
-    { label: "Cash Forecast", href: "/plan/forecast" },
+      { label: "Cash Forecast", href: "/plan/forecast" },
+      { label: "Budget", href: "/plan/budget" },
     ],
   },
 };

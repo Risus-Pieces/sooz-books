@@ -3,13 +3,14 @@
 import * as React from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { ChevronDown, ChevronRight, FilterX, Search } from "lucide-react";
+import { BookOpen, ChevronDown, ChevronRight, FilterX, Search } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { DateInput } from "@/components/ui/date-input";
 import { EmptyState } from "@/components/ui/empty-state";
+import { FilterDisclosure } from "@/components/ui/filter-disclosure";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Money } from "@/components/ui/money";
@@ -95,129 +96,132 @@ export function JournalList({
   const lastPage = Math.max(1, Math.ceil(total / pageSize));
   const firstRow = total === 0 ? 0 : (page - 1) * pageSize + 1;
   const lastRow = Math.min(page * pageSize, total);
+  const filterSummary = `${active ? "Filtered · " : ""}${total === 1 ? "1 entry" : `${total} entries`}`;
 
   return (
     <div className="flex flex-col gap-4">
       <Card>
-        <form
-          className="grid gap-3 p-3 md:grid-cols-2 xl:grid-cols-4"
-          onSubmit={(event) => {
-            event.preventDefault();
-            apply(draft);
-          }}
-        >
-          <Field label="From">
-            <DateInput value={draft.from} onValueChange={(value) => set("from", value)} />
-          </Field>
-          <Field label="To">
-            <DateInput value={draft.to} onValueChange={(value) => set("to", value)} />
-          </Field>
-          <Field label="Status">
-            <Select
-              value={draft.status === "" ? ANY : draft.status}
-              onValueChange={(value) => set("status", value === ANY ? "" : value)}
-            >
-              <SelectTrigger aria-label="Status">
-                <SelectValue placeholder="Any status" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value={ANY}>Any status</SelectItem>
-                <SelectItem value="posted">Posted</SelectItem>
-                <SelectItem value="draft">Draft</SelectItem>
-              </SelectContent>
-            </Select>
-          </Field>
-          <Field label="Source">
-            <Select
-              value={draft.sourceType === "" ? ANY : draft.sourceType}
-              onValueChange={(value) => set("sourceType", value === ANY ? "" : value)}
-            >
-              <SelectTrigger aria-label="Source">
-                <SelectValue placeholder="Any source" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value={ANY}>Any source</SelectItem>
-                {sourceTypes.map((source) => (
-                  <SelectItem key={source} value={source}>
-                    {sourceLabel(source)}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </Field>
-          <Field label="Account">
-            <AccountCombobox
-              accounts={accounts}
-              value={draft.accountId === "" ? null : draft.accountId}
-              placeholder="Any account"
-              className="h-8"
-              onChange={(accountId) => set("accountId", accountId)}
-            />
-          </Field>
-          <Field label="Amount from">
-            <Input
-              numeric
-              inputMode="decimal"
-              placeholder="0.00"
-              value={draft.minAmount}
-              onChange={(event) => set("minAmount", event.target.value)}
-            />
-          </Field>
-          <Field label="Amount to">
-            <Input
-              numeric
-              inputMode="decimal"
-              placeholder="0.00"
-              value={draft.maxAmount}
-              onChange={(event) => set("maxAmount", event.target.value)}
-            />
-          </Field>
-          <Field label="Memo contains">
-            <Input
-              placeholder="Search memos"
-              value={draft.q}
-              onChange={(event) => set("q", event.target.value)}
-            />
-          </Field>
-
-          <div className="flex items-end gap-2 md:col-span-2 xl:col-span-4">
-            <Button type="submit" size="sm">
-              <Search />
-              Apply
-            </Button>
-            {active ? (
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                onClick={() =>
-                  apply({
-                    from: "",
-                    to: "",
-                    status: "",
-                    sourceType: "",
-                    accountId: "",
-                    minAmount: "",
-                    maxAmount: "",
-                    q: "",
-                  })
-                }
+        <FilterDisclosure triggerClassName="p-3" summary={filterSummary}>
+          <form
+            className="grid grid-cols-2 gap-3 p-3 max-sm:pt-0 md:grid-cols-2 xl:grid-cols-4"
+            onSubmit={(event) => {
+              event.preventDefault();
+              apply(draft);
+            }}
+          >
+            <Field label="From" half>
+              <DateInput value={draft.from} onValueChange={(value) => set("from", value)} />
+            </Field>
+            <Field label="To" half>
+              <DateInput value={draft.to} onValueChange={(value) => set("to", value)} />
+            </Field>
+            <Field label="Status">
+              <Select
+                value={draft.status === "" ? ANY : draft.status}
+                onValueChange={(value) => set("status", value === ANY ? "" : value)}
               >
-                <FilterX />
-                Clear
+                <SelectTrigger aria-label="Status">
+                  <SelectValue placeholder="Any status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={ANY}>Any status</SelectItem>
+                  <SelectItem value="posted">Posted</SelectItem>
+                  <SelectItem value="draft">Draft</SelectItem>
+                </SelectContent>
+              </Select>
+            </Field>
+            <Field label="Source">
+              <Select
+                value={draft.sourceType === "" ? ANY : draft.sourceType}
+                onValueChange={(value) => set("sourceType", value === ANY ? "" : value)}
+              >
+                <SelectTrigger aria-label="Source">
+                  <SelectValue placeholder="Any source" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={ANY}>Any source</SelectItem>
+                  {sourceTypes.map((source) => (
+                    <SelectItem key={source} value={source}>
+                      {sourceLabel(source)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </Field>
+            <Field label="Account">
+              <AccountCombobox
+                accounts={accounts}
+                value={draft.accountId === "" ? null : draft.accountId}
+                placeholder="Any account"
+                className="h-8"
+                onChange={(accountId) => set("accountId", accountId)}
+              />
+            </Field>
+            <Field label="Amount from" half>
+              <Input
+                numeric
+                inputMode="decimal"
+                placeholder="0.00"
+                value={draft.minAmount}
+                onChange={(event) => set("minAmount", event.target.value)}
+              />
+            </Field>
+            <Field label="Amount to" half>
+              <Input
+                numeric
+                inputMode="decimal"
+                placeholder="0.00"
+                value={draft.maxAmount}
+                onChange={(event) => set("maxAmount", event.target.value)}
+              />
+            </Field>
+            <Field label="Memo contains">
+              <Input
+                placeholder="Search memos"
+                value={draft.q}
+                onChange={(event) => set("q", event.target.value)}
+              />
+            </Field>
+
+            <div className="col-span-2 flex flex-wrap items-end gap-2 xl:col-span-4">
+              <Button type="submit" size="sm">
+                <Search />
+                Apply
               </Button>
-            ) : null}
-            <p className="ml-auto text-xs text-muted-foreground">
-              {total === 0 ? "No entries" : `${firstRow}–${lastRow} of ${total}`}
-              {total === 0 ? null : (
-                <>
-                  {" · "}
-                  <Money cents={totalDebitCents} currency plain className="text-xs" /> in debits
-                </>
-              )}
-            </p>
-          </div>
-        </form>
+              {active ? (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() =>
+                    apply({
+                      from: "",
+                      to: "",
+                      status: "",
+                      sourceType: "",
+                      accountId: "",
+                      minAmount: "",
+                      maxAmount: "",
+                      q: "",
+                    })
+                  }
+                >
+                  <FilterX />
+                  Clear
+                </Button>
+              ) : null}
+              <p className="ml-auto text-xs text-muted-foreground">
+                {total === 0 ? "No entries" : `${firstRow}–${lastRow} of ${total}`}
+                {total === 0 ? null : (
+                  <>
+                    {" · "}
+                    <Money cents={totalDebitCents} currency plain className="text-xs" /> in debits
+                  </>
+                )}
+              </p>
+            </div>
+          </form>
+        </FilterDisclosure>
       </Card>
 
       <Card>
@@ -240,14 +244,22 @@ export function JournalList({
                 <tr>
                   <td colSpan={7}>
                     <EmptyState
+                      icon={active ? undefined : <BookOpen />}
                       title={active ? "No entry matches those filters" : "The journal is empty"}
                       description={
                         active
                           ? "Widen the date range or clear a filter."
-                          : "Every posting — manual, imported or raised by a sub-ledger — will appear here."
+                          : "Bank lines post here once they are approved in the review queue, as do bills, invoices and payouts. Write an entry by hand for anything else."
                       }
                       action={
-                        <Button asChild size="sm">
+                        active ? undefined : (
+                          <Button asChild size="sm">
+                            <Link href="/banking/review">Open the review queue</Link>
+                          </Button>
+                        )
+                      }
+                      secondaryAction={
+                        <Button asChild size="sm" variant="secondary">
                           <Link href="/ledger/new">New entry</Link>
                         </Button>
                       }
@@ -265,7 +277,7 @@ export function JournalList({
                             type="button"
                             aria-expanded={open}
                             aria-label={open ? `Hide lines of entry ${row.entryNo}` : `Show lines of entry ${row.entryNo}`}
-                            className="rounded-xs p-0.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                            className="relative rounded-xs p-0.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground max-sm:after:absolute max-sm:after:-inset-3 max-sm:after:content-['']"
                             onClick={() => setExpanded(open ? null : row.id)}
                           >
                             {open ? (
@@ -391,9 +403,18 @@ function LineTable({ lines }: { lines: readonly JournalLineRow[] }) {
   );
 }
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
+function Field({
+  label,
+  children,
+  half = false,
+}: {
+  label: string;
+  children: React.ReactNode;
+  /** Takes half a row on a phone — dates and amounts pair up; everything else runs full width. */
+  half?: boolean;
+}) {
   return (
-    <div className="flex flex-col gap-1.5">
+    <div className={cn("flex min-w-0 flex-col gap-1.5", !half && "max-md:col-span-2")}>
       <Label>{label}</Label>
       {children}
     </div>

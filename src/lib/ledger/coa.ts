@@ -154,6 +154,9 @@ export const COA_SEED: readonly AccountSeed[] = Object.freeze([
     { clearingForChannel: 'WHOLESALE' }),
   acct('1140', 'Payment Processor Clearing', 'asset', 'clearing', '1100',
     'Card and ACH payments taken outside Shopify (Stripe, PayPal, Square) between capture and deposit.'),
+  acct('1150', 'Square Clearing', 'asset', 'clearing', '1100',
+    'Holds a Square payout between the sale being recorded and the cash landing in Relay. Should be zero once the matching Square settlement is imported.',
+    { clearingForChannel: 'DTC' }),
 
   acct('1200', 'Accounts Receivable', 'asset', 'accounts_receivable', null,
     'Control account for customer invoices. Only the invoicing and cash-receipt modules post here, never a manual entry.',
@@ -268,6 +271,8 @@ export const COA_SEED: readonly AccountSeed[] = Object.freeze([
   // -------------------------------------------------------------------------
   acct('3000', 'Common Stock', 'equity', 'equity', null,
     'Par value of issued shares, or member capital contributions for an LLC.'),
+  acct('3015', 'Member Contributions', 'equity', 'equity', '3000',
+    'Money the founder puts into the business from personal funds. Relay shows these as ACH Pulls from Chase College Checking and BofA Advantage SafeBalance. Not revenue.'),
   acct('3010', 'Additional Paid-In Capital', 'equity', 'equity', null,
     'Amounts investors paid above par in priced rounds, and SAFE balances once converted.'),
   acct('3020', 'Owner Draws & Distributions', 'equity', 'contra_equity', null,
@@ -284,6 +289,8 @@ export const COA_SEED: readonly AccountSeed[] = Object.freeze([
     `${ROLLUP} Gross sales before any contra-revenue.`),
   acct('4010', 'DTC Sales (Shopify)', 'revenue', 'sales', '4000',
     'Gross product revenue from the Shopify store at the price charged, before discounts and processing fees.'),
+  acct('4015', 'Direct & Market Sales (Square)', 'revenue', 'sales', '4000',
+    'In-person and direct sales taken through Square: markets, events, sampling, direct invoices.'),
   acct('4020', 'Amazon Sales', 'revenue', 'sales', '4000',
     'Gross product revenue from Amazon orders at the price charged, before referral and FBA fees.'),
   acct('4030', 'Distributor Sales (UNFI / KeHE)', 'revenue', 'sales', '4000',
@@ -520,6 +527,7 @@ export const ACCOUNTS = Object.freeze({
   CLEARING_AMAZON: '1120',
   CLEARING_FAIRE: '1130',
   CLEARING_PROCESSOR: '1140',
+  CLEARING_SQUARE: '1150',
 
   // Receivables
   AR: '1200',
@@ -584,6 +592,7 @@ export const ACCOUNTS = Object.freeze({
   // Equity
   COMMON_STOCK: '3000',
   PAID_IN_CAPITAL: '3010',
+  MEMBER_CONTRIBUTIONS: '3015',
   OWNER_DRAWS: '3020',
   RETAINED_EARNINGS: '3900',
   OPENING_BALANCE_EQUITY: '3990',
@@ -591,6 +600,7 @@ export const ACCOUNTS = Object.freeze({
   // Revenue
   GROSS_REVENUE: '4000',
   SALES_DTC: '4010',
+  SALES_SQUARE: '4015',
   SALES_AMAZON: '4020',
   SALES_DISTRIBUTOR: '4030',
   SALES_WHOLESALE: '4040',

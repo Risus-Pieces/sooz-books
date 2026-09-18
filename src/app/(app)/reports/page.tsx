@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
-import { BookOpenText, Landmark, Scale, TrendingUp } from 'lucide-react';
+import { BookOpenText, Landmark, Scale, Target, TrendingUp, Waves } from 'lucide-react';
 
 import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
@@ -18,6 +18,8 @@ const ICONS = {
   'balance-sheet': Scale,
   'trial-balance': Landmark,
   'general-ledger': BookOpenText,
+  'cash-flow': Waves,
+  'budget-vs-actual': Target,
 } as const;
 
 interface ReportCard {
@@ -82,6 +84,22 @@ export default async function ReportsIndexPage() {
       description:
         'The register behind every figure: opening balance, each posted line with its entry and source, running balance, closing balance.',
       tags: ['Drill-down', 'Audit trail'],
+    },
+    {
+      key: 'cash-flow',
+      href: `/reports/cash-flow${query(yearToDate)}`,
+      title: 'Cash Flow',
+      description:
+        'Net income walked to the change in cash: operating, investing and financing, tied to the Relay accounts with no plug.',
+      tags: ['Indirect method', 'Member contributions'],
+    },
+    {
+      key: 'budget-vs-actual',
+      href: '/plan/budget?tab=variance',
+      title: 'Budget vs Actual',
+      description:
+        'The active budget against posted actuals on the P&L spine, with each variance coloured by whether it helps or hurts.',
+      tags: ['Variance', 'Favourability'],
     },
   ];
 

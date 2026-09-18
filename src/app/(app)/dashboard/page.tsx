@@ -1,259 +1,477 @@
 import type { Metadata } from 'next';
+import type { ReactNode } from 'react';
 import Link from 'next/link';
-import { Lock, Plus } from 'lucide-react';
+import { ArrowRight, BookOpen, Inbox, Lock } from 'lucide-react';
 
 import { NetIncomeChart } from '@/components/ledger/net-income-chart';
 import { monthLabel, sourceLabel } from '@/components/ledger/types';
+import { RunwayCallout, shortDate } from '@/components/planning/runway-callout';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardHeader, CardTitle } from '@/components/ui/card';
 import { EmptyState } from '@/components/ui/empty-state';
-import { formatCents, Money } from '@/components/ui/money';
+import { Money } from '@/components/ui/money';
 import { PageHeader } from '@/components/ui/page-header';
 import { StatTile } from '@/components/ui/stat-tile';
 import { can } from '@/lib/auth/roles';
 import { requireUser } from '@/lib/auth/session';
-import { periodOf } from '@/lib/dates';
+import { cn } from '@/lib/cn';
+import { ACCOUNTS } from '@/lib/ledger/coa';
 
 import { dashboardData } from '../ledger/queries';
+import {
+  bankRows,
+  closeStatus,
+  founderContributions,
+  inventoryCapitalized,
+  reviewQueue,
+  runwayForecast,
+  squareClearing,
+} from './queries';
 
 export const metadata: Metadata = {
   title: 'Dashboard',
 };
 
+export const dynamic = 'force-dynamic';
+
+/** "Relay — ••9727" → "Relay": the mask is shown on its own. */
+function accountName(name: string): string {
+  return name.replace(/\s*—\s*••\d+$/, '');
+}
+
 /**
- * The first screen of the books.
- *
- * Every figure here is a query against posted entries — there are no estimates
- * and no placeholders. Tiles that would need a module that does not exist yet,
- * such as receivable aging or trade spend accrued against promotions, are left
- * off rather than filled with something that looks like an answer.
+ * The first screen of the books, built from what is true for Sooz today: four
+ * Relay accounts, a review queue the ledger is waiting on, a founder funding the
+ * business, and inventory being bought ahead of launch. Every figure is a query;
+ * a tile with nothing true to say is left off.
  */
 export default async function DashboardPage() {
-  const [user, data] = await Promise.all([requireUser('/dashboard'), dashboardData()]);
-  const { month } = periodOf(data.asOf);
+  const user = await requireUser('/dashboard');
+  // Sequential on purpose: the connection pool this app shares is small.
+  const banks = await bankRows();
+  const queue = await reviewQueue();
+  const forecast = await runwayForecast();
+  const founder = await founderContributions();
+  const inventory = await inventoryCapitalized();
+  const square = await squareClearing();
+  const close = await closeStatus();
+  const ledger = await dashboardData();
 
-  const netDelta = data.netIncomeCents - data.previousNetIncomeCents;
-  const previousMonth = monthLabel(
-    month === 1 ? data.period.year - 1 : data.period.year,
-    month === 1 ? 12 : month - 1,
-  ).split(' ')[0];
-
-  const emptyBooks = data.recentEntries.length === 0;
+  const hasCards = banks.some((b) => b.kind === 'credit_card' || b.kind === 'line_of_credit');
+  const depository = banks.filter((b) => b.kind !== 'credit_card' && b.kind !== 'line_of_credit');
+  const cards = banks.filter((b) => b.kind === 'credit_card' || b.kind === 'line_of_credit');
+  const bankTotal = depository.reduce((s, b) => s + (b.bankCents ?? 0), 0);
+  const bookTotal = depository.reduce((s, b) => s + b.bookCents, 0);
+  const flowCount = forecast.weeks.reduce((n, w) => n + w.flows.length, 0);
+  const posted = ledger.recentEntries.some((e) => e.status === 'posted');
+  const anyNetIncome = ledger.monthly.some((m) => m.netCents !== 0);
+  const month = monthLabel(close.current.year, close.current.month);
 
   return (
     <div className="flex flex-col gap-5">
       <PageHeader
         title="Dashboard"
-        description={`Sooz Books as of ${data.asOf}.`}
+        description={`Sooz Beverage as of ${shortDate(ledger.asOf)}.`}
         meta={
-          <Badge tone={data.period.status === 'closed' ? 'neutral' : 'info'}>
-            {data.period.status === 'closed' ? <Lock /> : null}
-            {monthLabel(data.period.year, data.period.month)} {data.period.status}
+          <Badge tone={close.current.status === 'closed' ? 'neutral' : 'info'}>
+            {close.current.status === 'closed' ? <Lock /> : null}
+            {month} {close.current.status}
           </Badge>
-        }
-        actions={
-          can(user.role, 'ledger.post') ? (
-            <Button asChild size="sm">
-              <Link href="/ledger/new">
-                <Plus />
-                New entry
-              </Link>
-            </Button>
-          ) : null
         }
       />
 
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <StatTile
-          label="Cash in bank"
-          value={<Money cents={data.cashCents} currency plain />}
-          hint={`${data.bankAccounts.length} ${data.bankAccounts.length === 1 ? 'account' : 'accounts'}`}
-          footer={
-            data.bankAccounts.length === 0 ? (
-              'No bank account has posted activity yet.'
-            ) : (
-              <ul className="flex flex-col gap-0.5">
-                {data.bankAccounts.map((account) => (
-                  <li key={account.accountId} className="flex justify-between gap-3">
-                    <span className="truncate">{account.name}</span>
-                    <Money cents={account.cents} plain className="text-xs" />
+      <div className="grid gap-4 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
+        <Card className="min-w-0 border-primary/40">
+          <div className="flex flex-col gap-4 p-4 sm:flex-row sm:items-end sm:justify-between">
+            <div className="min-w-0">
+              <p className="eyebrow flex items-center gap-1.5">
+                <Inbox className="size-3.5" aria-hidden />
+                Review queue
+              </p>
+              {queue.unreviewedCount === 0 ? (
+                <p className="mt-1 text-3xl font-semibold tracking-tight">Nothing to review</p>
+              ) : (
+                <p className="mt-1 text-3xl font-semibold tracking-tight">
+                  <span className="num">{queue.unreviewedCount}</span>
+                  <span className="text-muted-foreground"> bank transactions to review</span>
+                </p>
+              )}
+              <p className="mt-1.5 max-w-prose text-xs leading-relaxed text-muted-foreground">
+                {queue.unreviewedCount === 0 ? (
+                  'Every imported bank line has been reviewed.'
+                ) : (
+                  <>
+                    <Money cents={queue.unreviewedOutCents} currency plain className="text-foreground" /> out and{' '}
+                    <Money cents={queue.unreviewedInCents} currency plain className="text-foreground" /> in, back to{' '}
+                    {queue.oldestUnreviewed === null ? '—' : shortDate(queue.oldestUnreviewed)}. Nothing reaches the
+                    ledger until you approve it, so every figure below waits on this queue.
+                  </>
+                )}
+                {queue.categorizedCount > 0 ? (
+                  <>
+                    {' '}
+                    {queue.categorizedCount} more {queue.categorizedCount === 1 ? 'line is' : 'lines are'} categorized by
+                    an auto-post rule (<Money cents={queue.categorizedNetCents} currency plain signed className="text-foreground" /> net)
+                    and not yet posted.
+                  </>
+                ) : null}
+              </p>
+            </div>
+            {queue.unreviewedCount > 0 ? (
+              <Button asChild className="shrink-0 self-start sm:self-auto">
+                <Link href="/banking/review">
+                  Open the review queue
+                  <ArrowRight />
+                </Link>
+              </Button>
+            ) : null}
+          </div>
+          {queue.bySuggestion.length > 0 ? (
+            <div className="border-t border-border">
+              <p className="eyebrow px-4 pt-2.5 pb-1">Waiting, by suggested account</p>
+              <ul className="grid grid-cols-1 gap-x-6 px-4 pb-3 sm:grid-cols-2">
+                {queue.bySuggestion.slice(0, 6).map((g) => (
+                  <li key={g.code ?? 'none'} className="rule-row flex items-baseline justify-between gap-3 py-1 text-xs">
+                    <span className="min-w-0 truncate">
+                      {g.code !== null ? <span className="num mr-1.5 text-muted-foreground">{g.code}</span> : null}
+                      {g.name}
+                      <span className="num ml-1.5 text-muted-foreground">×{g.count}</span>
+                    </span>
+                    <Money cents={g.netCents} signed colorPositive />
                   </li>
                 ))}
               </ul>
+              {queue.bySuggestion.length > 6 ? (
+                <p className="px-4 pb-3 text-2xs text-muted-foreground">
+                  and {queue.bySuggestion.length - 6} more accounts. Suggestions come from rules, AI and history; you approve each one.
+                </p>
+              ) : null}
+            </div>
+          ) : null}
+        </Card>
+
+        <Card className="min-w-0 p-4">
+          <RunwayCallout
+            compact
+            facts={{
+              asOf: forecast.asOf,
+              cashCents: forecast.opening.cashCents,
+              netBurnCents: forecast.burn.netBurnCents,
+              monthlyBurnCents: forecast.burn.monthlyBurnCents,
+              windowDays: forecast.burn.windowDays,
+              burnFrom: forecast.burn.from,
+              runwayDays: forecast.burn.runwayDays,
+              cashOutDate: forecast.burn.cashOutDate,
+              financingInflowCents: forecast.burn.financingInflowCents,
+              suggestedCents: forecast.burn.suggestedCents,
+              firstNegativeWeekStart: forecast.runway.firstNegativeWeekStart,
+              lowestClosingCents: forecast.runway.lowestClosingCents,
+              lowestWeekStart: forecast.runway.lowestWeekStart,
+              forecastFlowCount: flowCount,
+            }}
+          />
+          <Link href="/plan/forecast" className="mt-3 inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline">
+            Open the 13-week forecast
+            <ArrowRight className="size-3" aria-hidden />
+          </Link>
+        </Card>
+      </div>
+
+      <Card className="min-w-0 overflow-hidden">
+        <CardHeader>
+          <div className="min-w-0">
+            <CardTitle>Cash in the bank</CardTitle>
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              The bank&apos;s balance from its latest imported statement line, against what the books show posted. The
+              gap is activity still waiting in review.
+            </p>
+          </div>
+        </CardHeader>
+        <div className="relative overflow-x-auto">
+          <table className="w-full min-w-xl border-separate border-spacing-0 text-sm">
+            <caption className="sr-only">Bank balances against book balances</caption>
+            <thead>
+              <tr>
+                <Th className="text-left">Account</Th>
+                <Th>Bank balance</Th>
+                <Th>In the books</Th>
+                <Th>Awaiting review</Th>
+              </tr>
+            </thead>
+            <tbody>
+              {depository.map((b) => {
+                const gap = b.bankCents === null ? null : b.bankCents - b.bookCents;
+                return (
+                  <tr key={b.bankAccountId} className="rule-row">
+                    <td className="px-3 py-1.5">
+                      <Link href={`/banking?account=${b.bankAccountId}`} className="hover:underline">
+                        {accountName(b.name)}
+                      </Link>
+                      {b.mask ? <span className="num ml-1.5 text-xs text-muted-foreground">••{b.mask}</span> : null}
+                    </td>
+                    <td className="px-3 py-1.5 text-right">
+                      {b.bankCents === null ? (
+                        <span className="text-xs text-muted-foreground">no activity</span>
+                      ) : (
+                        <>
+                          <Money cents={b.bankCents} plain />
+                          <span className="num block text-2xs text-muted-foreground">{b.bankDate === null ? '' : shortDate(b.bankDate)}</span>
+                        </>
+                      )}
+                    </td>
+                    <td className="px-3 py-1.5 text-right">
+                      <Money cents={b.bookCents} zeroDash plain />
+                    </td>
+                    <td className="px-3 py-1.5 text-right">
+                      {gap === null || gap === 0 ? (
+                        <span className="text-muted-foreground">—</span>
+                      ) : (
+                        <Money cents={gap} className="text-warning" />
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+              <tr>
+                <th scope="row" className="rule-subtotal rule-total px-3 py-2 text-left text-xs font-semibold tracking-wide uppercase">
+                  Total
+                </th>
+                <td className="rule-subtotal rule-total px-3 py-2 text-right font-semibold">
+                  <Money cents={bankTotal} currency plain />
+                </td>
+                <td className="rule-subtotal rule-total px-3 py-2 text-right font-semibold">
+                  <Money cents={bookTotal} currency plain />
+                </td>
+                <td className="rule-subtotal rule-total px-3 py-2 text-right font-semibold">
+                  <Money cents={bankTotal - bookTotal} currency plain className={bankTotal === bookTotal ? undefined : 'text-warning'} />
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </Card>
+
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <StatTile
+          label="Founder contributions"
+          value={<Money cents={founder.postedCents} currency plain />}
+          hint={`posted · ${ACCOUNTS.MEMBER_CONTRIBUTIONS}`}
+          footer={
+            founder.pendingCount === 0 && founder.unbookedOpeningCents === 0 ? (
+              'Money from the founder, booked as Member Contributions, never revenue.'
+            ) : (
+              <span>
+                {founder.pendingCount > 0 ? (
+                  <>
+                    <Money cents={founder.pendingCents} currency plain className="text-foreground" /> more in{' '}
+                    {founder.pendingCount} ACH {founder.pendingCount === 1 ? 'pull' : 'pulls'} waiting to post
+                  </>
+                ) : null}
+                {founder.pendingCount > 0 && founder.unbookedOpeningCents !== 0 ? ', and ' : null}
+                {founder.unbookedOpeningCents !== 0 ? (
+                  <>
+                    the <Money cents={founder.unbookedOpeningCents} currency plain className="text-foreground" /> opening
+                    deposit not yet booked
+                  </>
+                ) : null}
+                .
+              </span>
             )
           }
         />
 
         <StatTile
-          label={`Net income · ${monthLabel(data.period.year, data.period.month).split(' ')[0]}`}
-          value={<Money cents={data.netIncomeCents} currency plain />}
-          delta={formatCents(netDelta, { currency: true, signed: true })}
-          deltaTone={netDelta === 0 ? 'neutral' : netDelta > 0 ? 'positive' : 'negative'}
-          deltaDirection={netDelta === 0 ? 'flat' : netDelta > 0 ? 'up' : 'down'}
-          deltaLabel={`vs. ${previousMonth}`}
+          label="Inventory capitalized"
+          value={<Money cents={inventory.postedCents} currency plain />}
+          hint={`posted · ${ACCOUNTS.INVENTORY}`}
+          footer={
+            inventory.pendingCount === 0 ? (
+              'Ingredients and packaging are held as inventory until they are used.'
+            ) : (
+              <span>
+                <Money cents={inventory.pendingCents} currency plain className="text-foreground" /> more waiting to post:
+                ingredients <Money cents={inventory.ingredients.pendingCents} plain className="text-foreground" />,
+                packaging <Money cents={inventory.packaging.pendingCents} plain className="text-foreground" />.
+              </span>
+            )
+          }
+        />
+
+        <StatTile
+          label="Square Clearing"
+          value={<Money cents={square.postedCents} currency plain />}
+          hint={`posted · ${ACCOUNTS.CLEARING_SQUARE}`}
           footer={
             <span>
-              Revenue less expense on posted entries.{' '}
-              <Link href="/reports/profit-loss" className="text-primary hover:underline">
-                P&amp;L
-              </Link>
+              Square sales post here gross; each SQ deposit into Relay clears them. A balance is money Square still
+              holds.
+              {square.depositsCount > 0 ? (
+                <>
+                  {' '}
+                  {square.depositsCount} deposits so far, <Money cents={square.depositsCents} currency plain className="text-foreground" />.
+                </>
+              ) : null}
             </span>
           }
         />
 
         <StatTile
-          label="Card balances"
-          value={<Money cents={data.cardBalanceCents} currency plain />}
-          hint="owed"
-          footer="Company cards reconciled against a statement feed."
-        />
-
-        <StatTile
-          label="Drafts to post"
-          value={<span className="num">{data.draftCount}</span>}
-          footer={
-            data.draftCount === 0 ? (
-              'Nothing unposted.'
+          label="Month-end close"
+          value={
+            close.nextToClose === null ? (
+              <span>All closed</span>
             ) : (
-              <Link href="/ledger?status=draft" className="text-primary hover:underline">
-                Work the drafts
-              </Link>
+              <span className="text-xl">{monthLabel(close.nextToClose.year, close.nextToClose.month)}</span>
             )
           }
+          hint={close.nextToClose === null ? undefined : 'next to close'}
+          footer={
+            <span>
+              {close.closedCount === 0
+                ? 'No month has been closed yet.'
+                : `${close.closedCount} closed, through ${close.lastClosed === null ? '—' : monthLabel(close.lastClosed.year, close.lastClosed.month)}.`}{' '}
+              {close.checklist !== null ? `Checklist ${close.checklist.done} of ${close.checklist.total} ready. ` : null}
+              <Link href="/close" className="text-primary hover:underline">
+                Work the close
+              </Link>
+            </span>
+          }
         />
+
+        {hasCards ? (
+          <StatTile
+            label="Card balances"
+            value={<Money cents={-cards.reduce((s, c) => s + c.bookCents, 0)} currency plain />}
+            hint="owed, posted"
+            footer={`${cards.length} ${cards.length === 1 ? 'card' : 'cards'} or credit lines.`}
+          />
+        ) : null}
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-[3fr_2fr]">
+      {!posted ? (
         <Card>
-          <CardHeader>
-            <CardTitle>Net income by month</CardTitle>
-            <p className="text-xs text-muted-foreground">Last six months, posted entries only.</p>
-          </CardHeader>
-          <div className="p-3">
-            <NetIncomeChart data={data.monthly} />
-          </div>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>
-              Top expenses · {monthLabel(data.period.year, data.period.month).split(' ')[0]}
-            </CardTitle>
-            <Money cents={data.expenseTotalCents} currency plain className="text-sm font-semibold" />
-          </CardHeader>
-          {data.topExpenses.length === 0 ? (
-            <EmptyState
-              title="No expense posted this month"
-              description="Expense accounts with activity in the month will rank here."
-            />
-          ) : (
-            <ul className="flex flex-col gap-2 p-4">
-              {data.topExpenses.map((expense) => {
-                const share =
-                  data.expenseTotalCents === 0
-                    ? 0
-                    : Math.round((expense.cents / data.expenseTotalCents) * 100);
-                return (
-                  <li key={expense.accountId} className="flex flex-col gap-1">
-                    <div className="flex items-baseline justify-between gap-3 text-sm">
-                      <Link
-                        href={`/ledger?accountId=${expense.accountId}`}
-                        className="min-w-0 truncate hover:underline"
-                      >
-                        <span className="num mr-2 text-xs text-muted-foreground">
-                          {expense.code}
-                        </span>
-                        {expense.name}
-                      </Link>
-                      <Money cents={expense.cents} plain />
-                    </div>
-                    <div className="h-1 w-full rounded-xs bg-muted">
-                      <div
-                        className="h-1 rounded-xs bg-primary"
-                        style={{ width: `${Math.max(share, 2)}%` }}
-                      />
-                    </div>
-                  </li>
-                );
-              })}
-            </ul>
-          )}
-        </Card>
-      </div>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Recent entries</CardTitle>
-          <Link href="/ledger" className="text-xs text-primary hover:underline">
-            Open the journal
-          </Link>
-        </CardHeader>
-        {emptyBooks ? (
           <EmptyState
-            title="Nothing has been posted yet"
-            description="The first entry can be written by hand, or arrive from a bank import once one is loaded."
+            icon={<BookOpen />}
+            title="Nothing has been posted to the ledger yet"
+            description={`Profit and loss, expenses and recent entries appear here as bank lines are approved. ${queue.unreviewedCount} are waiting.`}
             action={
-              can(user.role, 'ledger.post') ? (
+              can(user.role, 'bank.approve') && queue.unreviewedCount > 0 ? (
                 <Button asChild size="sm">
-                  <Link href="/ledger/new">New entry</Link>
+                  <Link href="/banking/review">Open the review queue</Link>
                 </Button>
               ) : undefined
             }
           />
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-2xl border-separate border-spacing-0 text-sm">
-              <caption className="sr-only">Recent journal entries</caption>
-              <thead>
-                <tr>
-                  <th scope="col" className="rule-head bg-surface-sunken px-3 py-1.5 text-left text-2xs font-semibold tracking-wider text-muted-foreground uppercase">
-                    Entry
-                  </th>
-                  <th scope="col" className="rule-head bg-surface-sunken px-3 py-1.5 text-left text-2xs font-semibold tracking-wider text-muted-foreground uppercase">
-                    Date
-                  </th>
-                  <th scope="col" className="rule-head bg-surface-sunken px-3 py-1.5 text-left text-2xs font-semibold tracking-wider text-muted-foreground uppercase">
-                    Memo
-                  </th>
-                  <th scope="col" className="rule-head bg-surface-sunken px-3 py-1.5 text-left text-2xs font-semibold tracking-wider text-muted-foreground uppercase">
-                    Source
-                  </th>
-                  <th scope="col" className="rule-head bg-surface-sunken px-3 py-1.5 text-right text-2xs font-semibold tracking-wider text-muted-foreground uppercase">
-                    Debits
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {data.recentEntries.map((entry) => (
-                  <tr key={entry.id} className="rule-row align-middle">
-                    <td className="num px-3 py-1.5">
-                      <Link href={`/ledger/${entry.id}`} className="hover:underline">
-                        #{entry.entryNo}
-                      </Link>
-                      {entry.status === 'draft' ? (
-                        <Badge tone="warning" size="sm" className="ml-2">
-                          draft
-                        </Badge>
-                      ) : null}
-                    </td>
-                    <td className="num px-3 py-1.5">{entry.date}</td>
-                    <td className="px-3 py-1.5">
-                      {entry.memo ?? <span className="text-muted-foreground">No memo</span>}
-                    </td>
-                    <td className="px-3 py-1.5 text-xs text-muted-foreground">
-                      {sourceLabel(entry.sourceType)}
-                    </td>
-                    <td className="px-3 py-1.5 text-right">
-                      <Money cents={entry.debitCents} plain />
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+        </Card>
+      ) : (
+        <>
+          <div className="grid gap-4 lg:grid-cols-[3fr_2fr]">
+            <Card className="min-w-0">
+              <CardHeader>
+                <CardTitle>Net income by month</CardTitle>
+                <p className="text-xs text-muted-foreground">Last six months, posted entries only.</p>
+              </CardHeader>
+              <div className="p-3">
+                {anyNetIncome ? (
+                  <NetIncomeChart data={ledger.monthly} />
+                ) : (
+                  <p className="px-1 py-10 text-center text-xs text-muted-foreground">
+                    No income or expense posted in the last six months.
+                  </p>
+                )}
+              </div>
+            </Card>
+
+            <Card className="min-w-0">
+              <CardHeader>
+                <CardTitle>Top expenses · {month.split(' ')[0]}</CardTitle>
+                <Money cents={ledger.expenseTotalCents} currency plain className="text-sm font-semibold" />
+              </CardHeader>
+              {ledger.topExpenses.length === 0 ? (
+                <EmptyState title="No expense posted this month" description="Expense accounts with activity in the month rank here." />
+              ) : (
+                <ul className="flex flex-col gap-2 p-4">
+                  {ledger.topExpenses.map((expense) => {
+                    const share = ledger.expenseTotalCents === 0 ? 0 : Math.round((expense.cents * 100) / ledger.expenseTotalCents);
+                    return (
+                      <li key={expense.accountId} className="flex flex-col gap-1">
+                        <div className="flex items-baseline justify-between gap-3 text-sm">
+                          <Link href={`/ledger?accountId=${expense.accountId}`} className="min-w-0 truncate hover:underline">
+                            <span className="num mr-2 text-xs text-muted-foreground">{expense.code}</span>
+                            {expense.name}
+                          </Link>
+                          <Money cents={expense.cents} plain />
+                        </div>
+                        <div className="h-1 w-full rounded-xs bg-muted">
+                          <div className="h-1 rounded-xs bg-primary" style={{ width: `${Math.max(share, 2)}%` }} />
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </Card>
           </div>
-        )}
-      </Card>
+
+          <Card className="min-w-0">
+            <CardHeader>
+              <CardTitle>Recent entries</CardTitle>
+              <Link href="/ledger" className="text-xs text-primary hover:underline">
+                Open the journal
+              </Link>
+            </CardHeader>
+            <div className="relative overflow-x-auto">
+              <table className="w-full min-w-2xl border-separate border-spacing-0 text-sm">
+                <caption className="sr-only">Recent journal entries</caption>
+                <thead>
+                  <tr>
+                    <Th className="text-left">Entry</Th>
+                    <Th className="text-left">Date</Th>
+                    <Th className="text-left">Memo</Th>
+                    <Th className="text-left">Source</Th>
+                    <Th>Debits</Th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {ledger.recentEntries.map((entry) => (
+                    <tr key={entry.id} className="rule-row">
+                      <td className="num px-3 py-1.5">
+                        <Link href={`/ledger/${entry.id}`} className="hover:underline">
+                          #{entry.entryNo}
+                        </Link>
+                        {entry.status === 'draft' ? (
+                          <Badge tone="warning" size="sm" className="ml-2">draft</Badge>
+                        ) : null}
+                      </td>
+                      <td className="num px-3 py-1.5">{entry.date}</td>
+                      <td className="px-3 py-1.5">{entry.memo ?? <span className="text-muted-foreground">No memo</span>}</td>
+                      <td className="px-3 py-1.5 text-xs text-muted-foreground">{sourceLabel(entry.sourceType)}</td>
+                      <td className="px-3 py-1.5 text-right">
+                        <Money cents={entry.debitCents} plain />
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </Card>
+        </>
+      )}
     </div>
+  );
+}
+
+function Th({ className, children }: { className?: string; children?: ReactNode }) {
+  return (
+    <th
+      scope="col"
+      className={cn(
+        'rule-head bg-surface-sunken px-3 py-1.5 text-right text-2xs font-semibold tracking-wider text-muted-foreground uppercase',
+        className,
+      )}
+    >
+      {children}
+    </th>
   );
 }

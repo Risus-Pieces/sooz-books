@@ -14,7 +14,7 @@ export function Checkbox({
     <CheckboxPrimitive.Root
       data-slot="checkbox"
       className={cn(
-        "peer size-4 shrink-0 rounded-xs border border-border-strong bg-surface-raised transition-colors data-[state=checked]:border-primary data-[state=checked]:bg-primary data-[state=indeterminate]:border-primary data-[state=indeterminate]:bg-primary disabled:cursor-not-allowed disabled:opacity-45",
+        "peer size-4 shrink-0 rounded-xs border relative max-sm:after:absolute max-sm:after:-inset-3 max-sm:after:content-[''] border-border-strong bg-surface-raised transition-colors data-[state=checked]:border-primary data-[state=checked]:bg-primary data-[state=indeterminate]:border-primary data-[state=indeterminate]:bg-primary disabled:cursor-not-allowed disabled:opacity-45",
         className,
       )}
       {...props}

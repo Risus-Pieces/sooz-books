@@ -36,6 +36,7 @@ import {
   InvalidDateError,
   InvalidReferenceError,
   LedgerError,
+  OwnedEntryError,
   RollupAccountError,
   UnbalancedEntryError,
   UnknownAccountError,
@@ -509,6 +510,8 @@ function translateDbError(error: unknown, entries: readonly PreparedEntry[]): un
     if (/has no amounts/.test(message)) {
       return new UnbalancedEntryError(0, 0, 0, 'Entry has no amounts to post.');
     }
+    const owned = /journal entry #(\d+) is a (\S+) entry; reverse it through the module that owns it/.exec(message);
+    if (owned) return new OwnedEntryError(null, Number(owned[1]), owned[2]);
     const rollup = /account (\S+) (.+) is a rollup/.exec(message);
     if (rollup) return new RollupAccountError(rollup[1], rollup[2]);
     if (

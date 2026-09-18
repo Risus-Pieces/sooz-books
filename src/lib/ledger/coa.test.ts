@@ -125,6 +125,11 @@ describe('chart of accounts definition', () => {
     for (const account of COA_SEED) {
       if (account.clearingForChannel === null) continue;
       expect(account.subtype).toBe('clearing');
+      // Square is DTC's second processor: its clearing account sits beside Shopify's.
+      if (account.code === ACCOUNTS.CLEARING_SQUARE) {
+        expect(account.clearingForChannel).toBe('DTC');
+        continue;
+      }
       expect(CHANNEL_CODES).toContain(account.clearingForChannel);
       expect(used.has(account.clearingForChannel)).toBe(false);
       used.set(account.clearingForChannel, account.code);

@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { DateInput } from "@/components/ui/date-input";
 import { EmptyState } from "@/components/ui/empty-state";
+import { FilterDisclosure } from "@/components/ui/filter-disclosure";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -19,6 +20,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { cn } from "@/lib/cn";
 
 import { AuditDiff } from "./audit-diff";
 import type { ActorOption, AuditEntryRow, AuditFilters } from "./types";
@@ -88,106 +90,109 @@ export function AuditTable({
   const lastPage = Math.max(1, Math.ceil(total / pageSize));
   const firstRow = total === 0 ? 0 : (page - 1) * pageSize + 1;
   const lastRow = Math.min(page * pageSize, total);
+  const filterSummary = `${active ? "Filtered · " : ""}${total} recorded ${total === 1 ? "write" : "writes"}`;
 
   return (
     <div className="flex flex-col gap-4">
       <Card>
-        <form
-          className="grid gap-3 p-3 md:grid-cols-2 xl:grid-cols-5"
-          onSubmit={(event) => {
-            event.preventDefault();
-            apply(draft);
-          }}
-        >
-          <Field label="Table">
-            <Select
-              value={draft.table === "" ? ANY : draft.table}
-              onValueChange={(value) => set("table", value === ANY ? "" : value)}
-            >
-              <SelectTrigger aria-label="Table">
-                <SelectValue placeholder="Any table" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value={ANY}>Any table</SelectItem>
-                {tables.map((table) => (
-                  <SelectItem key={table} value={table}>
-                    {table}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </Field>
-          <Field label="Operation">
-            <Select
-              value={draft.op === "" ? ANY : draft.op}
-              onValueChange={(value) => set("op", value === ANY ? "" : value)}
-            >
-              <SelectTrigger aria-label="Operation">
-                <SelectValue placeholder="Any operation" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value={ANY}>Any operation</SelectItem>
-                <SelectItem value="INSERT">Insert</SelectItem>
-                <SelectItem value="UPDATE">Update</SelectItem>
-                <SelectItem value="DELETE">Delete</SelectItem>
-              </SelectContent>
-            </Select>
-          </Field>
-          <Field label="Actor">
-            <Select
-              value={draft.actorId === "" ? ANY : draft.actorId}
-              onValueChange={(value) => set("actorId", value === ANY ? "" : value)}
-            >
-              <SelectTrigger aria-label="Actor">
-                <SelectValue placeholder="Anyone" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value={ANY}>Anyone</SelectItem>
-                {actors.map((actor) => (
-                  <SelectItem key={actor.id} value={actor.id}>
-                    {actor.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </Field>
-          <Field label="From">
-            <DateInput value={draft.from} onValueChange={(value) => set("from", value)} />
-          </Field>
-          <Field label="To">
-            <DateInput value={draft.to} onValueChange={(value) => set("to", value)} />
-          </Field>
-          <Field label="Contains">
-            <Input
-              value={draft.q}
-              placeholder="Any value in the row"
-              onChange={(event) => set("q", event.target.value)}
-            />
-          </Field>
-
-          <div className="flex items-end gap-2 md:col-span-2 xl:col-span-5">
-            <Button type="submit" size="sm">
-              <Search />
-              Apply
-            </Button>
-            {active ? (
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                onClick={() => apply({ table: "", op: "", actorId: "", from: "", to: "", q: "" })}
+        <FilterDisclosure triggerClassName="p-3" summary={filterSummary}>
+          <form
+            className="grid grid-cols-2 gap-3 p-3 max-sm:pt-0 md:grid-cols-3 xl:grid-cols-6"
+            onSubmit={(event) => {
+              event.preventDefault();
+              apply(draft);
+            }}
+          >
+            <Field label="Table">
+              <Select
+                value={draft.table === "" ? ANY : draft.table}
+                onValueChange={(value) => set("table", value === ANY ? "" : value)}
               >
-                <FilterX />
-                Clear
+                <SelectTrigger aria-label="Table">
+                  <SelectValue placeholder="Any table" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={ANY}>Any table</SelectItem>
+                  {tables.map((table) => (
+                    <SelectItem key={table} value={table}>
+                      {table}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </Field>
+            <Field label="Operation">
+              <Select
+                value={draft.op === "" ? ANY : draft.op}
+                onValueChange={(value) => set("op", value === ANY ? "" : value)}
+              >
+                <SelectTrigger aria-label="Operation">
+                  <SelectValue placeholder="Any operation" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={ANY}>Any operation</SelectItem>
+                  <SelectItem value="INSERT">Insert</SelectItem>
+                  <SelectItem value="UPDATE">Update</SelectItem>
+                  <SelectItem value="DELETE">Delete</SelectItem>
+                </SelectContent>
+              </Select>
+            </Field>
+            <Field label="Actor">
+              <Select
+                value={draft.actorId === "" ? ANY : draft.actorId}
+                onValueChange={(value) => set("actorId", value === ANY ? "" : value)}
+              >
+                <SelectTrigger aria-label="Actor">
+                  <SelectValue placeholder="Anyone" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={ANY}>Anyone</SelectItem>
+                  {actors.map((actor) => (
+                    <SelectItem key={actor.id} value={actor.id}>
+                      {actor.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </Field>
+            <Field label="From" half>
+              <DateInput value={draft.from} onValueChange={(value) => set("from", value)} />
+            </Field>
+            <Field label="To" half>
+              <DateInput value={draft.to} onValueChange={(value) => set("to", value)} />
+            </Field>
+            <Field label="Contains">
+              <Input
+                value={draft.q}
+                placeholder="Any value in the row"
+                onChange={(event) => set("q", event.target.value)}
+              />
+            </Field>
+
+            <div className="col-span-2 flex flex-wrap items-end gap-2 md:col-span-3 xl:col-span-6">
+              <Button type="submit" size="sm">
+                <Search />
+                Apply
               </Button>
-            ) : null}
-            <p className="ml-auto text-xs text-muted-foreground">
-              {total === 0
-                ? "No entries"
-                : `${firstRow}\u2013${lastRow} of ${total} recorded ${total === 1 ? "write" : "writes"}`}
-            </p>
-          </div>
-        </form>
+              {active ? (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => apply({ table: "", op: "", actorId: "", from: "", to: "", q: "" })}
+                >
+                  <FilterX />
+                  Clear
+                </Button>
+              ) : null}
+              <p className="ml-auto text-xs text-muted-foreground">
+                {total === 0
+                  ? "No entries"
+                  : `${firstRow}\u2013${lastRow} of ${total} recorded ${total === 1 ? "write" : "writes"}`}
+              </p>
+            </div>
+          </form>
+        </FilterDisclosure>
       </Card>
 
       <Card>
@@ -250,9 +255,18 @@ export function AuditTable({
   );
 }
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
+function Field({
+  label,
+  children,
+  half = false,
+}: {
+  label: string;
+  children: React.ReactNode;
+  /** Takes half a row on a phone — dates and amounts pair up; everything else runs full width. */
+  half?: boolean;
+}) {
   return (
-    <div className="flex flex-col gap-1.5">
+    <div className={cn("flex min-w-0 flex-col gap-1.5", !half && "max-md:col-span-2")}>
       <Label>{label}</Label>
       {children}
     </div>

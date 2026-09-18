@@ -41,7 +41,7 @@ export function CardTitle({ className, ...props }: React.ComponentPropsWithRef<"
 
 export function CardDescription({ className, ...props }: React.ComponentPropsWithRef<"p">) {
   return (
-    <p data-slot="card-description" className={cn("text-xs text-muted-foreground", className)} {...props} />
+    <p data-slot="card-description" className={cn("text-xs text-pretty text-muted-foreground", className)} {...props} />
   );
 }
 

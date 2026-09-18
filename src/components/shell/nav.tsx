@@ -77,6 +77,7 @@ const ALL_GROUPS: NavGroup[] = [
           { label: "Balance Sheet", href: "/reports/balance-sheet" },
           { label: "Trial Balance", href: "/reports/trial-balance" },
           { label: "General Ledger", href: "/reports/general-ledger" },
+          { label: "Cash Flow", href: "/reports/cash-flow" },
         ],
       },
       { label: "Close", href: "/close", icon: CalendarCheck },

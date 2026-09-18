@@ -273,7 +273,11 @@ export function sourceLabel(sourceType: string): string {
 /**
  * Where a source document lives, once the module that owns it exists. Routes
  * that are not built yet are deliberately absent: the entry detail renders a
- * disabled affordance for those rather than a link that 404s. No source
- * register has a page yet, so every non-manual entry takes that path.
+ * disabled affordance for those rather than a link that 404s.
  */
-export const SOURCE_ROUTES: Readonly<Partial<Record<string, string>>> = {};
+export const SOURCE_ROUTES: Readonly<Partial<Record<string, string>>> = {
+  invoice: '/sales/invoices',
+  receipt: '/sales/receipts',
+  bill: '/purchases/bills',
+  bill_payment: '/purchases/payments',
+};

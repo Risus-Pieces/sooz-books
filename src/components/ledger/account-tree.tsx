@@ -138,7 +138,7 @@ export function AccountTree({ accounts, canManage }: AccountTreeProps) {
         </CardHeader>
 
         <div className="overflow-x-auto">
-          <table className="w-full min-w-3xl border-separate border-spacing-0 text-sm">
+          <table className="w-full min-w-[62rem] border-separate border-spacing-0 text-sm">
             <caption className="sr-only">Chart of accounts</caption>
             <thead>
               <tr>

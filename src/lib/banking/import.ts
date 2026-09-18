@@ -1940,6 +1940,11 @@ export async function commitImport(input: CommitImportInput): Promise<CommitResu
           suggestionConfidence: suggestion === null ? null : suggestion.confidence.toFixed(3),
           suggestionReasoning: suggestion?.reasoning ?? null,
           ruleId: suggestion?.ruleId ?? null,
+          // A charge already in the ledger; one in this same file is linked after insert.
+          refundOfTxnId:
+            suggestion?.cardRefundOfTxnId != null && !suggestion.cardRefundOfTxnId.startsWith('pending:')
+              ? suggestion.cardRefundOfTxnId
+              : null,
           notes: decision?.notes ?? null,
         };
       });
@@ -1983,6 +1988,7 @@ export async function commitImport(input: CommitImportInput): Promise<CommitResu
         (await linkReturnedPairs(tx, classified, idByRowIndex)) +
         (await linkReturnsToLedger(tx, returns.links, idByRowIndex));
       const transferPairsLinked = await linkTransferPairs(tx, insertable, byRowIndex, idByRowIndex);
+      await linkPendingRefunds(tx, insertable, byRowIndex, idByRowIndex);
 
       const duplicates =
         classified.filter((entry) => entry.class === 'duplicate').length + conflicts;
@@ -2307,6 +2313,26 @@ async function linkTransferPairs(
     }
   }
   return linked;
+}
+
+/**
+ * Links card refunds to charges from the same file, which had no database id when the
+ * rows were written. Approving the refund then defaults to the charge's account.
+ */
+async function linkPendingRefunds(
+  tx: Tx,
+  insertable: readonly Classified[],
+  suggestions: ReadonlyMap<number, Suggestion>,
+  idByRowIndex: ReadonlyMap<number, string>,
+): Promise<void> {
+  for (const entry of insertable) {
+    const original = suggestions.get(entry.row.rowIndex)?.cardRefundOfTxnId ?? null;
+    if (original === null || !original.startsWith('pending:')) continue;
+    const self = idByRowIndex.get(entry.row.rowIndex);
+    const target = idByRowIndex.get(Number(original.slice('pending:'.length)));
+    if (self === undefined || target === undefined || self === target) continue;
+    await tx.update(bankTransactions).set({ refundOfTxnId: target }).where(eq(bankTransactions.id, self));
+  }
 }
 
 // ---------------------------------------------------------------------------

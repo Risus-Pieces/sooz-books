@@ -17,7 +17,7 @@ import { type ChannelOption, ReportToolbar } from "./report-toolbar";
 
 export const REPORT_EXPORT_PATH = "/reports/export";
 
-export type ReportKind = "profit-loss" | "balance-sheet" | "trial-balance" | "general-ledger";
+export type ReportKind = "profit-loss" | "balance-sheet" | "trial-balance" | "general-ledger" | "cash-flow";
 
 export interface ReportSurfaceProps {
   report: Report;

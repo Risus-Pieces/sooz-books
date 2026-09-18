@@ -1,0 +1,22 @@
+Transaction Date,Type,Order,Card Brand,Card Source,Payout Status,Payout Date,Available On,Checkout,Payment Method Name,Presentment Amount,Presentment Currency,Amount,Fee,Net,Currency
+2026-09-10 09:14:22 -0400,charge,#1001,visa,online,paid,2026-09-14,2026-09-14,c_884411003,shopify_payments,118.45,USD,118.45,3.73,114.72,USD
+2026-09-10 11:02:47 -0400,charge,#1002,mastercard,online,paid,2026-09-14,2026-09-14,c_884411004,shopify_payments,64.20,USD,64.20,2.16,62.04,USD
+2026-09-10 16:38:11 -0400,charge,#1003,amex,online,paid,2026-09-14,2026-09-14,c_884411009,shopify_payments,212.90,USD,212.90,6.47,206.43,USD
+2026-09-11 08:21:55 -0400,charge,#1004,visa,online,paid,2026-09-14,2026-09-14,c_884411015,shop_pay,47.65,USD,47.65,1.68,45.97,USD
+2026-09-11 13:47:03 -0400,charge,#1005,visa,online,paid,2026-09-14,2026-09-14,c_884411021,shopify_payments,412.80,CAD,305.12,13.43,291.69,USD
+2026-09-11 19:05:41 -0400,charge,#1006,mastercard,online,paid,2026-09-14,2026-09-14,c_884411030,shop_pay_installments,89.00,USD,89.00,2.88,86.12,USD
+2026-09-12 07:33:19 -0400,charge,#1007,visa,online,paid,2026-09-14,2026-09-14,c_884411038,shop_app,156.30,USD,156.30,4.83,151.47,USD
+2026-09-11 10:12:00 -0400,refund,#0987,visa,online,paid,2026-09-14,2026-09-14,c_884402277,shopify_payments,-54.30,USD,-54.30,0.00,-54.30,USD
+2026-09-12 15:26:34 -0400,refund,#1002,mastercard,online,paid,2026-09-14,2026-09-14,c_884411004,shopify_payments,-64.20,USD,-64.20,0.00,-64.20,USD
+2026-09-11 04:00:00 -0400,dispute,#0954,visa,online,paid,2026-09-14,2026-09-14,c_884399812,shopify_payments,-72.40,USD,-72.40,0.00,-72.40,USD
+2026-09-11 04:00:00 -0400,chargeback_fee,#0954,visa,online,paid,2026-09-14,2026-09-14,,shopify_payments,-15.00,USD,-15.00,0.00,-15.00,USD
+2026-09-12 04:00:00 -0400,dispute_reversal,#0931,mastercard,online,paid,2026-09-14,2026-09-14,c_884388120,shopify_payments,48.75,USD,48.75,0.00,48.75,USD
+2026-09-12 02:00:00 -0400,billing_debit,,,,paid,2026-09-14,2026-09-14,,,-139.90,USD,-139.90,0.00,-139.90,USD
+2026-09-10 18:44:02 -0400,shipping_label,,,,paid,2026-09-14,2026-09-14,,,-86.24,USD,-86.24,0.00,-86.24,USD
+2026-09-12 06:15:00 -0400,shipping_label_adjustment,,,,paid,2026-09-14,2026-09-14,,,-3.15,USD,-3.15,0.00,-3.15,USD
+2026-09-12 07:33:19 -0400,adjustment,#1007,,,paid,2026-09-14,2026-09-14,,,-11.72,USD,-11.72,0.00,-11.72,USD
+2026-09-14 00:00:00 -0400,payout,,,,paid,2026-09-14,2026-09-14,,,-560.28,USD,-560.28,0.00,-560.28,USD
+2026-09-13 09:02:11 -0400,charge,#1008,visa,online,pending,,2026-09-17,c_884411044,shopify_payments,74.10,USD,74.10,2.45,71.65,USD
+2026-09-13 12:40:58 -0400,charge,#1009,mastercard,online,pending,,2026-09-17,c_884411051,shopify_payments,129.99,USD,129.99,4.07,125.92,USD
+2026-09-13 20:17:36 -0400,charge,#1010,visa,online,pending,,2026-09-17,c_884411060,shop_pay,41.50,USD,41.50,1.50,40.00,USD
+2026-09-13 21:05:12 -0400,refund,#1005,visa,online,pending,,2026-09-17,c_884411021,shopify_payments,-25.00,USD,-25.00,0.00,-25.00,USD

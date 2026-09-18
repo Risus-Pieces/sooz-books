@@ -20,6 +20,14 @@ import { type Report, type ReportRequest, type ReportRow } from './types';
  * activity in it, which is what lets these tests assert absolute figures rather
  * than deltas; `assertWindowIsClear` fails loudly if that ever stops being true.
  */
+/**
+ * Each test seeds a dozen entries (five round trips apiece) and builds several
+ * reports inside one transaction against the remote pooler, at ~150 ms a round
+ * trip. Alone that is 15–25 s; with the full suite's workers sharing the pooler
+ * it can double, so the limit leaves room for contention rather than latency.
+ */
+const DB_TEST_TIMEOUT = 120_000;
+
 const JAN = { from: '2029-01-01', to: '2029-01-31' };
 const FEB = { from: '2029-02-01', to: '2029-02-28' };
 const WINDOW = { from: JAN.from, to: FEB.to };
@@ -182,7 +190,7 @@ describe.skipIf(!hasDatabase)('profit and loss', () => {
         expect(report.rows.some((row) => row.style === 'error')).toBe(false);
       });
     },
-    30_000,
+    DB_TEST_TIMEOUT,
   );
 
   it(
@@ -199,7 +207,7 @@ describe.skipIf(!hasDatabase)('profit and loss', () => {
         expect(findRow(report, PL_ROWS.grossMarginPct).format).toBe('percent');
       });
     },
-    30_000,
+    DB_TEST_TIMEOUT,
   );
 
   it(
@@ -225,7 +233,7 @@ describe.skipIf(!hasDatabase)('profit and loss', () => {
         expect(findRow(report, PL_ROWS.netSales).values[months[1].index]).toBe(60_000);
       });
     },
-    30_000,
+    DB_TEST_TIMEOUT,
   );
 
   it(
@@ -261,7 +269,7 @@ describe.skipIf(!hasDatabase)('profit and loss', () => {
         );
       });
     },
-    30_000,
+    DB_TEST_TIMEOUT,
   );
 
   it(
@@ -284,7 +292,7 @@ describe.skipIf(!hasDatabase)('profit and loss', () => {
         expect(netSales.values[variance]).toBe(-77_500);
       });
     },
-    30_000,
+    DB_TEST_TIMEOUT,
   );
 });
 
@@ -305,7 +313,7 @@ describe.skipIf(!hasDatabase)('trial balance', () => {
         expect(report.rows.some((row) => row.id === 'tb:out-of-balance')).toBe(false);
       });
     },
-    30_000,
+    DB_TEST_TIMEOUT,
   );
 
   it(
@@ -323,7 +331,7 @@ describe.skipIf(!hasDatabase)('trial balance', () => {
         expect(byCode.get(ACCOUNTS.SALES_DTC)?.flagged).toBe(false);
       });
     },
-    30_000,
+    DB_TEST_TIMEOUT,
   );
 });
 
@@ -354,7 +362,7 @@ describe.skipIf(!hasDatabase)('balance sheet', () => {
         );
       });
     },
-    30_000,
+    DB_TEST_TIMEOUT,
   );
 
   it(
@@ -374,7 +382,7 @@ describe.skipIf(!hasDatabase)('balance sheet', () => {
         expect(after.totals.outOfBalance).toEqual([0]);
       });
     },
-    30_000,
+    DB_TEST_TIMEOUT,
   );
 
   it(
@@ -396,7 +404,7 @@ describe.skipIf(!hasDatabase)('balance sheet', () => {
         expect(after.totals.assets[0] - after.totals.liabilities[0]).toBe(after.totals.equity[0]);
       });
     },
-    30_000,
+    DB_TEST_TIMEOUT,
   );
 });
 
@@ -421,7 +429,7 @@ describe.skipIf(!hasDatabase)('general ledger', () => {
         }
       });
     },
-    30_000,
+    DB_TEST_TIMEOUT,
   );
 
   it(
@@ -446,7 +454,7 @@ describe.skipIf(!hasDatabase)('general ledger', () => {
         expect(sales.closingCents - sales.openingCents).toBe(160_000);
       });
     },
-    30_000,
+    DB_TEST_TIMEOUT,
   );
 
   it(
@@ -468,7 +476,7 @@ describe.skipIf(!hasDatabase)('general ledger', () => {
         expect(after.accounts[0].closingCents - before.accounts[0].closingCents).toBe(160_000);
       });
     },
-    30_000,
+    DB_TEST_TIMEOUT,
   );
 
   it(
@@ -491,7 +499,7 @@ describe.skipIf(!hasDatabase)('general ledger', () => {
         expect(findRow(report, 'gl:total').blankColumns).toEqual([7]);
       });
     },
-    30_000,
+    DB_TEST_TIMEOUT,
   );
 });
 
@@ -594,7 +602,7 @@ describe.skipIf(!hasDatabase)('cash basis', () => {
         expect(ledger.accounts[0].closingCents).toBe(0);
       });
     },
-    30_000,
+    DB_TEST_TIMEOUT,
   );
 
   it(
@@ -611,7 +619,7 @@ describe.skipIf(!hasDatabase)('cash basis', () => {
         expect(sheet.totals.outOfBalance).toEqual([0]);
       });
     },
-    30_000,
+    DB_TEST_TIMEOUT,
   );
 
   it(
@@ -624,6 +632,6 @@ describe.skipIf(!hasDatabase)('cash basis', () => {
         expect(accrual.meta.warnings).toEqual([]);
       });
     },
-    30_000,
+    DB_TEST_TIMEOUT,
   );
 });

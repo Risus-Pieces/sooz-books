@@ -277,11 +277,19 @@ export const bankTransactions = pgTable(
     fingerprint: text('fingerprint').notNull(),
     status: bankTxnStatusEnum('status').notNull().default('unreviewed'),
     journalEntryId: uuid('journal_entry_id').references(() => journalEntries.id),
+    /**
+     * What the row is matched to. `receipt` / `bill_payment`: a document bank matching
+     * created from the row (void it to undo). `entry`: an entry already in the ledger
+     * that the row was linked to instead of posting its own. `payout`: the channel
+     * settlement the deposit clears — independent of the row's own posting.
+     */
     matchedType: text('matched_type', {
-      enum: ['invoice', 'bill', 'receipt', 'bill_payment', 'payout', 'transfer'],
+      enum: ['invoice', 'bill', 'receipt', 'bill_payment', 'payout', 'transfer', 'entry'],
     }),
     matchedId: uuid('matched_id'),
     transferPairId: uuid('transfer_pair_id').references((): AnyPgColumn => bankTransactions.id),
+    /** The card charge this refund reverses (0019). Approving the refund defaults to its account. */
+    refundOfTxnId: uuid('refund_of_txn_id').references((): AnyPgColumn => bankTransactions.id),
     suggestedAccountId: uuid('suggested_account_id').references(() => accounts.id),
     suggestedVendorId: uuid('suggested_vendor_id').references((): AnyPgColumn => vendors.id),
     suggestedCustomerId: uuid('suggested_customer_id').references((): AnyPgColumn => customers.id),

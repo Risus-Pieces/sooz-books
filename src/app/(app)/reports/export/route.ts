@@ -6,13 +6,14 @@
 
 import { requireCapability } from '@/lib/auth/session';
 import { balanceSheetReport } from '@/lib/reports/balance-sheet';
+import { cashFlowReport } from '@/lib/reports/cash-flow';
 import { toCsv, toTsv, reportFilename } from '@/lib/reports/export';
 import { generalLedgerReport, parseGeneralLedgerRequest } from '@/lib/reports/general-ledger';
 import { profitAndLossReport } from '@/lib/reports/pnl';
 import { trialBalanceReport } from '@/lib/reports/trial-balance';
 import { type Report, type SearchParams, parseReportRequest } from '@/lib/reports/types';
 
-const KINDS = ['profit-loss', 'balance-sheet', 'trial-balance', 'general-ledger'] as const;
+const KINDS = ['profit-loss', 'balance-sheet', 'trial-balance', 'general-ledger', 'cash-flow'] as const;
 type Kind = (typeof KINDS)[number];
 
 function isKind(value: string | null): value is Kind {
@@ -39,6 +40,8 @@ async function build(kind: Kind, params: SearchParams): Promise<Report> {
       return trialBalanceReport(parseReportRequest(params));
     case 'general-ledger':
       return generalLedgerReport(parseGeneralLedgerRequest(params));
+    case 'cash-flow':
+      return cashFlowReport(parseReportRequest(params));
   }
 }
 
