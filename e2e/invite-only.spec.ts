@@ -40,6 +40,18 @@ test.describe('invite-only sign-up', () => {
     await expect(page).toHaveURL(/\/login/);
   });
 
+  test('the join page needs the invitation link, and a made-up link is refused', async ({ page }) => {
+    await page.goto('/login?stage=join', { waitUntil: 'networkidle' });
+    await expect(page.getByText('Open the invitation link the owner sent you.')).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Create account' })).toHaveCount(0);
+
+    // A well-formed token nobody issued: the page asks the server, which finds no invitation.
+    const forged = 'x'.repeat(43);
+    await page.goto(`/login?stage=join#invite=${forged}`, { waitUntil: 'networkidle' });
+    await expect(page.getByText(/no longer valid/)).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Create account' })).toHaveCount(0);
+  });
+
   test('a direct sign-up is refused by the database, and the redirect it causes reads plainly', async ({ page }) => {
     const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
     const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;

@@ -4,13 +4,17 @@ import * as React from 'react';
 import { useActionState } from 'react';
 
 import {
-  acceptInvite,
+  joinWithInvite,
+  lookupInvite,
+  setPassword,
   signIn,
   signInWithOtp,
   signOut,
   signUpFirstOwner,
   type AuthFormState,
+  type InviteLookupState,
 } from '@/lib/auth/actions';
+import { ROLE_LABELS } from '@/lib/auth/roles';
 import { Button } from '@/components/ui/button';
 import { Glyph, type GlyphName } from '@/components/ui/glyph';
 import { Input } from '@/components/ui/input';
@@ -22,7 +26,7 @@ import { cn } from '@/lib/cn';
  * parameter because it is set by a redirect — from the invitation callback, or from the guard
  * that found a deactivated account.
  */
-export type LoginStage = 'sign-in' | 'invite' | 'disabled';
+export type LoginStage = 'sign-in' | 'join' | 'invite' | 'disabled';
 
 export interface LoginFormProps {
   stage: LoginStage;
@@ -37,6 +41,7 @@ export interface LoginFormProps {
 export function LoginForm({ stage, next, notice, unclaimed }: LoginFormProps) {
   if (stage === 'disabled') return <DisabledPanel />;
   if (stage === 'invite') return <AcceptInvitePanel />;
+  if (stage === 'join') return <JoinPanel />;
   if (unclaimed) return <FirstOwnerPanel notice={notice} />;
   return <SignInPanel next={next} notice={notice} />;
 }
@@ -171,11 +176,131 @@ function FirstOwnerPanel({ notice }: { notice: string | null }) {
 // Invitations and closed accounts
 // ---------------------------------------------------------------------------
 
-function AcceptInvitePanel() {
-  const [state, action, pending] = useActionState<AuthFormState, FormData>(acceptInvite, null);
+/** Where the token waits for this tab once it has been lifted out of the address bar. */
+const INVITE_KEY = 'sooz-invite-token';
+
+/**
+ * Reads the invitation token from the link's fragment, which never reaches a server log, or
+ * from this tab's session storage once the fragment has been cleared from the address bar.
+ */
+function tokenFromHash(): string | null {
+  const match = /(?:^|[#&])invite=([A-Za-z0-9_-]{20,200})/.exec(window.location.hash);
+  if (match) return match[1];
+  try {
+    return window.sessionStorage.getItem(INVITE_KEY);
+  } catch {
+    return null;
+  }
+}
+
+
+function subscribeToHash(onChange: () => void): () => void {
+  window.addEventListener('hashchange', onChange);
+  return () => window.removeEventListener('hashchange', onChange);
+}
+
+function JoinPanel() {
+  // The fragment exists only in the browser: on the server there is no token yet.
+  const token = React.useSyncExternalStore(subscribeToHash, tokenFromHash, () => null);
+  const hydrated = React.useSyncExternalStore(subscribeToHash, () => true, () => false);
+  const [lookup, setLookup] = React.useState<{ token: string; result: InviteLookupState } | null>(null);
+  const [state, action, pending] = useActionState<AuthFormState, FormData>(joinWithInvite, null);
+
+  React.useEffect(() => {
+    if (!token) return;
+    // Keep the token for this tab only, and take it out of the address bar and history so it
+    // is not left behind in a screenshot, a shared screen or the browser's history.
+    try {
+      window.sessionStorage.setItem(INVITE_KEY, token);
+    } catch {
+      // storage unavailable: the fragment stays until the page is left
+    }
+    if (window.location.hash) {
+      window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}`);
+    }
+    let live = true;
+    lookupInvite(token)
+      .then((result) => {
+        // The token stays in this tab's storage even when it is refused: the fragment is already
+        // gone from the address bar, so forgetting it here would replace the refusal's reason
+        // with "open the invitation link". A new link carries its own fragment and wins.
+        if (live) setLookup({ token, result });
+      })
+      .catch(() => {
+        if (live) {
+          setLookup({ token, result: { ok: false, error: 'Could not check your invitation. Reload the page to try again.' } });
+        }
+      });
+    return () => {
+      live = false;
+    };
+  }, [token]);
+
+  if (hydrated && !token) {
+    return (
+      <Panel title="Join Sooz Books" subtitle="Open the invitation link the owner sent you.">
+        <a href="/login" className="block text-center text-sm text-ink-blue hover:underline focus-ring">
+          Go to sign in
+        </a>
+      </Panel>
+    );
+  }
+
+  if (!token || lookup === null || lookup.token !== token) {
+    return <Panel title="Join Sooz Books" subtitle="Checking your invitation…">{null}</Panel>;
+  }
+
+  if (!lookup.result.ok) {
+    return (
+      <Panel title="Join Sooz Books" subtitle={lookup.result.error}>
+        <a href="/login" className="block text-center text-sm text-ink-blue hover:underline focus-ring">
+          Go to sign in
+        </a>
+      </Panel>
+    );
+  }
+
+  const invite = lookup.result.value;
+  const created = state?.ok === true;
 
   return (
-    <Panel title="Set your password" subtitle="Your invitation is accepted. Choose how you sign in.">
+    <Panel title="Join Sooz Books" subtitle={`Invited as ${ROLE_LABELS[invite.role]}.`}>
+      {created ? (
+        <div className="flex flex-col gap-3.5">
+          <Notice notice={null} state={state} />
+          <a href="/login" className="text-center text-sm text-ink-blue hover:underline focus-ring">
+            Go to sign in
+          </a>
+        </div>
+      ) : (
+        <form action={action} className="flex flex-col gap-3.5">
+          <input type="hidden" name="token" value={token} />
+          <Field label="Email" name="email" type="email" value={invite.email} readOnly autoComplete="username" />
+          <Field label="Your name" name="fullName" autoComplete="name" autoFocus required />
+          <Field
+            label="Password"
+            name="password"
+            type="password"
+            autoComplete="new-password"
+            required
+            hint="At least 10 characters."
+          />
+          <Field label="Confirm password" name="confirm" type="password" autoComplete="new-password" required />
+          <Notice notice={null} state={state} />
+          <Button type="submit" size="lg" disabled={pending}>
+            {pending ? 'Creating…' : 'Create account'}
+          </Button>
+        </form>
+      )}
+    </Panel>
+  );
+}
+
+function AcceptInvitePanel() {
+  const [state, action, pending] = useActionState<AuthFormState, FormData>(setPassword, null);
+
+  return (
+    <Panel title="Set your password" subtitle="Choose the password you will sign in with.">
       <form action={action} className="flex flex-col gap-3.5">
         <Field label="Your name" name="fullName" autoComplete="name" autoFocus />
         <Field

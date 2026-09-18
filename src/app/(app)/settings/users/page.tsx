@@ -7,7 +7,6 @@ import { db, sql } from '@/db/client';
 import { appUsers } from '@/db/schema';
 import {
   deactivateUser,
-  inviteUser,
   reactivateUser,
   revokeInvite,
   updateUserRole,
@@ -28,7 +27,7 @@ import { ToolbarGroup } from '@/components/ui/toolbar';
 import { cn } from '@/lib/cn';
 
 import { PaneBody, ROLE_TONE, SettingsSplit, paneFor } from '../_components/settings-split';
-import { InviteSheet, PersonRow, type PersonView } from '../_components/users-ui';
+import { InviteSheet, NewLinkSheet, PersonRow, type PersonView } from '../_components/users-ui';
 
 export const metadata: Metadata = {
   title: 'Users',
@@ -109,7 +108,7 @@ export default async function UsersSettingsPage({
         info="Who can open these books, and what each of them may do. A role takes effect on the next request; nobody has to sign in again."
         actions={
           <ToolbarGroup>
-            <InviteSheet key={`invite-${noticeKey}`} invite={invite} roleOptions={ROLE_OPTIONS} emailSent={hasAdminAccess()} />
+            <InviteSheet key={`invite-${noticeKey}`} roleOptions={ROLE_OPTIONS} linksWork={hasAdminAccess()} />
           </ToolbarGroup>
         }
       />
@@ -149,7 +148,10 @@ export default async function UsersSettingsPage({
             header="Invites"
             separatorInset={63}
             headerAccessory={
-              <InfoButton label="About invites">The role is applied the moment that address signs up.</InfoButton>
+              <InfoButton label="About invites">
+                Each invite is a single-use link for one address that expires after a week. Make a new link if one is
+                lost; the old one stops working.
+              </InfoButton>
             }
           >
             {invites.length === 0 ? (
@@ -166,13 +168,20 @@ export default async function UsersSettingsPage({
                   subtitle={
                     <>
                       <Glyph name="clock" size={12} />
-                      {since(pending.invitedAt)}
+                      {pending.hasLink ? `expires ${until(pending.expiresAt)}` : 'needs a new link'}
                       {pending.invitedByEmail ? ` · ${pending.invitedByEmail}` : ''}
                     </>
                   }
                   trailing={
                     <span className="flex items-center gap-2">
                       <Pill tone={ROLE_TONE[pending.role]}>{ROLE_LABELS[pending.role]}</Pill>
+                      <NewLinkSheet
+                        key={`${pending.id}-${noticeKey}`}
+                        inviteId={pending.id}
+                        email={pending.email}
+                        roleLabel={ROLE_LABELS[pending.role]}
+                        linksWork={hasAdminAccess()}
+                      />
                       <form action={withdrawInvite}>
                         <input type="hidden" name="inviteId" value={pending.id} />
                         <Button type="submit" variant="ghost" size="sm" aria-label={`Withdraw invite for ${pending.email}`}>
@@ -195,15 +204,6 @@ export default async function UsersSettingsPage({
 // Mutations. Each one calls the shared action, then reloads the page carrying its answer —
 // the page stays a Server Component and the whole screen works without JavaScript.
 // ---------------------------------------------------------------------------
-
-async function invite(formData: FormData): Promise<void> {
-  'use server';
-  const result = await inviteUser(
-    String(formData.get('email') ?? ''),
-    String(formData.get('role') ?? 'viewer') as AppRole,
-  );
-  redirect(noticeUrl(result));
-}
 
 async function changeRole(formData: FormData): Promise<void> {
   'use server';
@@ -245,6 +245,9 @@ interface PendingInvite {
   role: AppRole;
   /** Formatted in SQL as UTC ISO-8601, so nothing here depends on the driver's date parsing. */
   invitedAt: string;
+  /** False for an invitation made before links existed: it cannot be claimed until re-keyed. */
+  hasLink: boolean;
+  expiresAt: string | null;
   invitedByEmail: string | null;
 }
 
@@ -259,6 +262,8 @@ async function pendingInvites(): Promise<PendingInvite[]> {
            i.email,
            i.role,
            to_char(i.invited_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') as "invitedAt",
+           (i.token_hash is not null and i.expires_at > now()) as "hasLink",
+           to_char(i.expires_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') as "expiresAt",
            u.email as "invitedByEmail"
       from app_invites i
       left join app_users u on u.id = i.invited_by
@@ -339,6 +344,11 @@ function Notice({ ok, error }: { ok?: string; error?: string }) {
       {message}
     </p>
   );
+}
+
+function until(iso: string | null): string {
+  if (!iso) return 'never';
+  return `in ${formatDistanceToNowStrict(new Date(iso))}`;
 }
 
 function since(iso: string | null): string {

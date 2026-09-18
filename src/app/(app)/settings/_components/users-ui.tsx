@@ -2,6 +2,7 @@
 
 import * as React from 'react';
 
+import { inviteFromForm, reissueFromForm, type InviteLinkState } from '@/lib/auth/actions';
 import { cn } from '@/lib/cn';
 import { Button } from '@/components/ui/button';
 import { Glyph } from '@/components/ui/glyph';
@@ -153,60 +154,194 @@ export function PersonRow({
   );
 }
 
-/** The toolbar's Invite button and its sheet: an email and a role. */
-export function InviteSheet({
-  invite,
-  roleOptions,
-  emailSent,
-}: {
-  invite: FormAction;
-  roleOptions: PopUpOption[];
-  /** False when no service role key is set: nobody is emailed, the role waits for their sign-up. */
-  emailSent: boolean;
-}) {
+/**
+ * The link an invitation produced, shown once. It is never put in a URL or stored in the clear:
+ * copy it now and send it to the person yourself.
+ */
+function LinkReveal({ link, email, roleLabel, expiresAt }: { link: string; email: string; roleLabel: string; expiresAt: string }) {
+  const [copied, setCopied] = React.useState(false);
+  const expires = new Date(expiresAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+
+  async function copy() {
+    try {
+      await navigator.clipboard.writeText(link);
+      setCopied(true);
+    } catch {
+      setCopied(false);
+    }
+  }
+
   return (
-    <Sheet>
+    <div className="flex flex-col">
+      <div className="flex flex-col items-center gap-2 pt-3 pb-1">
+        <span className="grid size-14 place-items-center rounded-full bg-tint-green/14 text-tint-green">
+          <Glyph name="link" size={26} />
+        </span>
+        <p className="text-sm font-semibold text-label">{email}</p>
+        <Pill tone="neutral">{roleLabel}</Pill>
+      </div>
+      <InsetGroup
+        header="Invite link"
+        headerAccessory={
+          <InfoButton label="About invite links">
+            Send it yourself — text or chat. It works once, for this address only, and expires {expires}. Anyone
+            holding it can join as {roleLabel}, so send it only to them.
+          </InfoButton>
+        }
+      >
+        <div className="flex items-center gap-2 px-4 py-2.5">
+          <Input readOnly value={link} aria-label="Invite link" className="min-w-0 flex-1 font-mono text-xs" onFocus={(e) => e.currentTarget.select()} />
+          <Button type="button" onClick={copy} size="sm">
+            <Glyph name={copied ? 'check' : 'doc'} />
+            {copied ? 'Copied' : 'Copy'}
+          </Button>
+        </div>
+      </InsetGroup>
+      <p className="px-4 pt-1.5 text-xs text-label2">Single use · expires {expires}</p>
+    </div>
+  );
+}
+
+/** Shown while the server cannot redeem links: better to know before sending one. */
+function LinksOffWarning() {
+  return (
+    <p role="status" className="mx-4 mt-3 flex items-start gap-2 rounded-[10px] bg-tint-orange/12 px-3 py-2.5 text-sm text-label">
+      <Glyph name="warning" size={16} className="mt-px shrink-0 text-tint-orange" />
+      Links can&apos;t be used yet: the server needs its Supabase service key.
+    </p>
+  );
+}
+
+/** The toolbar's Invite button and its sheet: an email and a role in, a single-use link out. */
+export function InviteSheet({ roleOptions, linksWork }: { roleOptions: PopUpOption[]; linksWork: boolean }) {
+  // Each round of the form gets its own action state, so a second invite starts empty.
+  const [round, setRound] = React.useState(0);
+
+  return (
+    <Sheet onOpenChange={(open) => (open ? undefined : setRound((r) => r + 1))}>
       <SheetTrigger asChild>
         <ToolbarButton glyph="plus" label="Invite" />
       </SheetTrigger>
       <SheetContent title="Invite" width="sm">
-        <form action={invite} className="flex flex-col">
-          <div className="flex flex-col items-center gap-2 pt-3 pb-1">
-            <span className="grid size-14 place-items-center rounded-full bg-tint-indigo/14 text-tint-indigo">
-              <Glyph name="mail" size={26} />
-            </span>
-          </div>
-          <InsetGroup
-            header="Person"
-            headerAccessory={
-              <InfoButton label="About invitations">
-                {emailSent
-                  ? 'They receive an email, set a password, and arrive with the role you choose.'
-                  : 'No SUPABASE_SERVICE_ROLE_KEY is set, so no email goes out. They sign up with this address and the role is applied for them.'}
-              </InfoButton>
-            }
-          >
-            <GroupRow label="Email" htmlFor="invite-email">
-              <Input
-                id="invite-email"
-                name="email"
-                type="email"
-                required
-                autoComplete="off"
-                placeholder="name@example.com"
-                className="w-56 max-sm:w-44"
-              />
-            </GroupRow>
-            <GroupRow label="Role">
-              <PopUpButton aria-label="Role" name="role" defaultValue="viewer" options={roleOptions} />
-            </GroupRow>
-          </InsetGroup>
-          <p className="px-4 pt-1.5 text-xs text-label2">{emailSent ? 'Sends an email' : 'No email sent'}</p>
-          <Button type="submit" className="mt-5 self-stretch">
-            <Glyph name="mail" />
-            Send invitation
-          </Button>
-        </form>
+        <InviteRound key={round} roleOptions={roleOptions} linksWork={linksWork} next={() => setRound((r) => r + 1)} />
+      </SheetContent>
+    </Sheet>
+  );
+}
+
+function InviteRound({
+  roleOptions,
+  linksWork,
+  next,
+}: {
+  roleOptions: PopUpOption[];
+  linksWork: boolean;
+  next: () => void;
+}) {
+  const [state, action, pending] = React.useActionState<InviteLinkState, FormData>(inviteFromForm, null);
+  const roleLabel = (value: string) => roleOptions.find((o) => o.value === value)?.label ?? value;
+
+  return state?.ok ? (
+    <div className="flex flex-col">
+      <LinkReveal
+        link={state.value.link}
+        email={state.value.email}
+        roleLabel={roleLabel(state.value.role)}
+        expiresAt={state.value.expiresAt}
+      />
+      {linksWork ? null : <LinksOffWarning />}
+      <Button type="button" variant="secondary" className="mt-5 self-stretch" onClick={next}>
+        <Glyph name="plus" />
+        Invite someone else
+      </Button>
+    </div>
+  ) : (
+          <form action={action} className="flex flex-col">
+            <div className="flex flex-col items-center gap-2 pt-3 pb-1">
+              <span className="grid size-14 place-items-center rounded-full bg-tint-indigo/14 text-tint-indigo">
+                <Glyph name="mail" size={26} />
+              </span>
+            </div>
+            <InsetGroup
+              header="Person"
+              headerAccessory={
+                <InfoButton label="About invitations">
+                  You get a single-use link to send them. They choose a password and arrive with the role you pick.
+                </InfoButton>
+              }
+            >
+              <GroupRow label="Email" htmlFor="invite-email">
+                <Input
+                  id="invite-email"
+                  name="email"
+                  type="email"
+                  required
+                  autoComplete="off"
+                  placeholder="name@example.com"
+                  className="w-56 max-sm:w-44"
+                />
+              </GroupRow>
+              <GroupRow label="Role">
+                <PopUpButton aria-label="Role" name="role" defaultValue="viewer" options={roleOptions} />
+              </GroupRow>
+            </InsetGroup>
+            {linksWork ? null : <LinksOffWarning />}
+            {state && !state.ok ? (
+              <p role="alert" className="px-4 pt-2 text-sm text-ink-red">{state.error}</p>
+            ) : null}
+            <Button type="submit" className="mt-5 self-stretch" disabled={pending}>
+              <Glyph name="link" />
+              {pending ? 'Creating…' : 'Create invite link'}
+            </Button>
+          </form>
+  );
+}
+
+/** A fresh link for a pending invitation — the old one stops working the moment this is made. */
+export function NewLinkSheet({
+  inviteId,
+  email,
+  roleLabel,
+  linksWork,
+}: {
+  inviteId: string;
+  email: string;
+  roleLabel: string;
+  linksWork: boolean;
+}) {
+  const [state, action, pending] = React.useActionState<InviteLinkState, FormData>(reissueFromForm, null);
+
+  return (
+    <Sheet>
+      <SheetTrigger asChild>
+        <Button type="button" variant="ghost" size="sm" aria-label={`New invite link for ${email}`}>
+          New link
+        </Button>
+      </SheetTrigger>
+      <SheetContent title="Invite link" width="sm">
+        {state?.ok ? (
+          <LinkReveal link={state.value.link} email={state.value.email} roleLabel={roleLabel} expiresAt={state.value.expiresAt} />
+        ) : (
+          <form action={action} className="flex flex-col">
+            <input type="hidden" name="inviteId" value={inviteId} />
+            <div className="flex flex-col items-center gap-2 pt-3 pb-1">
+              <span className="grid size-14 place-items-center rounded-full bg-tint-indigo/14 text-tint-indigo">
+                <Glyph name="link" size={26} />
+              </span>
+              <p className="text-sm font-semibold text-label">{email}</p>
+              <Pill tone="neutral">{roleLabel}</Pill>
+            </div>
+            <p className="px-4 pt-2 text-center text-sm text-label2">Any earlier link for {email} stops working.</p>
+            {linksWork ? null : <LinksOffWarning />}
+            {state && !state.ok ? (
+              <p role="alert" className="px-4 pt-2 text-sm text-ink-red">{state.error}</p>
+            ) : null}
+            <Button type="submit" className="mt-5 self-stretch" disabled={pending}>
+              <Glyph name="link" />
+              {pending ? 'Creating…' : 'Create new link'}
+            </Button>
+          </form>
+        )}
       </SheetContent>
     </Sheet>
   );

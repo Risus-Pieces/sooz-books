@@ -32,7 +32,7 @@ export default async function LoginPage({
 }
 
 function readStage(value: string | undefined): LoginStage {
-  return value === 'invite' || value === 'disabled' ? value : 'sign-in';
+  return value === 'invite' || value === 'disabled' || value === 'join' ? value : 'sign-in';
 }
 
 function first(value: string | string[] | undefined): string | undefined {
