@@ -3,6 +3,7 @@
  *
  *   npx tsx scripts/shoot.ts http://localhost:3100 /banking/review /banking/import
  *   npx tsx scripts/shoot.ts http://localhost:3100 /dashboard --mobile --out /tmp/shots
+ *   npx tsx scripts/shoot.ts http://localhost:3100 /dashboard --mobile --dark   # light and dark
  *
  * Writes one PNG per route and viewport and prints each path, so a reviewer can open them.
  * Also reports, per route: the HTTP status, where it ended up after redirects, any console
@@ -24,23 +25,26 @@ interface Args {
   routes: string[];
   out: string;
   mobile: boolean;
+  dark: boolean;
 }
 
 function parseArgs(argv: string[]): Args {
   const positional: string[] = [];
   let out = 'test-results/shots';
   let mobile = false;
+  let dark = false;
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i];
     if (arg === '--out') out = argv[++i] ?? out;
     else if (arg === '--mobile') mobile = true;
+    else if (arg === '--dark') dark = true;
     else positional.push(arg);
   }
   const [base, ...routes] = positional;
   if (!base || routes.length === 0) {
     throw new Error('usage: npx tsx scripts/shoot.ts <baseUrl> <route> [route...] [--mobile] [--out dir]');
   }
-  return { base: base.replace(/\/$/, ''), routes, out, mobile };
+  return { base: base.replace(/\/$/, ''), routes, out, mobile, dark };
 }
 
 async function logIn(page: Page, base: string): Promise<void> {
@@ -65,14 +69,21 @@ async function main(): Promise<void> {
   const args = parseArgs(process.argv.slice(2));
   mkdirSync(args.out, { recursive: true });
 
-  const viewports = [{ name: 'desktop', width: 1440, height: 900 }];
-  if (args.mobile) viewports.push({ name: 'mobile', width: 390, height: 844 });
+  const sizes = [{ name: 'desktop', width: 1440, height: 900 }];
+  if (args.mobile) sizes.push({ name: 'mobile', width: 390, height: 844 });
+  const schemes: Array<'light' | 'dark'> = args.dark ? ['light', 'dark'] : ['light'];
+  const viewports = sizes.flatMap((size) =>
+    schemes.map((scheme) => ({ ...size, scheme, name: args.dark ? `${size.name}-${scheme}` : size.name })),
+  );
 
   const browser = await chromium.launch();
   let failed = 0;
   try {
     for (const viewport of viewports) {
-      const context = await browser.newContext({ viewport: { width: viewport.width, height: viewport.height } });
+      const context = await browser.newContext({
+        viewport: { width: viewport.width, height: viewport.height },
+        colorScheme: viewport.scheme,
+      });
       const page = await context.newPage();
       await logIn(page, args.base);
 
@@ -103,7 +114,7 @@ async function main(): Promise<void> {
         const ok = status > 0 && status < 400 && overlay === 0 && errors.length === 0 && !landed.startsWith('/login');
         if (!ok) failed += 1;
         process.stdout.write(
-          `${ok ? 'OK  ' : 'FAIL'} ${viewport.name.padEnd(7)} ${route} -> ${landed} [${status}]${overlay ? ' ERROR-OVERLAY' : ''}\n` +
+          `${ok ? 'OK  ' : 'FAIL'} ${viewport.name.padEnd(13)} ${route} -> ${landed} [${status}]${overlay ? ' ERROR-OVERLAY' : ''}\n` +
             `     ${file}\n` +
             errors.map((e) => `     ${e.slice(0, 300)}\n`).join(''),
         );
