@@ -8,6 +8,7 @@ import * as z from 'zod';
 
 import { db, withActor } from '@/db/client';
 import { appUsers } from '@/db/schema';
+import { booksAreUnclaimed } from '@/lib/auth/owner';
 import { isForbiddenError, type Capability } from '@/lib/auth/roles';
 import { requireCapability, type AuthedUser } from '@/lib/auth/session';
 import { createAdminClient, createClient } from '@/lib/supabase/server';
@@ -98,8 +99,8 @@ export async function signOut(): Promise<never> {
 }
 
 /**
- * Opens the books. Only works while `app_users` is empty — the trigger on `auth.users` makes
- * whoever that is the owner, and this refuses to serve anyone arriving afterwards.
+ * Opens the books. Only offered until the owner named in app_settings has an account; the
+ * trigger on `auth.users` accepts that address as owner and refuses every uninvited one.
  */
 export async function signUpFirstOwner(
   _prev: AuthFormState,
@@ -125,7 +126,14 @@ export async function signUpFirstOwner(
       emailRedirectTo: await callbackUrl('/dashboard'),
     },
   });
-  if (error) return err(error.message);
+  if (error) {
+    // The invite-only trigger refuses any address but the owner's; Supabase surfaces that as
+    // "Database error saving new user", which tells a person nothing.
+    if (/database error saving new user/i.test(error.message)) {
+      return err('Only the owner of these books can create the first account. Anyone else needs an invitation from the owner.');
+    }
+    return err(error.message);
+  }
 
   // With email confirmation switched on there is no session yet; the identity — and so the
   // owner row — only appears once the address is confirmed.
@@ -357,11 +365,6 @@ async function setActive(actorId: string, userId: string, active: boolean): Prom
   await withActor(actorId, (tx) =>
     tx.update(appUsers).set({ active }).where(eq(appUsers.id, userId)),
   );
-}
-
-async function booksAreUnclaimed(): Promise<boolean> {
-  const rows = await db.select({ id: appUsers.id }).from(appUsers).limit(1);
-  return rows.length === 0;
 }
 
 function describe(user: TargetUser): string {

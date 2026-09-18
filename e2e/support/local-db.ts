@@ -221,6 +221,9 @@ export function rebuildDatabase(user?: E2eUser): void {
 insert into auth.users (id, email) values (${quote(user.id)}, ${quote(user.email)});
 alter table auth.users enable trigger user;
 insert into app_users (id, email, full_name, role) values (${quote(user.id)}, ${quote(user.email)}, ${quote(user.fullName)}, 'owner');
+-- In a test database the seeded owner is the owner these books are configured for, so the
+-- login page offers sign-in rather than the owner's one-time sign-up.
+update app_settings set owner_email = ${quote(user.email)};
 `;
   writeFileSync(grants, `${APP_GRANTS}\n${owner}`);
   psql(DB_NAME, ['-f', grants]);

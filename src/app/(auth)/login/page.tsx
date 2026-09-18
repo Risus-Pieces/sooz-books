@@ -1,8 +1,7 @@
 import type { Metadata } from 'next';
 
-import { db } from '@/db/client';
-import { appUsers } from '@/db/schema';
 import { LoginForm, type LoginStage } from '@/app/(auth)/login/login-form';
+import { booksAreUnclaimed } from '@/lib/auth/owner';
 
 export const metadata: Metadata = {
   title: 'Sign in',
@@ -19,7 +18,7 @@ export default async function LoginPage({
 
   const stage = readStage(first(params.stage));
   // Only worth asking while nobody is signed in, and it settles whether this screen offers a
-  // sign-in or the one-time chance to create the owner account.
+  // sign-in or the owner's one-time chance to create their account.
   const unclaimed = stage === 'sign-in' && (await booksAreUnclaimed());
 
   return (
@@ -30,11 +29,6 @@ export default async function LoginPage({
       unclaimed={unclaimed}
     />
   );
-}
-
-async function booksAreUnclaimed(): Promise<boolean> {
-  const rows = await db.select({ id: appUsers.id }).from(appUsers).limit(1);
-  return rows.length === 0;
 }
 
 function readStage(value: string | undefined): LoginStage {
