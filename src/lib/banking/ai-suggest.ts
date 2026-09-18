@@ -49,6 +49,7 @@ import type { NormalizedTxn } from './types';
 import {
   SOOZ_COMPANY_CONTEXT,
   buildSuggestPrompt,
+  isClearingAccount,
   type CompanyContext,
   type PromptAccount,
   type PromptTxn,
@@ -67,11 +68,22 @@ import {
  */
 export const MAX_BATCH_SIZE = 40;
 
+/**
+ * Rows per call when the caller does not choose. Small enough that a full answer for every
+ * row — account, confidence and a sentence of reasoning — comes back well inside the
+ * timeout: a 37-row batch asked to answer every row ran past 10 seconds and lost all 37.
+ * Batches run concurrently, so smaller ones cost no wall-clock time.
+ */
+export const DEFAULT_BATCH_SIZE = 10;
+
+/** Batches in flight at once. */
+export const DEFAULT_CONCURRENCY = 4;
+
 /** Below this, a suggestion is shown but flagged for a human. */
 export const DEFAULT_CONFIDENCE_FLOOR = 0.6;
 
-/** Per batch, not per import. A slow model must not hold up a bank import. */
-export const DEFAULT_TIMEOUT_MS = 10_000;
+/** Per batch, not per import. Batches run in parallel, so an import waits for the slowest one. */
+export const DEFAULT_TIMEOUT_MS = 30_000;
 
 /** One retry, then give up. */
 export const DEFAULT_MAX_ATTEMPTS = 2;
@@ -124,7 +136,8 @@ export type AIDiscardReason =
   | 'inactive_account'
   | 'rollup_account'
   | 'bank_account'
-  | 'control_account';
+  | 'control_account'
+  | 'clearing_account';
 
 export interface AIDiscard {
   readonly rowIndex: number | null;
@@ -211,8 +224,10 @@ export interface AISuggestContext {
   readonly apiKey?: string;
   /** Overrides `AI_GATEWAY_API_KEY`. */
   readonly gatewayApiKey?: string;
-  /** Clamped to 1..{@link MAX_BATCH_SIZE}. */
+  /** Default {@link DEFAULT_BATCH_SIZE}; clamped to 1..{@link MAX_BATCH_SIZE}. */
   readonly batchSize?: number;
+  /** Batches in flight at once. Default {@link DEFAULT_CONCURRENCY}. */
+  readonly concurrency?: number;
   /** Default {@link DEFAULT_CONFIDENCE_FLOOR}. */
   readonly confidenceFloor?: number;
   /** Per batch. Default {@link DEFAULT_TIMEOUT_MS}. */
@@ -453,6 +468,14 @@ export function applyGuardrails(input: GuardrailInput): GuardrailOutput {
       // The bank side of a bank transaction is the bank account. Proposing another one
       // would move money between accounts on a model's say-so.
       discarded.push({ rowIndex, accountCode, reason: 'bank_account' });
+      seen.add(rowIndex);
+      continue;
+    }
+    if (isClearingAccount(account)) {
+      // A clearing account holds a settlement between the sale and the deposit; only the
+      // settlement importers and the deterministic payout rules post to it. A model
+      // guessing one for a card refund leaves the refund stranded and its charge unnetted.
+      discarded.push({ rowIndex, accountCode, reason: 'clearing_account' });
       seen.add(rowIndex);
       continue;
     }
@@ -902,19 +925,21 @@ export async function suggestWithAIDetailed(
   const accountIndex = new Map(ctx.accounts.map((account) => [account.code, account]));
   const alwaysReview = alwaysReviewTerms(ctx.vendors);
   const confidenceFloor = ctx.confidenceFloor ?? DEFAULT_CONFIDENCE_FLOOR;
-  const batchSize = Math.max(1, Math.min(ctx.batchSize ?? MAX_BATCH_SIZE, MAX_BATCH_SIZE));
+  const batchSize = Math.max(1, Math.min(ctx.batchSize ?? DEFAULT_BATCH_SIZE, MAX_BATCH_SIZE));
   const timeoutMs = ctx.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   const maxAttempts = Math.max(1, ctx.maxAttempts ?? DEFAULT_MAX_ATTEMPTS);
   const retryDelayMs = ctx.retryDelayMs ?? DEFAULT_RETRY_DELAY_MS;
 
-  const suggestions: AISuggestion[] = [];
-  const discarded: AIDiscard[] = [];
-  const calls: AIBatchReport[] = [];
-
   const batches = chunk(ordered, batchSize);
 
-  for (let batchIndex = 0; batchIndex < batches.length; batchIndex += 1) {
-    const batch = batches[batchIndex];
+  const runBatch = async (
+    batch: readonly PromptTxn[],
+    batchIndex: number,
+  ): Promise<{
+    readonly suggestions: readonly AISuggestion[];
+    readonly discarded: readonly AIDiscard[];
+    readonly call: AIBatchReport;
+  }> => {
     // Scoped to this call: a row id from another batch is one this model was never
     // shown, and an answer for it is discarded as `unknown_row`.
     const batchRows = new Map(batch.map((row) => [row.rowId, row]));
@@ -942,7 +967,7 @@ export async function suggestWithAIDetailed(
           schema: suggestResponseSchema,
           schemaName: 'BankTransactionSuggestions',
           schemaDescription:
-            'One entry per transaction you can confidently answer for. Skip the rest.',
+            'One entry for every transaction. Express uncertainty through confidence and needsHuman, not by omitting a row.',
           system,
           prompt: user,
           temperature: 0,
@@ -979,28 +1004,48 @@ export async function suggestWithAIDetailed(
           })
         : { suggestions: [] as readonly AISuggestion[], discarded: [] as readonly AIDiscard[] };
 
-    suggestions.push(...batchResult.suggestions);
-    discarded.push(...batchResult.discarded);
+    return {
+      suggestions: batchResult.suggestions,
+      discarded: batchResult.discarded,
+      call: {
+        batchIndex,
+        rowCount: batch.length,
+        modelId: resolved.modelId,
+        inputTokens,
+        outputTokens,
+        cachedInputTokens,
+        totalTokens,
+        costMicroUsd: costOf(ctx.pricing, inputTokens, outputTokens),
+        durationMs: Date.now() - startedAt,
+        attempts,
+        ok: failure === null,
+        failure,
+        suggestionCount: batchResult.suggestions.length,
+        discardCount: batchResult.discarded.length,
+      },
+    };
+  };
 
-    calls.push({
-      batchIndex,
-      rowCount: batch.length,
-      modelId: resolved.modelId,
-      inputTokens,
-      outputTokens,
-      cachedInputTokens,
-      totalTokens,
-      costMicroUsd: costOf(ctx.pricing, inputTokens, outputTokens),
-      durationMs: Date.now() - startedAt,
-      attempts,
-      ok: failure === null,
-      failure,
-      suggestionCount: batchResult.suggestions.length,
-      discardCount: batchResult.discarded.length,
-    });
-  }
+  // Batches are independent — each has its own prompt, row map and guardrail pass — so
+  // they run a few at a time. Results are reassembled in batch order, so the output is
+  // identical to a sequential run whatever order the calls finish in.
+  const concurrency = Math.max(1, ctx.concurrency ?? DEFAULT_CONCURRENCY);
+  const results: Array<Awaited<ReturnType<typeof runBatch>>> = new Array(batches.length);
+  let next = 0;
+  const worker = async (): Promise<void> => {
+    while (next < batches.length) {
+      const batchIndex = next;
+      next += 1;
+      results[batchIndex] = await runBatch(batches[batchIndex], batchIndex);
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(concurrency, batches.length) }, worker));
 
-  return { suggestions, calls, discarded };
+  return {
+    suggestions: results.flatMap((r) => r.suggestions),
+    discarded: results.flatMap((r) => r.discarded),
+    calls: results.map((r) => r.call),
+  };
 }
 
 /**

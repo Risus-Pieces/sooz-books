@@ -602,16 +602,17 @@ describe('what the review queue is handed', () => {
     expect(count).toBe('0');
   }, ONE_IMPORT);
 
-  it('never gives Amazon a default, because the same payee covers four different things', async () => {
+  it('parks Amazon for a per-transaction AI business default and a human, never auto-posting it', async () => {
     const file = septemberFullMonth();
     await importFile(file);
 
     const amazon = (await storedTransactions()).find((row) => row.description === 'Amazon');
     expect(amazon).toBeDefined();
-    // 7900 Ask My Accountant — a destination, not a decision.
+    // The rule parks the row in 7900 so the AI tier, which sees the amount and the date,
+    // proposes a business account per transaction. With no model it stays parked.
     expect(amazon?.suggested_account_code).toBe('7900');
     expect(amazon?.status).toBe('unreviewed');
-    expect(amazon?.rule_name).toBe('Amazon — always review');
+    expect(amazon?.rule_name).toBe('Amazon — business default via AI, always review');
   }, ONE_IMPORT);
 
   it('records the confidence and the reasoning behind every suggestion', async () => {
@@ -1430,7 +1431,7 @@ describe('the AI tier', () => {
 
     const amazon = (await storedTransactions()).find((row) => row.description === 'Amazon');
     expect(amazon?.suggested_account_code).toBe('7900');
-    expect(amazon?.rule_name).toBe('Amazon — always review');
+    expect(amazon?.rule_name).toBe('Amazon — business default via AI, always review');
   }, ONE_IMPORT);
 
   it('records that it was skipped when no model is configured', async () => {

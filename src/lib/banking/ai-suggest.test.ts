@@ -27,6 +27,7 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import {
   ALWAYS_REVIEW_NOTE_PATTERNS,
   DEFAULT_CONFIDENCE_FLOOR,
+  DEFAULT_BATCH_SIZE,
   MAX_BATCH_SIZE,
   alwaysReviewTerms,
   createAnthropicModel,
@@ -101,6 +102,7 @@ const CHART: readonly PromptAccount[] = [
   account('1000', 'Cash & Bank', 'asset', { postable: false, description: 'Rollup only.' }),
   account('1011', 'Relay — Operating Expenses ••9726', 'asset', { isBank: true }),
   account('1200', 'Accounts Receivable', 'asset', { isControl: true }),
+  account('1150', 'Square Clearing', 'asset', { subtype: 'clearing' }),
   account('1320', 'Raw Ingredients', 'asset'),
   account('1330', 'Packaging Materials', 'asset'),
   account('2000', 'Accounts Payable', 'liability', { isControl: true }),
@@ -276,17 +278,31 @@ describe('buildSuggestPrompt', () => {
   });
 
   it('states the guardrails the code also enforces', () => {
-    expect(prompt.system).toMatch(/Never propose a bank account, a credit card account or a control account/);
+    expect(prompt.system).toMatch(/Never propose a bank account, a credit card account, a control account/);
+    expect(prompt.system).toMatch(/or a clearing account/);
     expect(prompt.system).toMatch(/Accounts Receivable, Accounts Payable/);
     expect(prompt.system).toMatch(/is a member contribution to equity/);
-    expect(prompt.system).toMatch(/do not guess/);
-    expect(prompt.system).toMatch(/owner draw \(3020\)/);
+    expect(prompt.system).toMatch(/Owner Draws \(3020\) only when the evidence clearly points to a personal purchase/);
     expect(prompt.system).toMatch(/A human reviews every suggestion/);
+  });
+
+  // The owner chose "default to business expense" for mixed-use payees (Amazon, big-box
+  // stores, restaurants). An earlier prompt told the model "do not guess" and to skip rows
+  // it was unsure of, and 37 of 39 real transactions came back with no suggestion at all.
+  it('states the owner’s mixed-use policy: a flagged business default, never abstention', () => {
+    expect(prompt.system).toMatch(/owner’s policy for these is to default to a business account/);
+    expect(prompt.system).toMatch(/Always set needsHuman to true for these/);
+    expect(prompt.system).toMatch(/It is not the answer for a mixed-use payee/);
+    expect(prompt.system).not.toMatch(/do not guess/);
   });
 
   it('tells the model the row id is the key, not the position', () => {
     expect(prompt.system).toMatch(/copied exactly[\s\S]*never be guessed or renumbered/);
-    expect(prompt.system).toMatch(/Skip a transaction entirely rather than inventing an answer/);
+  });
+
+  it('asks for an answer on every row rather than silent omissions', () => {
+    expect(prompt.system).toMatch(/Answer every transaction/);
+    expect(prompt.system).not.toMatch(/Skip a transaction entirely/);
   });
 
   it('echoes the confidence floor it will be judged against', () => {
@@ -391,6 +407,24 @@ describe('guardrails', () => {
 
     expect(result.suggestions).toEqual([]);
     expect(result.discarded.map((d) => d.reason)).toEqual(['control_account', 'control_account']);
+  });
+
+  // The live run proposed Payment Processor Clearing at 0.85 for an Amazon card refund of
+  // +$14.99, leaving it unnetted against its −$14.99 charge. Clearing is settlement-only.
+  it('discards a clearing account, and never offers one in the prompt', async () => {
+    const model = modelReturning({
+      suggestions: [
+        { rowIndex: 0, accountCode: '1150', vendorName: null, confidence: 0.85, reasoning: 'Card credit.', needsHuman: false },
+      ],
+    });
+    const refund = txn(0, { amountCents: 1499, rawType: 'Receive' });
+    const result = await suggestWithAIDetailed([refund], ctxWith(model));
+
+    expect(result.suggestions).toEqual([]);
+    expect(result.discarded).toEqual([{ rowIndex: 0, accountCode: '1150', reason: 'clearing_account' }]);
+    expect(selectableAccounts(CHART).map((a) => a.code)).not.toContain('1150');
+    expect(buildSuggestPrompt([toPromptTxn(refund)], { accounts: CHART, vendors: VENDORS }).system)
+      .toMatch(/reverses an earlier charge: propose the same account that charge would use/);
   });
 
   it('discards a bank account', async () => {
@@ -645,10 +679,46 @@ describe('batching', () => {
 
     const result = await suggestWithAIDetailed(txns, ctxWith(model));
 
+    // Ten rows a call by default: a full answer per row has to fit inside the timeout.
+    expect(DEFAULT_BATCH_SIZE).toBe(10);
     expect(MAX_BATCH_SIZE).toBe(40);
-    expect(model.doGenerateCalls).toHaveLength(3);
-    expect(result.calls.map((c) => c.rowCount)).toEqual([40, 40, 15]);
+    expect(model.doGenerateCalls).toHaveLength(10);
+    expect(result.calls.map((c) => c.rowCount)).toEqual([10, 10, 10, 10, 10, 10, 10, 10, 10, 5]);
+    expect(result.calls.map((c) => c.batchIndex)).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8, 9]);
     expect(result.suggestions).toHaveLength(95);
+    // Batches run concurrently, but results come back in row order regardless.
+    expect(result.suggestions.map((s) => s.rowIndex)).toEqual(txns.map((t) => t.rowIndex));
+  });
+
+  it('runs batches concurrently and still returns them in order when they finish out of order', async () => {
+    const txns = Array.from({ length: 30 }, (_, i) => txn(i, { counterparty: 'Michaels' }));
+    let inFlight = 0;
+    let peak = 0;
+    let call = 0;
+    const model = new MockLanguageModelV4({
+      modelId: 'stub-model',
+      doGenerate: async () => {
+        call += 1;
+        const mine = call;
+        inFlight += 1;
+        peak = Math.max(peak, inFlight);
+        // The first batch is the slowest, so it finishes last.
+        await new Promise((resolve) => setTimeout(resolve, mine === 1 ? 60 : 5));
+        inFlight -= 1;
+        // Workers take batches in order, so the k-th call started holds rows 10(k-1)..10k-1.
+        const first = (mine - 1) * 10;
+        return objectResult({
+          suggestions: Array.from({ length: 10 }, (_, i) => ({
+            rowIndex: first + i, accountCode: '6740', vendorName: null, confidence: 0.8, reasoning: `Call ${mine}.`, needsHuman: false,
+          })),
+        });
+      },
+    });
+
+    const result = await suggestWithAIDetailed(txns, ctxWith(model, { batchSize: 10, concurrency: 3 }));
+
+    expect(peak).toBe(3);
+    expect(result.calls.map((c) => c.batchIndex)).toEqual([0, 1, 2]);
     expect(result.suggestions.map((s) => s.rowIndex)).toEqual(txns.map((t) => t.rowIndex));
   });
 
@@ -1196,11 +1266,14 @@ describe('integration: the real ambiguous transactions', () => {
     const { vendors } = await loadLive();
     const terms = alwaysReviewTerms(vendors);
 
-    // Nothing in this module names Amazon. It is on the list because the owner wrote
-    // "Never auto-categorize." on the vendor record.
+    // Nothing in this module names Amazon. It is on the list because the vendor record says
+    // "Always review." — every mixed-use payee carries that note (migration 0018).
     expect(terms).toContain('AMAZON');
-    const amazon = vendors.find((v) => v.name === 'Amazon');
-    expect(amazon?.notes ?? '').toMatch(/Never auto-categorize/i);
+    for (const name of ['Amazon', 'Target', 'Walmart', "Dave's Hot Chicken"]) {
+      const vendor = vendors.find((v) => v.name === name);
+      expect(vendor?.notes ?? '', name).toMatch(/Always review/);
+      expect(vendor?.notes ?? '', name).toMatch(/Owner.s policy/);
+    }
   }, 60_000);
 
   it.skipIf(!hasKey() || !hasDb())(

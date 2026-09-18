@@ -26,14 +26,24 @@ const cache = globalThis as typeof globalThis & {
 };
 
 /** Raw postgres.js client, for the handful of queries Drizzle cannot express. */
+const url = assertDbEnv();
+
+// Supabase's transaction pooler (port 6543) multiplexes up to 200 clients over a small
+// server pool, which is what serverless functions and parallel test workers need; the
+// session pooler (5432) pins one server connection per client and caps out at 15.
+// Transaction mode hands each transaction a possibly different backend, so prepared
+// statements cannot be reused and must be off. Everything else this app relies on is
+// transaction-scoped already: withActor() sets app.user_id with is_local = true, and
+// the balance check is a deferred constraint that fires at COMMIT.
+const transactionPooler = /:6543\//.test(url);
+
 export const sql: postgres.Sql =
   cache.__soozBooksSql ??
-  postgres(assertDbEnv(), {
-    max: 10,
+  postgres(url, {
+    max: Number(process.env.DB_POOL_MAX ?? 10),
     idle_timeout: 20,
     connect_timeout: 30,
-    // Session mode, so prepared statements survive between checkouts.
-    prepare: true,
+    prepare: !transactionPooler,
   });
 
 export const db: PostgresJsDatabase<Schema> = cache.__soozBooksDb ?? drizzle(sql, { schema });

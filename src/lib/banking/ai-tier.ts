@@ -54,6 +54,12 @@ export interface AiTierReport {
   readonly written: number;
   /** Answers the guardrails threw away (unknown account, control account, …). */
   readonly discarded: number;
+  /**
+   * Rows sent to the model that came back with no answer, or whose answer could not be
+   * written (a human reviewed the row mid-call). attempted = written + discarded +
+   * unanswered always holds, so a row can never vanish from the report unaccounted.
+   */
+  readonly unanswered: number;
   readonly modelId: string | null;
   /** One line per failed model call; empty when every call worked. */
   readonly failures: readonly string[];
@@ -73,6 +79,7 @@ function emptyReport(attempted: number, skippedReason: string | null): AiTierRep
     attempted,
     written: 0,
     discarded: 0,
+    unanswered: attempted,
     modelId: null,
     failures: [],
     skippedReason,
@@ -320,6 +327,7 @@ export async function applyAiSuggestions(
     attempted: candidates.length,
     written: written.length,
     discarded: result.discarded.length,
+    unanswered: Math.max(0, candidates.length - written.length - result.discarded.length),
     modelId: result.calls[0]?.modelId ?? null,
     failures,
     skippedReason: null,

@@ -202,11 +202,19 @@ function renderTxn(txn: PromptTxn): string {
  * before the list is written. Offering an account the answer may never be is an
  * invitation; the filter is the first of the two places this is enforced.
  */
+/**
+ * A channel or processor clearing account (Square, Shopify, Amazon, Faire, processor).
+ * Posted only by settlement importers and deterministic payout rules, never by a guess.
+ */
+export function isClearingAccount(account: Pick<PromptAccount, 'subtype'>): boolean {
+  return account.subtype === 'clearing';
+}
+
 export function selectableAccounts(
   accounts: readonly PromptAccount[],
 ): readonly PromptAccount[] {
   return accounts
-    .filter((a) => a.active && a.postable && !a.isBank && !a.isControl)
+    .filter((a) => a.active && a.postable && !a.isBank && !a.isControl && !isClearingAccount(a))
     .slice()
     .sort((a, b) => (a.code < b.code ? -1 : a.code > b.code ? 1 : 0));
 }
@@ -262,7 +270,7 @@ export function buildSuggestPrompt(
     '1. Use only a code from the list above. An account that is not on the list is discarded, and the transaction goes to a human with no suggestion at all.',
   );
   lines.push(
-    '2. Never propose a bank account, a credit card account or a control account (Accounts Receivable, Accounts Payable). They are deliberately absent from the list. Bank movements are posted by the import, and the receivables and payables subledgers own their own control accounts.',
+    '2. Never propose a bank account, a credit card account, a control account (Accounts Receivable, Accounts Payable) or a clearing account (Square, Shopify, Amazon, Faire, processor clearing). They are deliberately absent from the list. Bank movements are posted by the import, the receivables and payables subledgers own their control accounts, and only settlement imports post to clearing. A refund or credit arriving on the company card reverses an earlier charge: propose the same account that charge would use, so the two net to zero.',
   );
   lines.push(
     '3. Money pulled in from the founder’s personal bank account is a member contribution to equity. It is never revenue, and it is never other income.',
@@ -271,13 +279,13 @@ export function buildSuggestPrompt(
     '4. Ingredients and packaging bought for production are capitalized to inventory (1320, 1330). Do not send them to a cost-of-goods-sold account; COGS is relieved when the product sells, which has not happened yet.',
   );
   lines.push(
-    '5. Where a payee covers genuinely different kinds of purchase — a general marketplace or a big-box store that sells lab supplies, packaging, office goods and groceries alike — do not guess. Set needsHuman to true whatever your confidence, and say what the possibilities are.',
+    '5. Some payees are mixed use — a general marketplace, a big-box store, a restaurant — and a single charge could be a business purchase or a personal one. The owner’s policy for these is to default to a business account: propose the most plausible business account for a pre-launch beverage company in formulation, using the amount, the date and the vendor notes (small lab and bench supplies to Formulation & Bench Work, a clear ingredient to Raw Ingredients, bottles and labels to Packaging, office goods to Office Supplies, meals to Meals). Always set needsHuman to true for these, give an honest confidence, and name the likeliest alternative in your reasoning. The owner re-tags personal purchases to Owner Draws at review.',
   );
   lines.push(
-    '6. A personal purchase on a company account is an owner draw (3020), not an expense. Say so when the evidence points that way rather than inventing a business purpose.',
+    '6. Propose Owner Draws (3020) only when the evidence clearly points to a personal purchase. For a mixed-use payee with no such evidence, follow rule 5.',
   );
   lines.push(
-    '7. If no account is a defensible fit, propose 7900 Ask My Accountant with needsHuman true rather than forcing the transaction into a category that is merely nearby.',
+    '7. Propose 7900 Ask My Accountant only when the payee itself is unintelligible and no account is a defensible fit. It is not the answer for a mixed-use payee; those follow rule 5.',
   );
   lines.push('');
 
@@ -292,7 +300,7 @@ export function buildSuggestPrompt(
     `- needsHuman: true when a person should look at this before it posts. Anything below ${floor} confidence is treated as needing a human regardless of what you set.`,
   );
   lines.push(
-    'Skip a transaction entirely rather than inventing an answer for it. A missing row is read as "no suggestion" and costs nothing; a wrong row costs a bookkeeper’s afternoon.',
+    'Answer every transaction. Express uncertainty through a low confidence and needsHuman, never by leaving a row out: a missing row reaches the bookkeeper with no suggestion at all, and a flagged best guess with its alternative named is what saves their time. Nothing you propose posts without a human approving it.',
   );
 
   const user = [

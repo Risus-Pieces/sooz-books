@@ -2067,7 +2067,7 @@ async function runAiTierAfterCommit(
       issues.push({
         severity: 'info',
         code: 'ai.ran',
-        message: `${report.attempted} row${report.attempted === 1 ? ' was' : 's were'} offered to ${report.modelId ?? 'the model'}; ${report.written} now carry an AI suggestion for review, ${report.discarded} answer${report.discarded === 1 ? ' was' : 's were'} discarded by the guardrails.`,
+        message: `${report.attempted} row${report.attempted === 1 ? ' was' : 's were'} offered to ${report.modelId ?? 'the model'}; ${report.written} now carry an AI suggestion for review, ${report.discarded} answer${report.discarded === 1 ? ' was' : 's were'} discarded by the guardrails${report.unanswered > 0 ? `, and ${report.unanswered} came back unanswered and still need a category` : ''}.`,
       });
       for (const failure of report.failures) {
         issues.push({
