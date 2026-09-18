@@ -1,26 +1,385 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
+/*
+  Sooz Books — "Iron gall on ledger paper".
+
+  The field is a warm greige desk; the reading surfaces are a lighter paper laid on top of it,
+  so data is always the brightest thing on screen. Ink is a blue-black. The single chromatic
+  accent is a deep mulberry, chosen by elimination: red belongs to money out, green to money in,
+  and neither may be spent on chrome.
+
+  The signature is the rule system. On ruled ledger paper the weight of a line carries meaning,
+  and it does here too: a hairline separates rows, a solid rule closes a header, a single rule
+  sits above a subtotal, and a double rule closes a grand total. See the `rule-*` utilities.
+*/
+
+@custom-variant dark {
+  @media (prefers-color-scheme: dark) {
+    &:where(:not([data-theme="light"], [data-theme="light"] *)) {
+      @slot;
+    }
+  }
+  &:where([data-theme="dark"], [data-theme="dark"] *) {
+    @slot;
+  }
 }
 
 @theme inline {
   --color-background: var(--background);
+  --color-surface: var(--surface);
+  --color-surface-raised: var(--surface-raised);
+  --color-surface-sunken: var(--surface-sunken);
+  --color-border: var(--border);
+  --color-border-strong: var(--border-strong);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-primary: var(--primary);
+  --color-primary-hover: var(--primary-hover);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-positive: var(--positive);
+  --color-negative: var(--negative);
+  --color-warning: var(--warning);
+  --color-info: var(--info);
+  --color-ring: var(--ring);
+
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-strong: var(--sidebar-strong);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent: var(--sidebar-accent);
+
+  /* The inner fallbacks keep the declaration valid before next/font resolves its variables. */
+  --font-sans: var(--font-public-sans, ui-sans-serif), system-ui, -apple-system, "Segoe UI",
+    sans-serif;
+  --font-num: var(--font-plex-mono, ui-monospace), "SF Mono", "Cascadia Mono", Menlo, monospace;
+  --font-mono: var(--font-plex-mono, ui-monospace), "SF Mono", Menlo, monospace;
+
+  /* A precise instrument, not a consumer app: radii stay under 6px everywhere. */
+  --radius-xs: 2px;
+  --radius-sm: 3px;
+  --radius-md: 4px;
+  --radius-lg: 6px;
+  --radius-xl: 8px;
+
+  /* Denser than stock Tailwind by one step — 13px is the register's reading size. */
+  --text-2xs: 0.625rem;
+  --text-2xs--line-height: 0.875rem;
+  --text-xs: 0.6875rem;
+  --text-xs--line-height: 1rem;
+  --text-sm: 0.8125rem;
+  --text-sm--line-height: 1.25rem;
+  --text-base: 0.875rem;
+  --text-base--line-height: 1.375rem;
+  --text-lg: 1rem;
+  --text-lg--line-height: 1.5rem;
+  --text-xl: 1.125rem;
+  --text-xl--line-height: 1.625rem;
+  --text-2xl: 1.375rem;
+  --text-2xl--line-height: 1.75rem;
+  --text-3xl: 1.75rem;
+  --text-3xl--line-height: 2.125rem;
+  --text-4xl: 2.25rem;
+  --text-4xl--line-height: 2.5rem;
+
+  --shadow-raised: 0 1px 2px -1px rgb(0 0 0 / 0.1), 0 2px 8px -3px rgb(0 0 0 / 0.12);
+  --shadow-overlay: 0 4px 12px -4px rgb(0 0 0 / 0.16), 0 16px 40px -12px rgb(0 0 0 / 0.22);
+
+  --animate-shimmer: sb-shimmer 1.6s ease-in-out infinite;
+}
+
+:root {
+  color-scheme: light;
+
+  --background: #e9e5dc;
+  --surface: #faf8f3;
+  --surface-raised: #ffffff;
+  --surface-sunken: #e2ddd2;
+  --border: #d7d1c5;
+  --border-strong: #b1a998;
+  --foreground: #1d2127;
+  --muted: #efebe2;
+  --muted-foreground: #64676d;
+  --primary: #5b2750;
+  --primary-hover: #4a1f42;
+  --primary-foreground: #fbf7f5;
+  --positive: #1c5d46;
+  --negative: #a32c2c;
+  --warning: #8a5a0f;
+  --info: #2d5273;
+  --ring: #5b2750;
+
+  --sidebar: #1e2127;
+  --sidebar-foreground: #a9a69e;
+  --sidebar-strong: #f6f3ec;
+  --sidebar-border: #2e333a;
+  --sidebar-accent: #d9a6ce;
 }
 
 @media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+
+    --background: #121417;
+    --surface: #191c21;
+    --surface-raised: #21252b;
+    --surface-sunken: #0e1013;
+    --border: #2e333a;
+    --border-strong: #464c55;
+    --foreground: #e7e3d9;
+    --muted: #23272d;
+    --muted-foreground: #969ba4;
+    --primary: #c98fbe;
+    --primary-hover: #d9a6ce;
+    --primary-foreground: #1a1116;
+    --positive: #4fb286;
+    --negative: #e8776f;
+    --warning: #d3a03f;
+    --info: #74a6c9;
+    --ring: #bd84b3;
+
+    --sidebar: #0d0f12;
+    --sidebar-foreground: #8e949c;
+    --sidebar-strong: #edeae2;
+    --sidebar-border: #23272d;
+    --sidebar-accent: #d9a6ce;
   }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+:root[data-theme="dark"] {
+  color-scheme: dark;
+
+  --background: #121417;
+  --surface: #191c21;
+  --surface-raised: #21252b;
+  --surface-sunken: #0e1013;
+  --border: #2e333a;
+  --border-strong: #464c55;
+  --foreground: #e7e3d9;
+  --muted: #23272d;
+  --muted-foreground: #969ba4;
+  --primary: #bd84b3;
+  --primary-hover: #c893be;
+  --primary-foreground: #1a1116;
+  --positive: #4fb286;
+  --negative: #e8776f;
+  --warning: #d3a03f;
+  --info: #74a6c9;
+  --ring: #bd84b3;
+
+  --sidebar: #0d0f12;
+  --sidebar-foreground: #8e949c;
+  --sidebar-strong: #edeae2;
+  --sidebar-border: #23272d;
+  --sidebar-accent: #d9a6ce;
+}
+
+@layer base {
+  *,
+  ::before,
+  ::after {
+    border-color: var(--color-border);
+  }
+
+  html {
+    -webkit-text-size-adjust: 100%;
+    scrollbar-width: thin;
+    scrollbar-color: var(--color-border-strong) transparent;
+  }
+
+  body {
+    background-color: var(--color-background);
+    color: var(--color-foreground);
+    font-family: var(--font-public-sans, ui-sans-serif), system-ui, -apple-system, "Segoe UI",
+      sans-serif;
+    font-size: var(--text-base);
+    line-height: var(--text-base--line-height);
+  }
+
+  ::selection {
+    background-color: color-mix(in oklab, var(--color-primary) 22%, transparent);
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-ring);
+    outline-offset: 2px;
+  }
+
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background-color: var(--color-border-strong);
+    border: 3px solid transparent;
+    border-radius: 9999px;
+    background-clip: content-box;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  /* Native date/number controls inherit the register's figure treatment. */
+  input[type="date"],
+  input[type="number"] {
+    font-family: var(--font-num);
+    font-variant-numeric: tabular-nums slashed-zero;
+  }
+
+  input[type="date"]::-webkit-calendar-picker-indicator {
+    opacity: 0.5;
+    cursor: pointer;
+  }
+
+  input[type="date"]::-webkit-calendar-picker-indicator:hover {
+    opacity: 1;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    ::before,
+    ::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+}
+
+/*
+  Figures. Every money, quantity, date and account-code cell wears `.num` so that columns
+  align to the digit and a 9 never reads wider than a 1.
+*/
+@utility num {
+  font-family: var(--font-plex-mono, ui-monospace), "SF Mono", "Cascadia Mono", Menlo, monospace;
+  font-variant-numeric: tabular-nums slashed-zero;
+  font-feature-settings: "tnum" 1, "zero" 1;
+  letter-spacing: -0.012em;
+}
+
+/* The rule vocabulary — weight carries meaning. */
+@utility rule-row {
+  border-bottom: 1px solid color-mix(in oklab, var(--color-border) 62%, transparent);
+}
+
+@utility rule-head {
+  border-bottom: 1px solid var(--color-border-strong);
+}
+
+@utility rule-subtotal {
+  border-top: 1px solid var(--color-border-strong);
+}
+
+/* The accountant's double underline: nothing is added below a grand total. */
+@utility rule-total {
+  border-bottom: 3px double var(--color-border-strong);
+}
+
+/* The gutter between the debit and credit columns of a ledger page. */
+@utility rule-gutter {
+  border-left: 1px solid color-mix(in oklab, var(--color-border) 70%, transparent);
+}
+
+@utility eyebrow {
+  font-size: var(--text-2xs);
+  line-height: var(--text-2xs--line-height);
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--color-muted-foreground);
+}
+
+@keyframes sb-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes sb-fade-out {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes sb-pop-in {
+  from {
+    opacity: 0;
+    transform: translateY(-3px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes sb-pop-out {
+  from {
+    opacity: 1;
+    transform: none;
+  }
+  to {
+    opacity: 0;
+    transform: translateY(-3px) scale(0.985);
+  }
+}
+
+@keyframes sb-sheet-in {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: none;
+  }
+}
+
+@keyframes sb-sheet-out {
+  from {
+    transform: none;
+  }
+  to {
+    transform: translateX(-100%);
+  }
+}
+
+@keyframes sb-shimmer {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.45;
+  }
+}
+
+@utility anim-fade-in {
+  animation: sb-fade-in 130ms ease-out;
+}
+
+@utility anim-fade-out {
+  animation: sb-fade-out 110ms ease-in;
+}
+
+@utility anim-pop-in {
+  animation: sb-pop-in 130ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@utility anim-pop-out {
+  animation: sb-pop-out 100ms ease-in;
+}
+
+@utility anim-sheet-in {
+  animation: sb-sheet-in 200ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@utility anim-sheet-out {
+  animation: sb-sheet-out 160ms ease-in;
 }

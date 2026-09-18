@@ -1,0 +1,4 @@
+﻿Payout Date,Payout ID,Type,Description,Gross,Refunds,Discounts,Net Sale,Taxes,Tips,Total,Fee,Payout Amount,Currency,Bitcoin Conversion
+2026-04-06 17:00:00,sqpay_2026_0406_A1,Transfer,Automatic transfer,"$1,240.00",($40.00),($60.00),"$1,140.00",$91.20,$0.00,"$1,231.20",($34.11),"$1,197.09",usd,$0.00
+2026-04-13,sqpay_2026_0413_B2,Transfer,Automatic transfer,$300.00,$0.00,$0.00,$300.00,$24.00,$5.00,$329.00,($8.65),$295.35,USD,($25.00)
+2026-04-20,sqpay_2026_0420_C3,Transfer,No activity,$0.00,$0.00,$0.00,$0.00,$0.00,$0.00,$0.00,$0.00,$0.00,USD,$0.00

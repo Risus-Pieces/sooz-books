@@ -130,8 +130,11 @@ The consequential decisions, in order of how badly getting them wrong would dist
 ### 1. `ACH Pull` from a personal bank account is **not revenue**
 
 `CHASE COLLEGE` and `Adv SafeBalance Banking` are consumer checking products (Chase College Checking,
-Bank of America Advantage SafeBalance). Pulls from them total **$4,673.46** across the period — more than
-every Square deposit combined. Booking them as income would overstate revenue roughly tenfold.
+Bank of America Advantage SafeBalance). Twelve pulls from them total **$5,673.46** across the period.
+Add the $1,000.00 opening balance the first statement implies and the founder has put **$6,673.46**
+into the business, against **$292.00** of Square revenue — a ratio of about 23 to 1. Booking these
+pulls as income would overstate revenue twentyfold and turn a funded pre-launch company into a
+fictitious one.
 
 ```
 Dr  1010 Relay Operating            500.00

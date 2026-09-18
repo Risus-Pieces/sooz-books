@@ -1,0 +1,16 @@
+Date,Payee,Account #,Transaction Type,Description,Reference,Status,Amount,Currency,Balance
+3/2/2026,Relay,,Spend,Unknown,"Banking Fees",SETTLED,-8.00,USD,1204.55
+3/1/2026,Square Inc,,Receive,,"SQ260301",SETTLED,+212.40,USD,1212.55
+2/28/2026,Blue Pacific Flavors,,Spend,,"PO SOOZ-2026-004 / CO10192 - Sent By Boxuan Zhao",SETTLED,-1043.00,USD,1000.15
+2/27/2026,GOOGLE,,Receive,,"Returned received ACH transaction #417940999 due to: Account has insufficient funds - Initiated By Unknown Payee",RETURNED,+10.00,USD,2043.15
+2/27/2026,GOOGLE,,Spend,Unknown,"GOOGLE  |  PURCHASE |  GG4DR9NAQMW4 - Initiated By Unknown Payee",SETTLED,-10.00,USD,2043.15
+2/26/2026,Amazon,,Receive,,"Corporate Card - 1892 (Business Card)",SETTLED,+14.99,USD,2053.15
+2/25/2026,Amazon,,Spend,Unknown,"Corporate Card - 1892 (Business Card)",SETTLED,-14.99,USD,2038.16
+2/24/2026,Target,,Spend,Unknown,"Corporate Card - 1892 (Business Card)",SETTLED,-8.19,USD,2053.15
+2/24/2026,Target,,Spend,Unknown,"Corporate Card - 1892 (Business Card)",SETTLED,-13.38,USD,2061.34
+2/20/2026,Operating Expenses,9973,Receive-transfer,,"Transfer",SETTLED,+50.00,USD,2074.72
+2/18/2026,Adv SafeBalance Banking,,Receive,,"ACH Pull",SETTLED,+1000.00,USD,2024.72
+2/15/2026,SP+AFF * META STORE -,,Spend,Unknown,"Corporate Card - 1892 (Business Card)",SETTLED,-53.31,USD,1024.72
+2/12/2026,FEDEX533300619,,Spend,Unknown,"Corporate Card - 8796 (Business Virtual Card)",SETTLED,-4.50,USD,1078.03
+2/10/2026,Jedwards International Inc.,,Spend,,"SO 0480099 / PO SOOZ-2026-005 / Sooz Beverage LLC - Sent By Boxuan Zhao",SETTLED,-254.35,USD,1082.53
+2/5/2026,Andrew Firestone,,Spend,,"Sooz Beverage Formulation Work - Sent By Boxuan Zhao",SETTLED,-450.00,USD,1336.88
