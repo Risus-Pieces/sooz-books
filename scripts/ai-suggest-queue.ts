@@ -10,7 +10,9 @@
 import 'dotenv/config';
 import { config } from 'dotenv';
 
-config({ path: '.env.local', override: true });
+// override: false so an explicit DATABASE_URL (a local replica, a test database) always wins over
+// .env.local; with override: true it would silently have written to production instead.
+config({ path: '.env.local', override: false });
 
 async function main(): Promise<void> {
   const { db, sql } = await import('@/db/client');

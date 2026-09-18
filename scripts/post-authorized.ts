@@ -23,7 +23,9 @@
 import 'dotenv/config';
 import { config } from 'dotenv';
 
-config({ path: '.env.local', override: true });
+// override: false so an explicit DATABASE_URL (a local replica, a test database) always wins over
+// .env.local; with override: true it would silently have written to production instead.
+config({ path: '.env.local', override: false });
 // The session pooler is shared by everything on this project; this script needs two.
 process.env.DB_POOL_MAX ??= '2';
 
