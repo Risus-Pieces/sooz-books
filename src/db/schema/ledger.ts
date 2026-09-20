@@ -35,6 +35,10 @@ export const appUsers = pgTable('app_users', {
   fullName: text('full_name'),
   role: appRoleEnum('role').notNull().default('viewer'),
   active: boolean('active').notNull().default(true),
+  // The member's own capital accounts. Null falls back to the pooled 3015 / 3020,
+  // which is what a single-member set of books wants. See `lib/ledger/member-equity`.
+  contributionsAccountId: uuid('contributions_account_id'),
+  drawsAccountId: uuid('draws_account_id'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
 

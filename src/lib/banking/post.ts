@@ -29,7 +29,6 @@ import { accounts, bankAccounts, bankTransactions, categorizationRules } from '@
 import type { BankTxnStatus } from '@/db/schema';
 import type { CalendarDate } from '@/lib/dates';
 import { postgresErrorOf } from '@/lib/db-errors';
-import { ACCOUNTS } from '@/lib/ledger/coa';
 import {
   ClosedPeriodError,
   ControlAccountError,
@@ -37,6 +36,7 @@ import {
   UnknownAccountError,
   isLedgerError,
 } from '@/lib/ledger/errors';
+import { memberEquityAccount } from '@/lib/ledger/member-equity';
 import { isPeriodOpen } from '@/lib/ledger/periods';
 import { type DraftLine, type LedgerDb, postJournalEntry, translateLedgerDbError } from '@/lib/ledger/post';
 import { ENTRY_MATCH_TYPE, reverseEntry } from '@/lib/ledger/reverse';
@@ -344,12 +344,6 @@ async function resolveCounterAccounts(
   return out;
 }
 
-async function accountIdByCode(tx: Tx, code: string): Promise<string> {
-  const [row] = await tx.select({ id: accounts.id }).from(accounts).where(eq(accounts.code, code));
-  if (row === undefined) throw new UnknownAccountError({ accountCode: code }, 'missing');
-  return row.id;
-}
-
 /**
  * The account a charge was coded to: the largest non-bank line of its entry once
  * posted, its suggestion before that.
@@ -614,17 +608,20 @@ export async function approveBankTransaction(
 /**
  * The owner's one-click answer for a personal purchase on a mixed-use payee: post it
  * to Owner Draws. Carries no vendor, so personal spend never shows in vendor reports.
+ *
+ * The draw belongs to whoever marked it. Two members share these books, and a draw that
+ * did not say whose it was would be worth nothing to either of them at settling-up time.
  */
 export async function markPersonal(
   txnId: string,
   ctx: BankingCtx,
   options: { memo?: string; confirmedNew?: boolean } = {},
 ): Promise<ApprovalResult> {
-  const ownerDraws = await inBankingTx(ctx, (tx) => accountIdByCode(tx, ACCOUNTS.OWNER_DRAWS));
+  const drawsAccount = await inBankingTx(ctx, (tx) => memberEquityAccount(tx, ctx.userId, 'draws'));
   return approveBankTransaction(
     {
       txnId,
-      accountId: ownerDraws,
+      accountId: drawsAccount.id,
       vendorId: null,
       customerId: null,
       channelId: null,

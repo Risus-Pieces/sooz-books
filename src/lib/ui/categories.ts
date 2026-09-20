@@ -97,11 +97,15 @@ const BY_CODE: Readonly<Record<string, CategoryKey>> = Object.freeze({
   // inventory held
   "1320": "ingredients",
   "1330": "packaging",
-  // founder money
+  // founder money — the pooled accounts and each member's own beneath them
   "3000": "founder",
   "3010": "founder",
   "3015": "founder",
+  "3016": "founder",
+  "3017": "founder",
   "3020": "founder",
+  "3021": "founder",
+  "3022": "founder",
   "2550": "founder",
   // cost of goods
   "5015": "ingredients",

@@ -6,10 +6,11 @@
  * statement's running balance. It has to reach the ledger as an entry, or the bank's GL
  * balance never ties to the statement and the first reconciliation cannot complete.
  *
- * The founder's money is the only source of Sooz's opening cash, so a positive balance
- * on a cash account is credited to Member Contributions (3015). Anything else — an
- * overdrawn account, a card that already owed money — was not a contribution, and goes
- * to Opening Balance Equity for the accountant to classify.
+ * The founders' money is the only source of Sooz's opening cash, so a positive balance on a
+ * cash account is credited to the contributions account of whoever posts it (see
+ * `./member-equity`), which is the pooled 3015 until members have accounts of their own.
+ * Anything else — an overdrawn account, a card that already owed money — was not a
+ * contribution, and goes to Opening Balance Equity for the accountant to classify.
  *
  * Posted with source type `opening_balance` and `source_id` = the bank account id, which
  * is also how idempotency is checked: an account with an unreversed opening entry is
@@ -25,6 +26,7 @@ import type { CalendarDate } from '@/lib/dates';
 
 import { ACCOUNTS } from './coa';
 import { isLedgerError } from './errors';
+import { memberEquityAccount } from './member-equity';
 import { type LedgerDb, postJournalEntry, translateLedgerDbError } from './post';
 
 export interface OpeningBalanceCtx {
@@ -107,9 +109,13 @@ async function postOne(tx: Tx, bankAccountId: string, userId: string | null): Pr
     return { ...base, status: 'skipped', reason: 'the opening balance has no date to post on' };
   }
 
+  // Cash already in an account when the books open came from a member, so it is that
+  // member's contribution — anything else is the unattributed opening-balance bucket.
   const contribution = account.openingBalanceCents > 0 && CASH_KINDS.has(account.kind);
-  const equityCode = contribution ? ACCOUNTS.MEMBER_CONTRIBUTIONS : ACCOUNTS.OPENING_BALANCE_EQUITY;
-  const equityAccountId = await accountIdByCode(tx, equityCode);
+  const equity = contribution
+    ? await memberEquityAccount(tx, userId, 'contributions')
+    : { id: await accountIdByCode(tx, ACCOUNTS.OPENING_BALANCE_EQUITY), code: ACCOUNTS.OPENING_BALANCE_EQUITY };
+  const equityAccountId = equity.id;
   const amount = Math.abs(account.openingBalanceCents);
   const bankSide = account.openingBalanceCents > 0 ? { debitCents: amount } : { creditCents: amount };
   const equitySide = account.openingBalanceCents > 0 ? { creditCents: amount } : { debitCents: amount };
@@ -133,7 +139,7 @@ async function postOne(tx: Tx, bankAccountId: string, userId: string | null): Pr
     { userId, tx },
   );
 
-  return { ...base, status: 'posted', entryId: posted.entryId, entryNo: posted.entryNo, equityAccountCode: equityCode };
+  return { ...base, status: 'posted', entryId: posted.entryId, entryNo: posted.entryNo, equityAccountCode: equity.code };
 }
 
 /**
