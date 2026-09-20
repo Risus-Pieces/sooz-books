@@ -56,6 +56,9 @@ const MEMBERS: readonly Member[] = [
 
 const DRY_RUN = process.argv.includes('--dry-run');
 
+/** The entry this script posts. Named so a second run can tell it apart from a contribution. */
+const ATTRIBUTION_MEMO = 'Attribute member contributions to each member';
+
 function say(line: string): void {
   process.stdout.write(`${line}\n`);
 }
@@ -102,6 +105,12 @@ async function main(): Promise<void> {
   );
   const actor = members.find((m) => m.ownsOpeningBalance)?.userId ?? members[0].userId;
 
+  const pooled = await getAccountByCodeIn(db, ACCOUNTS.MEMBER_CONTRIBUTIONS);
+  if (pooled === null) throw new Error(`${ACCOUNTS.MEMBER_CONTRIBUTIONS} is missing.`);
+  // Children mean the split has already run: the pooled account is a rollup holding nothing.
+  const nested = await db.select({ id: accounts.id }).from(accounts).where(eq(accounts.parentId, pooled.id)).limit(1);
+  const alreadySplit = nested.length > 0;
+
   // ---- who contributed what -------------------------------------------------
   const rows = await pg<{ entry_date: string; cents: string; source_type: string; bank_text: string | null }[]>`
     select e.entry_date, (l.credit_cents - l.debit_cents)::text as cents,
@@ -110,6 +119,7 @@ async function main(): Promise<void> {
       join accounts a on a.id = l.account_id and a.code = ${ACCOUNTS.MEMBER_CONTRIBUTIONS}
       join journal_entries e on e.id = l.entry_id and e.status = 'posted'
       left join bank_transactions bt on bt.journal_entry_id = e.id
+     where e.memo is distinct from ${ATTRIBUTION_MEMO}
      order by e.entry_date, e.entry_no`;
   const lines: PooledLine[] = rows.map((r) => ({
     entryDate: r.entry_date,
@@ -119,18 +129,22 @@ async function main(): Promise<void> {
   }));
 
   const share = new Map<string, number>(members.map((m) => [m.email, 0]));
-  for (const line of lines) {
+  for (const line of alreadySplit ? [] : lines) {
     const owner = ownerOf(line, formatMoney);
     share.set(owner.email, (share.get(owner.email) ?? 0) + line.cents);
   }
   const pooledTotal = lines.reduce((sum, l) => sum + l.cents, 0);
   const attributed = [...share.values()].reduce((sum, c) => sum + c, 0);
-  if (attributed !== pooledTotal) {
+  if (!alreadySplit && attributed !== pooledTotal) {
     throw new Error(`Attributed ${formatMoney(attributed)} of ${formatMoney(pooledTotal)}; they must match.`);
   }
 
-  say(`${lines.length} posted contributions on ${ACCOUNTS.MEMBER_CONTRIBUTIONS}, ${formatMoney(pooledTotal)} in total:`);
-  for (const m of members) say(`  ${m.label.padEnd(8)}${formatMoney(share.get(m.email) ?? 0).padStart(12)}`);
+  if (alreadySplit) {
+    say(`${ACCOUNTS.MEMBER_CONTRIBUTIONS} is already split into per-member accounts.`);
+  } else {
+    say(`${lines.length} posted contributions on ${ACCOUNTS.MEMBER_CONTRIBUTIONS}, ${formatMoney(pooledTotal)} in total:`);
+    for (const m of members) say(`  ${m.label.padEnd(8)}${formatMoney(share.get(m.email) ?? 0).padStart(12)}`);
+  }
 
   if (DRY_RUN) {
     say('\n--dry-run: nothing written.');
@@ -168,12 +182,8 @@ async function main(): Promise<void> {
     }
   });
 
-  const pooled = await getAccountByCodeIn(db, ACCOUNTS.MEMBER_CONTRIBUTIONS);
-  if (pooled === null) throw new Error(`${ACCOUNTS.MEMBER_CONTRIBUTIONS} is missing.`);
-
   // ---- 2. move the pooled balance onto them, while 3015 is still a leaf -----
-  const nested = await db.select({ id: accounts.id }).from(accounts).where(eq(accounts.parentId, pooled.id)).limit(1);
-  if (nested.length > 0) {
+  if (alreadySplit) {
     say('contributions are already attributed; nothing to reclassify');
   } else if (pooledTotal === 0) {
     say('nothing sits on the pooled account; nothing to reclassify');
@@ -189,7 +199,7 @@ async function main(): Promise<void> {
       postJournalEntry(
         {
           date: today,
-          memo: 'Attribute member contributions to each member',
+          memo: ATTRIBUTION_MEMO,
           sourceType: 'manual',
           lines: [
             { accountId: pooled.id, debitCents: pooledTotal, memo: 'Pooled contributions, now attributed' },
@@ -250,6 +260,29 @@ async function main(): Promise<void> {
         .returning({ name: categorizationRules.name });
       for (const rule of updated) say(`rule "${rule.name}" → ${m.contributionsCode}`);
     }
+  });
+
+  // ---- 5b. suggestions a rule already made, still naming the pooled account --
+  // Rows waiting in the review queue carry the account their rule chose when they were
+  // imported. Approving one now would be refused, because that account has become a
+  // rollup — so each is moved on to whatever its own rule points at today. These are
+  // suggestions: nothing is posted, and every row stays where the owner left it.
+  await withActor(actor, async (tx) => {
+    const realigned = await tx.execute<{ n: string }>(sql`
+      with moved as (
+        update bank_transactions bt
+           set suggested_account_id = r.account_id
+          from categorization_rules r
+         where bt.rule_id = r.id
+           and bt.journal_entry_id is null
+           and bt.suggested_account_id = ${pooled.id}
+           and r.account_id is not null
+           and r.account_id <> ${pooled.id}
+        returning 1
+      )
+      select count(*)::text as n from moved`);
+    const n = Number(realigned[0]?.n ?? 0);
+    if (n > 0) say(`realigned ${n} waiting ${n === 1 ? 'suggestion' : 'suggestions'} onto the member accounts`);
   });
 
   // ---- 6. what the books say now -------------------------------------------
