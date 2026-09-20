@@ -33,9 +33,12 @@ async function memberAccount(tx: LedgerDb, parentCode: string, name: string): Pr
   return row.id;
 }
 
-/** A real member: `app_users.id` is a foreign key onto `auth.users`, so tests use the seeded one. */
+/**
+ * A real member: `app_users.id` is a foreign key onto `auth.users`, so tests use the seeded one.
+ * Ordered, so a database that grows a second user does not make these tests pick at random.
+ */
 async function seededMember(tx: LedgerDb): Promise<string> {
-  const [row] = await tx.select({ id: appUsers.id }).from(appUsers).limit(1);
+  const [row] = await tx.select({ id: appUsers.id }).from(appUsers).orderBy(appUsers.id).limit(1);
   return row.id;
 }
 
