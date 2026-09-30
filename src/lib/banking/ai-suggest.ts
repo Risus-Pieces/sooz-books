@@ -550,6 +550,38 @@ export interface AnthropicModelOptions {
   readonly fetchImpl?: typeof globalThis.fetch;
 }
 
+/** A block in a request message. The adapter used to send text only. */
+type AnthropicRequestBlock =
+  | { type: 'text'; text: string }
+  | { type: 'image'; source: { type: 'base64'; media_type: string; data: string } }
+  | { type: 'document'; source: { type: 'base64'; media_type: 'application/pdf'; data: string } };
+
+const ANTHROPIC_IMAGE_TYPES: ReadonlySet<string> = new Set(['image/jpeg', 'image/png', 'image/gif', 'image/webp']);
+
+/** Inline bytes as base64. The SDK hands them over tagged (`{ type: 'data', data }`) or bare. */
+function inlineFileToBase64(data: unknown): string {
+  const inner =
+    typeof data === 'object' && data !== null && !(data instanceof Uint8Array) && !(data instanceof ArrayBuffer) &&
+    (data as { type?: unknown }).type === 'data'
+      ? (data as { data: unknown }).data
+      : data;
+  if (typeof inner === 'string') return inner; // already base64
+  if (inner instanceof Uint8Array) return Buffer.from(inner).toString('base64');
+  if (inner instanceof ArrayBuffer) return Buffer.from(inner).toString('base64');
+  throw new UnsupportedFunctionalityError({ functionality: 'file data that is not inline bytes' });
+}
+
+function fileBlock(part: { mediaType: string; data: unknown }): AnthropicRequestBlock {
+  const data = inlineFileToBase64(part.data);
+  if (ANTHROPIC_IMAGE_TYPES.has(part.mediaType)) {
+    return { type: 'image', source: { type: 'base64', media_type: part.mediaType, data } };
+  }
+  if (part.mediaType === 'application/pdf') {
+    return { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data } };
+  }
+  throw new UnsupportedFunctionalityError({ functionality: `${part.mediaType} files` });
+}
+
 /** The forced tool that carries the structured answer back. */
 const RESPONSE_TOOL_NAME = 'record_suggestions';
 
@@ -605,7 +637,7 @@ export function createAnthropicModel(options: AnthropicModelOptions): LanguageMo
 
     async doGenerate(callOptions) {
       const systemParts: string[] = [];
-      const messages: Array<{ role: 'user' | 'assistant'; content: Array<{ type: 'text'; text: string }> }> = [];
+      const messages: Array<{ role: 'user' | 'assistant'; content: AnthropicRequestBlock[] }> = [];
 
       for (const message of callOptions.prompt) {
         if (message.role === 'system') {
@@ -615,12 +647,13 @@ export function createAnthropicModel(options: AnthropicModelOptions): LanguageMo
         if (message.role === 'tool') {
           throw new UnsupportedFunctionalityError({ functionality: 'tool result messages' });
         }
-        const text: Array<{ type: 'text'; text: string }> = [];
+        const blocks: AnthropicRequestBlock[] = [];
         for (const part of message.content) {
-          if (part.type === 'text') text.push({ type: 'text', text: part.text });
+          if (part.type === 'text') blocks.push({ type: 'text', text: part.text });
+          else if (part.type === 'file' && message.role === 'user') blocks.push(fileBlock(part));
           else throw new UnsupportedFunctionalityError({ functionality: `${part.type} content parts` });
         }
-        if (text.length > 0) messages.push({ role: message.role, content: text });
+        if (blocks.length > 0) messages.push({ role: message.role, content: blocks });
       }
 
       const body: Record<string, unknown> = {
