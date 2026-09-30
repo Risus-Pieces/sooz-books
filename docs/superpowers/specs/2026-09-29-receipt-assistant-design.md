@@ -36,7 +36,7 @@ An **Assistant** button in the app shell opens a sheet: a right-hand panel on de
 sheet on phone (where the file picker offers the camera). The member drops, pastes or photographs
 up to 10 receipts. Each becomes a card:
 
-- thumbnail, vendor, date, total;
+- file link (opens the receipt), vendor, date, total;
 - the proposed entry in one line (`Packaging 1330  ->  Contributions - Risus 3016`);
 - **Paid by** (a member), **Post**, **Edit**, **Skip**;
 - a warning strip when something needs a look (see Checks).
@@ -190,3 +190,9 @@ spec left open or named loosely:
 10. **There is no in-card hand entry in v1.** With no model, or a receipt the model could not read, the file is
     kept and the card says so; the entry is made by hand in Ledger, New entry. A failed reading is retried by
     choosing the same file again.
+11. **The card links to the stored file instead of showing an inline thumbnail.** The filename in the card
+    header opens the receipt in a new tab through the signed-URL viewer, so the member can check the card
+    against the original before posting. An inline thumbnail can be added later.
+12. **A skipped receipt, or one the model found illegible, can be filed again** by choosing the same file
+    again: the existing proposal is revived in place (status back to waiting), never duplicated. Amendment
+    10's retry rule covers failed readings; this extends it.
