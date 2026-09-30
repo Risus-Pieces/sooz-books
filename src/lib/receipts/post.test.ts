@@ -30,7 +30,7 @@ afterAll(closeTestDb);
 
 const NOW = '2031-03-20';
 
-const ctxFor = (tx: LedgerDb, userId: string, extra: Partial<PostOptions> = {}): PostOptions => ({
+const ctxFor = (tx: LedgerDb, userId: string | null, extra: Partial<PostOptions> = {}): PostOptions => ({
   userId,
   tx,
   today: () => NOW,
@@ -125,6 +125,21 @@ describe.skipIf(!hasDatabase)('postReceiptProposal', () => {
       // The stored file now belongs to the entry, so it opens from there.
       const [file] = await tx.select().from(attachments).where(eq(attachments.id, f.attachmentId));
       expect(file).toMatchObject({ entityType: 'journal_entry', entityId: posted.entryId });
+    });
+  });
+
+  it('credits the payer’s account whoever taps Post', async () => {
+    await withRollback(async (tx) => {
+      const f = await ready(tx);
+
+      // A system actor taps Post: nothing ties the tapper to the payer, so only the proposal can say whose account.
+      const posted = await postReceiptProposal(f.id, ctxFor(tx, null));
+
+      const lines = await entryLines(tx, posted.entryId);
+      expect(lines).toEqual(
+        expect.arrayContaining([expect.objectContaining({ account: f.member.id, debit: 0, credit: 4110 })]),
+      );
+      expect(lines).toHaveLength(2);
     });
   });
 
@@ -225,6 +240,23 @@ describe.skipIf(!hasDatabase)('postReceiptProposal', () => {
 
       await postReceiptProposal(f.id, ctxFor(tx, f.userId, { confirmedNew: true }));
       expect(await statusOf(tx, f.id)).toBe('posted');
+    });
+  });
+
+  it('asks about a lookalike that was still waiting when this one was read, once the other is posted', async () => {
+    await withRollback(async (tx) => {
+      const vendorName = `ZZ Lookalike ${randomUUID().slice(0, 8)}`;
+      const first = await ready(tx, { vendorName });
+      const second = await ready(tx, { vendorName });
+      expect(first.id).not.toBe(second.id);
+
+      await postReceiptProposal(first.id, ctxFor(tx, first.userId));
+
+      await expect(postReceiptProposal(second.id, ctxFor(tx, second.userId))).rejects.toMatchObject({ code: 'duplicate' });
+      expect(await statusOf(tx, second.id)).toBe('proposed');
+
+      await postReceiptProposal(second.id, ctxFor(tx, second.userId, { confirmedNew: true }));
+      expect(await statusOf(tx, second.id)).toBe('posted');
     });
   });
 
@@ -353,6 +385,27 @@ describe.skipIf(!hasDatabase)('postAllReceiptProposals', () => {
       expect(await statusOf(tx, clean.id)).toBe('posted');
       expect(await statusOf(tx, needsLook.id)).toBe('proposed');
       expect(await statusOf(tx, inClosedMonth.id)).toBe('proposed');
+    });
+  });
+
+  it('posts the first of two lookalike receipts and refuses the second, so the expense is not booked twice', async () => {
+    await withRollback(async (tx) => {
+      const vendorName = `ZZ Lookalike All ${randomUUID().slice(0, 8)}`;
+      const first = await ready(tx, { vendorName });
+      const second = await ready(tx, { vendorName });
+
+      const result = await postAllReceiptProposals([first.id, second.id], ctxFor(tx, first.userId));
+
+      // Inside one test transaction both rows share a created_at, so which goes first is arbitrary;
+      // what matters is that exactly one is booked and the other is refused as a duplicate of it.
+      expect(result.posted).toHaveLength(1);
+      expect(result.failed).toHaveLength(1);
+      const [booked] = result.posted;
+      const [refused] = result.failed;
+      expect([booked.id, refused.id].sort()).toEqual([first.id, second.id].sort());
+      expect(refused.message).toMatch(/already posted as entry/);
+      expect(await statusOf(tx, booked.id)).toBe('posted');
+      expect(await statusOf(tx, refused.id)).toBe('proposed');
     });
   });
 

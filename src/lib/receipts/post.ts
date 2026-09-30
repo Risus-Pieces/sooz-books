@@ -7,6 +7,7 @@ import { isLedgerError } from '@/lib/ledger/errors';
 import { type DraftLine, postJournalEntry, translateLedgerDbError } from '@/lib/ledger/post';
 
 import { loadAllowedAccounts } from './accounts';
+import { findPossibleDuplicate } from './duplicates';
 import { recomputeWarnings } from './propose';
 import { loadProposalViews } from './queries';
 import { type ReceiptCtx, inReceiptTx, readerOf } from './tx';
@@ -96,6 +97,23 @@ export async function postReceiptProposal(proposalId: string, ctx: PostOptions):
       // Blocking warnings cover these, but the compiler cannot see that.
       if (proposal.payerId === null || proposal.receiptDate === null || proposal.totalCents === null) {
         throw new ReceiptError('blocked', 'This receipt is missing something. Check the card.');
+      }
+
+      // The stored warning only knows about receipts posted before this one was read. A lookalike
+      // that was still waiting then may have been posted since, so ask again, under the lock.
+      if (ctx.confirmedNew !== true) {
+        const posted = await findPossibleDuplicate(tx, {
+          vendorId: proposal.vendorId,
+          vendorName: proposal.vendorName,
+          date: proposal.receiptDate,
+          totalCents: proposal.totalCents,
+        });
+        if (posted !== null) {
+          throw new ReceiptError(
+            'duplicate',
+            `This looks like a receipt already posted as entry #${posted.entryNo}. Post it anyway if this is a different purchase.`,
+          );
+        }
       }
 
       const allowed = new Set((await loadAllowedAccounts(tx)).map((a) => a.id));
