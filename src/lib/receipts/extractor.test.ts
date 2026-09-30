@@ -137,7 +137,7 @@ describe('fixtures', () => {
     expect(devFixturesEnabled({ RECEIPT_FIXTURES: '1', NODE_ENV: 'development' })).toBe(true);
     expect(devFixturesEnabled({ RECEIPT_FIXTURES: '1', NODE_ENV: 'test' })).toBe(true);
     expect(devFixturesEnabled({ RECEIPT_FIXTURES: '1', NODE_ENV: 'production' })).toBe(false);
-    expect(devFixturesEnabled({ RECEIPT_FIXTURES: '1' } as NodeJS.ProcessEnv)).toBe(false);
+    expect(devFixturesEnabled({ RECEIPT_FIXTURES: '1' } as unknown as NodeJS.ProcessEnv)).toBe(false);
     expect(devFixturesEnabled({ RECEIPT_FIXTURES: '1', NODE_ENV: 'development', VERCEL: '1' })).toBe(false);
     expect(devFixturesEnabled({ NODE_ENV: 'development' })).toBe(false);
   });
