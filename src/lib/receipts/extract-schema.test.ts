@@ -96,6 +96,28 @@ describe('parseExtraction', () => {
       parseExtraction(raw({ items: [{ description: 'x', amount: 'n/a', accountCode: null }] })),
     ).toThrow(/line item/);
   });
+
+  it('refuses a line item with no amount rather than booking it as nothing', () => {
+    for (const blank of ['', '   ']) {
+      const attempt = () => parseExtraction(raw({ items: [{ description: 'Sugar', amount: blank, accountCode: null }] }));
+      expect(attempt).toThrow(UnparseableReceiptError);
+      expect(attempt).toThrow('A line item on the receipt has no amount.');
+    }
+  });
+
+  it('does not echo a long model-supplied value back in full', () => {
+    const long = 'x'.repeat(200);
+
+    let message = '';
+    try {
+      parseExtraction(raw({ total: long }));
+    } catch (error) {
+      message = (error as Error).message;
+    }
+
+    expect(message).toContain('x'.repeat(40) + '…');
+    expect(message).not.toContain('x'.repeat(41));
+  });
 });
 
 describe('itemsExplainTotal', () => {

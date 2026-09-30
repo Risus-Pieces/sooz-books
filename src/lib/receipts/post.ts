@@ -102,6 +102,11 @@ export async function postReceiptProposal(proposalId: string, ctx: PostOptions):
       // The stored warning only knows about receipts posted before this one was read. A lookalike
       // that was still waiting then may have been posted since, so ask again, under the lock.
       if (ctx.confirmedNew !== true) {
+        // Two lookalikes posted at the same instant, in separate transactions, would each miss the
+        // other. Serialise them on the (date, total) pair; the lock is released at commit.
+        await tx.execute(
+          sql`select pg_advisory_xact_lock(hashtext(${proposal.receiptDate} || ':' || ${proposal.totalCents}::text))`,
+        );
         const posted = await findPossibleDuplicate(tx, {
           vendorId: proposal.vendorId,
           vendorName: proposal.vendorName,

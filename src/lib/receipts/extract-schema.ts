@@ -53,7 +53,9 @@ function amount(what: string, value: string | null): number | null {
   try {
     return parseMoney(value);
   } catch {
-    throw new UnparseableReceiptError(`The ${what} on the receipt (“${value}”) is not an amount.`);
+    // The value is the model's own text: echo only the start of it.
+    const shown = value.length > 40 ? `${value.slice(0, 40)}…` : value;
+    throw new UnparseableReceiptError(`The ${what} on the receipt (“${shown}”) is not an amount.`);
   }
 }
 
@@ -72,11 +74,16 @@ export function parseExtraction(raw: RawExtraction): ExtractedReceipt {
     tipCents: amount('tip', raw.tip) ?? 0,
     totalCents: amount('total', raw.total),
     cardLast4,
-    items: raw.items.map((item) => ({
-      description: item.description.trim() || 'Item',
-      cents: amount('line item', item.amount) ?? 0,
-      accountCode: item.accountCode?.trim() ? item.accountCode.trim() : null,
-    })),
+    items: raw.items.map((item) => {
+      const cents = amount('line item', item.amount);
+      // A blank amount is not zero: booking it as nothing would hide a line the model could not read.
+      if (cents === null) throw new UnparseableReceiptError('A line item on the receipt has no amount.');
+      return {
+        description: item.description.trim() || 'Item',
+        cents,
+        accountCode: item.accountCode?.trim() ? item.accountCode.trim() : null,
+      };
+    }),
   };
 }
 

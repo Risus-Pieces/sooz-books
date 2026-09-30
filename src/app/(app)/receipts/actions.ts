@@ -11,6 +11,7 @@
  */
 
 import { revalidatePath } from 'next/cache';
+import { unstable_rethrow } from 'next/navigation';
 
 import type { ActionResult, PayerOption } from '@/components/receipts/types';
 import { db } from '@/db/client';
@@ -28,10 +29,14 @@ import type { ProposalView } from '@/lib/receipts/types';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const MAX_MESSAGE = 500;
-const MAX_POST_ALL = 20;
+const MAX_POST_ALL = 50;
 
 const ok = <T>(value: T): ActionResult<T> => ({ ok: true, value });
-const fail = <T>(error: unknown): ActionResult<T> => ({ ok: false, error: toActionFailure(error) });
+const fail = <T>(error: unknown): ActionResult<T> => {
+  // A redirect thrown by `requireUser` (an expired session) must reach Next, not become a toast.
+  unstable_rethrow(error);
+  return { ok: false, error: toActionFailure(error) };
+};
 const invalid = <T>(message: string): ActionResult<T> => ({ ok: false, error: { code: 'invalid', message } });
 
 /** What a posting moves: the journal and the dashboard's founder card. */
