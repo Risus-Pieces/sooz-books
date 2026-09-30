@@ -39,6 +39,9 @@ async function main(): Promise<void> {
       ANTHROPIC_API_KEY: '',
       AI_GATEWAY_API_KEY: '',
       SUPABASE_SERVICE_ROLE_KEY: '',
+      // A fixed receipt reader and an in-memory file store: the run neither calls the model nor
+      // writes to the real Supabase bucket. Honoured only outside production and outside Vercel.
+      RECEIPT_FIXTURES: '1',
     },
   });
 

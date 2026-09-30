@@ -19,6 +19,12 @@ adds nothing twice — every row carries a fingerprint. A review queue categoriz
 by rule first, then asks a model for a suggestion on whatever is left. Nothing reaches the ledger
 without a human approving it. Reconcile against a statement balance when the month closes.
 
+**Receipts.** Some spending never shows up on a Relay statement: a member paid on a personal card. Open
+the **Assistant**, drop in a photo or PDF of the receipt, and it reads the vendor, date and total,
+proposes the entry (expense or inventory debited, that member's own contributions account credited),
+and waits. You check it and tap **Post**. A typed message ("the sugar is ingredients", "Mo paid")
+corrects a card. Nothing posts until you tap, and the model cannot post at all.
+
 **Sales and purchases.** Customers, invoices, receipts applied across invoices, and AR aging.
 Vendors, bills, payments, and AP aging, with 1099-NEC totals at year end.
 
@@ -87,6 +93,7 @@ npm run dev
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | The publishable key. Safe in the browser. |
 | `SUPABASE_SERVICE_ROLE_KEY` | Server-only. Needed to create an invited account. Never expose it. |
 | `ANTHROPIC_API_KEY` or `AI_GATEWAY_API_KEY` | Optional. Without one, the review queue falls back to rules alone. |
+| `AI_RECEIPT_MODEL` | Optional. The model that reads receipts. Defaults to `anthropic/claude-sonnet-5`. |
 
 Applying a migration:
 
@@ -107,6 +114,7 @@ The unit suite starts its own throwaway Postgres on port 54330 and rebuilds it f
 `supabase/migrations/`, so no test can touch the real books. That needs `initdb` and `pg_ctl` on
 your `PATH` (`brew install postgresql@17`). The end-to-end suite does the same on port 54329 and
 signs in through real Supabase auth.
+The Assistant's flow runs with `RECEIPT_FIXTURES=1`, which swaps in a fixed receipt reader and an in-memory file store; it is honoured only outside production and outside Vercel.
 
 Tests never call a model. The AI keys are blanked for the suite unless `RUN_AI_INTEGRATION=1`.
 

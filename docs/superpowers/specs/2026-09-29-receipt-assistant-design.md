@@ -168,3 +168,25 @@ balanced output; payer attribution (Risus vs Mo, and a user with no accounts); d
 soft duplicate; closed period refused; a stale proposal (already posted, account since made a
 rollup) refused at the tap; Post all with one failure; edit validation. Integration runs on the
 local Postgres, never production.
+
+## Amendments made while planning
+
+The implementation plan (`docs/superpowers/plans/2026-09-29-receipt-assistant.md`) settled these points the
+spec left open or named loosely:
+
+1. **Refunds are blocked, not reversed.** A total of zero or less is a blocking warning ("enter it by hand").
+2. **Account choice does not reuse `suggestForTransaction`.** It is built around bank rows. Vendor matching and
+   vendor defaults are reused, plus one history query, and the model's per-line account code comes from the same
+   extraction call: one model call per receipt. Order: vendor default, vendor's latest account, model's pick.
+3. **The message box applies to the selected card**, shown above the box, so there is no guessing which receipt.
+4. **The payer never falls back to the pooled 3015.** A user with no contributions account of their own is not
+   offered as a payer; someone must choose a member.
+5. **HEIC is refused with a clear message.** The file input's `accept` list omits it so iPhone Safari converts
+   to JPEG itself.
+6. **The stored file's `attachments` row is re-pointed** to the finished entry rather than duplicated.
+7. **End-to-end uses fixtures** (`RECEIPT_FIXTURES=1`), honoured only outside production and outside Vercel.
+8. **"Post all" posts only cards with no warnings at all.**
+9. **A date in a closed period is refused at the tap**, with the ledger's own words, rather than warned on the card.
+10. **There is no in-card hand entry in v1.** With no model, or a receipt the model could not read, the file is
+    kept and the card says so; the entry is made by hand in Ledger, New entry. A failed reading is retried by
+    choosing the same file again.
