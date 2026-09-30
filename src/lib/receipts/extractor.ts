@@ -134,7 +134,7 @@ export function createClaudeExtractor(options: ModelOptions & { timeoutMs?: numb
               ],
             },
           ],
-          temperature: 0,
+          // No temperature: claude-sonnet-5 rejects sampling parameters (HTTP 400). The schema is the constraint here.
           maxOutputTokens: 4096,
           maxRetries: 0,
           abortSignal: AbortSignal.timeout(options.timeoutMs ?? DEFAULT_TIMEOUT_MS),

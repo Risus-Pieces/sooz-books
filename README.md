@@ -91,9 +91,9 @@ npm run dev
 | `DATABASE_URL` | Session-mode pooler URL for the `sooz_app` role. Session mode, not transaction mode — the ledger needs multi-statement transactions. |
 | `NEXT_PUBLIC_SUPABASE_URL` | The Supabase project URL. |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | The publishable key. Safe in the browser. |
-| `SUPABASE_SERVICE_ROLE_KEY` | Server-only. Needed to create an invited account. Never expose it. |
+| `SUPABASE_SERVICE_ROLE_KEY` | Server-only. Needed for invitation links (creating an invited account) and for storing and opening receipts. Never expose it. |
 | `ANTHROPIC_API_KEY` or `AI_GATEWAY_API_KEY` | Optional. Without one, the review queue falls back to rules alone. |
-| `AI_RECEIPT_MODEL` | Optional. The model that reads receipts. Defaults to `anthropic/claude-sonnet-5`. |
+| `AI_RECEIPT_MODEL` | Optional. The model that reads receipts. Defaults to `anthropic/claude-sonnet-5`. It must accept a forced tool call and no sampling parameters: `claude-sonnet-5` (default) and `claude-haiku-4-5` do. Newer models (Sonnet 5.5, Opus 5.5, Fable 5.1) reject the forced tool call this adapter sends, so do not point it at them until the adapter supports `auto` plus strict tools. |
 
 Applying a migration:
 

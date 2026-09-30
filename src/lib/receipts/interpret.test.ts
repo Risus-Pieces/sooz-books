@@ -43,6 +43,16 @@ function stubFetch(answer: Record<string, unknown>): {
 }
 
 describe('interpretMessage', () => {
+  it('sends no sampling parameters (claude-sonnet-5 rejects them with HTTP 400)', async () => {
+    const { fetchImpl, bodies } = stubFetch({ edits: [], unclear: 'Which line do you mean?' });
+
+    await interpretMessage('change it', SNAPSHOT, REFS, { apiKey: 'sk-test', fetchImpl });
+
+    expect(bodies[0]).not.toHaveProperty('temperature');
+    expect(bodies[0]).not.toHaveProperty('top_p');
+    expect(bodies[0]).not.toHaveProperty('top_k');
+  });
+
   it('turns a message into edits, and shows the model the card, the accounts and the members', async () => {
     const { fetchImpl, bodies } = stubFetch({
       edits: [{ kind: 'set_account', line: 2, accountCode: '1320' }],

@@ -98,7 +98,7 @@ export async function interpretMessage(
       schemaDescription: 'Edits to one receipt, or why none could be made.',
       system: SYSTEM_PROMPT,
       prompt: describeCard(snapshot, refs, text),
-      temperature: 0,
+      // No temperature: claude-sonnet-5 rejects sampling parameters (HTTP 400). The schema is the constraint here.
       maxOutputTokens: 1024,
       maxRetries: 0,
       abortSignal: AbortSignal.timeout(options.timeoutMs ?? 30_000),

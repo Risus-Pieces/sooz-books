@@ -72,6 +72,17 @@ describe('createClaudeExtractor', () => {
     expect(body.model).toBe(DEFAULT_RECEIPT_MODEL_ID.replace(/^anthropic\//, ''));
   });
 
+  it('sends no sampling parameters (claude-sonnet-5 rejects them with HTTP 400)', async () => {
+    const { fetchImpl, bodies } = stubFetch(GOOD_ANSWER);
+    const extractor = createClaudeExtractor({ apiKey: 'sk-test', fetchImpl });
+
+    await extractor.extract({ bytes: PDF_BYTES, mediaType: 'application/pdf', accounts: ACCOUNTS_GIVEN });
+
+    expect(bodies[0]).not.toHaveProperty('temperature');
+    expect(bodies[0]).not.toHaveProperty('top_p');
+    expect(bodies[0]).not.toHaveProperty('top_k');
+  });
+
   it('says there is no model, in words, when no key is configured', async () => {
     const extractor = createClaudeExtractor({ apiKey: '', fetchImpl: stubFetch(GOOD_ANSWER).fetchImpl });
 
@@ -122,9 +133,11 @@ describe('createClaudeExtractor', () => {
 });
 
 describe('fixtures', () => {
-  it('are on only outside production and outside Vercel', () => {
+  it('are on only in development or test, and never on Vercel', () => {
     expect(devFixturesEnabled({ RECEIPT_FIXTURES: '1', NODE_ENV: 'development' })).toBe(true);
+    expect(devFixturesEnabled({ RECEIPT_FIXTURES: '1', NODE_ENV: 'test' })).toBe(true);
     expect(devFixturesEnabled({ RECEIPT_FIXTURES: '1', NODE_ENV: 'production' })).toBe(false);
+    expect(devFixturesEnabled({ RECEIPT_FIXTURES: '1' })).toBe(false);
     expect(devFixturesEnabled({ RECEIPT_FIXTURES: '1', NODE_ENV: 'development', VERCEL: '1' })).toBe(false);
     expect(devFixturesEnabled({ NODE_ENV: 'development' })).toBe(false);
   });
