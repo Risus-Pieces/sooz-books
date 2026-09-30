@@ -253,7 +253,7 @@ export const SOURCE_LABELS: Readonly<Record<string, string>> = {
   vendor_credit: 'Vendor credit',
   payout: 'Payout',
   deduction: 'Deduction',
-  purchase_receipt: 'Receipt',
+  purchase_receipt: 'Purchase receipt',
   cogs: 'COGS',
   inventory: 'Inventory',
   landed_cost: 'Landed cost',

@@ -6847,15 +6847,9 @@ git commit -m "feat(receipts): end-to-end flow, docs, and the spec's amendments"
 
 Applying a migration to production and deploying are outward-facing. Confirm the owner wants the feature live first.
 
-1. Check the production environment already has what the feature needs (names only; never print values):
+**Order matters:** (1) 0046 via `psql` as `sooz_app`, (2) 0047 with an elevated role (Supabase MCP `execute_sql` or the SQL editor), (3) confirm `SUPABASE_SERVICE_ROLE_KEY` is set on Vercel, (4) deploy.
 
-```bash
-npx vercel env ls production --scope boxuanzhao1128-7935s-projects 2>&1 | grep -E "ANTHROPIC_API_KEY|AI_GATEWAY_API_KEY|SUPABASE_SERVICE_ROLE_KEY|NEXT_PUBLIC_SUPABASE_URL"
-```
-
-Expected: `SUPABASE_SERVICE_ROLE_KEY` and `NEXT_PUBLIC_SUPABASE_URL` present, and at least one of `ANTHROPIC_API_KEY` / `AI_GATEWAY_API_KEY`. If no model key is present the feature still runs, but every receipt will say no model is set up.
-
-2. Apply the table migration (as `sooz_app`, like every migration except the bucket one):
+1. Apply the table migration first, as `sooz_app` through `psql "$DATABASE_URL"`, like every table migration. `sooz_app` must OWN `receipt_proposals`: an owner bypasses row-level security, and the table has RLS enabled with no policies, so if another role applied it the app's queries would return nothing.
 
 ```bash
 set -a && . ./.env.local && set +a && psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase/migrations/0046_receipt_proposals.sql
@@ -6863,7 +6857,7 @@ set -a && . ./.env.local && set +a && psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f
 
 Expected: `CREATE TABLE`, two `CREATE INDEX`, a row from `attach_audit`, `ALTER TABLE`.
 
-3. Apply the bucket migration with an elevated role, through the Supabase MCP `execute_sql` tool on project `rufzfaecfhrlnnhvsfyv`, sending the contents of `supabase/migrations/0047_receipt_storage.sql`. Then verify:
+2. Apply the bucket migration second, with an elevated role (it touches the `storage` schema, which `sooz_app` cannot), through the Supabase MCP `execute_sql` tool on project `rufzfaecfhrlnnhvsfyv`, sending the contents of `supabase/migrations/0047_receipt_storage.sql`. Then verify:
 
 ```sql
 select id, public, file_size_limit, allowed_mime_types from storage.buckets where id = 'receipts';
@@ -6871,6 +6865,14 @@ select count(*) from receipt_proposals;
 ```
 
 Expected: one bucket row with `public = false` and `file_size_limit = 10485760`; a count of 0.
+
+3. Confirm the production environment has what the feature needs (names only; never print values). `SUPABASE_SERVICE_ROLE_KEY` matters here for more than invitations: receipts need it to store and to open files, so without it every upload fails at the storage step:
+
+```bash
+npx vercel env ls production --scope boxuanzhao1128-7935s-projects 2>&1 | grep -E "ANTHROPIC_API_KEY|AI_GATEWAY_API_KEY|SUPABASE_SERVICE_ROLE_KEY|NEXT_PUBLIC_SUPABASE_URL"
+```
+
+Expected: `SUPABASE_SERVICE_ROLE_KEY` and `NEXT_PUBLIC_SUPABASE_URL` present, and at least one of `ANTHROPIC_API_KEY` / `AI_GATEWAY_API_KEY`. If no model key is present the feature still runs, but every receipt will say no model is set up.
 
 4. Deploy and confirm it is live:
 

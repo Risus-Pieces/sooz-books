@@ -17,7 +17,7 @@ afterAll(closeTestDb);
 describe('purchase_receipt source type', () => {
   it('is a known source type with a readable label', () => {
     expect(SOURCE_TYPES).toContain('purchase_receipt');
-    expect(sourceLabel('purchase_receipt')).toBe('Receipt');
+    expect(sourceLabel('purchase_receipt')).toBe('Purchase receipt');
   });
 });
 

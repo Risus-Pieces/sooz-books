@@ -6,6 +6,12 @@
 --
 -- A proposal is not a ledger entry and moves no money. `entry_id` is set only when the entry
 -- posts, in the same transaction, which is what the check constraint below enforces.
+--
+-- Ownership: apply this as `sooz_app`, through `psql "$DATABASE_URL"`, like every other table
+-- migration, so that `sooz_app` OWNS the table. An owner bypasses row-level security. The table has
+-- RLS enabled and no policies, which is correct only under that ownership: applied as any other
+-- role, the app's queries would see no rows at all. (Contrast 0047, the storage bucket, which
+-- cannot be applied as `sooz_app` and needs an elevated role.)
 
 create table receipt_proposals (
   id            uuid primary key default gen_random_uuid(),
