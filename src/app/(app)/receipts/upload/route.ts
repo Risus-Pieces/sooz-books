@@ -10,6 +10,15 @@ import { createReceiptStorage } from '@/lib/receipts/storage';
 /** Reading a receipt takes a few seconds, occasionally tens: the model is the slow part. */
 export const maxDuration = 120;
 
+/**
+ * A multipart body is a little bigger than the file inside it (boundaries, the field's headers).
+ * The declared length is only a cheap first screen, so it gets this much slack; the exact limit is
+ * still enforced on the parsed file below.
+ */
+const MULTIPART_OVERHEAD_BYTES = 64 * 1024;
+
+const TOO_BIG = 'That file is over 10 MB. Try a smaller photo or a PDF.';
+
 const json = (body: unknown, status = 200): NextResponse => NextResponse.json(body, { status });
 
 /**
@@ -29,6 +38,13 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     return json({ error: 'File storage is not set up, so receipts cannot be saved right now.' }, 503);
   }
 
+  // Refuse an obviously oversize body before `formData()` reads all of it into memory. A declared
+  // length can be absent or understated, so the exact check on `file.size` below still stands.
+  const declared = Number(request.headers.get('content-length'));
+  if (Number.isFinite(declared) && declared > MAX_RECEIPT_BYTES + MULTIPART_OVERHEAD_BYTES) {
+    return json({ error: TOO_BIG }, 413);
+  }
+
   let form: FormData;
   try {
     form = await request.formData();
@@ -37,7 +53,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   }
   const file = form.get('file');
   if (!(file instanceof File)) return json({ error: 'Choose a receipt to upload.' }, 400);
-  if (file.size > MAX_RECEIPT_BYTES) return json({ error: 'That file is over 10 MB. Try a smaller photo or a PDF.' }, 413);
+  if (file.size > MAX_RECEIPT_BYTES) return json({ error: TOO_BIG }, 413);
 
   try {
     const result = await ingestReceipt(

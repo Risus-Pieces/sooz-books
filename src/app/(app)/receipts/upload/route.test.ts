@@ -28,10 +28,10 @@ const userWith = (role: AppRole) => ({
 const STORAGE = { put: vi.fn(), signedUrl: vi.fn() };
 const pdf = () => new File([new Uint8Array([0x25, 0x50, 0x44, 0x46, 0x2d])], 'r.pdf', { type: 'application/pdf' });
 
-function upload(file?: File): NextRequest {
+function upload(file?: File, headers?: Record<string, string>): NextRequest {
   const form = new FormData();
   if (file !== undefined) form.append('file', file);
-  return new NextRequest('http://localhost/receipts/upload', { method: 'POST', body: form });
+  return new NextRequest('http://localhost/receipts/upload', { method: 'POST', body: form, headers });
 }
 
 beforeEach(() => {
@@ -78,6 +78,37 @@ describe('POST /receipts/upload', () => {
     const big = new File([new Uint8Array(MAX_RECEIPT_BYTES + 1)], 'big.pdf', { type: 'application/pdf' });
 
     const response = await POST(upload(big));
+
+    expect(response.status).toBe(413);
+    expect(ingestReceipt).not.toHaveBeenCalled();
+  });
+
+  it('refuses a declared length over the limit without parsing the body', async () => {
+    const request = upload(pdf(), { 'content-length': String(MAX_RECEIPT_BYTES + 64 * 1024 + 1) });
+    const formData = vi.spyOn(request, 'formData');
+
+    const response = await POST(request);
+
+    expect(response.status).toBe(413);
+    expect(formData).not.toHaveBeenCalled();
+    expect(ingestReceipt).not.toHaveBeenCalled();
+  });
+
+  it('lets a declared length within the limit plus multipart overhead through to the exact gate', async () => {
+    const proposal = { id: 'p1' } as ProposalView;
+    vi.mocked(ingestReceipt).mockResolvedValue({ ok: true, proposal, alreadyFiled: false });
+
+    const response = await POST(upload(pdf(), { 'content-length': String(MAX_RECEIPT_BYTES + 1024) }));
+
+    expect(response.status).toBe(200);
+  });
+
+  it('still applies the exact size gate when no length is declared', async () => {
+    const big = new File([new Uint8Array(MAX_RECEIPT_BYTES + 1)], 'big.pdf', { type: 'application/pdf' });
+    const request = upload(big);
+    expect(request.headers.get('content-length')).toBeNull();
+
+    const response = await POST(request);
 
     expect(response.status).toBe(413);
     expect(ingestReceipt).not.toHaveBeenCalled();
