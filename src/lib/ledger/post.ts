@@ -64,6 +64,7 @@ export const SOURCE_TYPES = [
   'bill',
   'bill_payment',
   'vendor_credit',
+  'purchase_receipt',
   'payout',
   'deduction',
   'cogs',
