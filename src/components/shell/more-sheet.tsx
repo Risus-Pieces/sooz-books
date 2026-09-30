@@ -36,6 +36,24 @@ export function MoreSheet({ open, onOpenChange }: { open: boolean; onOpenChange:
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent side="bottom" title="More" description="Every section of the books.">
         <div className="flex flex-col gap-5 pb-24">
+          {shell?.canUseAssistant ? (
+            <ul className="overflow-hidden rounded-[14px] bg-card shadow-card">
+              <li className={row}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    close();
+                    shell.openAssistant();
+                  }}
+                  className="flex min-h-11 flex-1 items-center gap-3 text-left"
+                >
+                  <IconBadge glyph="sparkle" tint="purple" size="lg" />
+                  <span className="flex-1">Assistant</span>
+                  <Glyph name="chevron-right" size={12} weight={2.4} className="text-label3" />
+                </button>
+              </li>
+            </ul>
+          ) : null}
           {NAV_GROUPS.map((group) => {
             const sections = group.sections.filter((s) => !ON_TABS.has(s.href));
             if (sections.length === 0) return null;

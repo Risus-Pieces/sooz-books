@@ -79,6 +79,20 @@ export function SideNav({ variant = "rail", onNavigate, className }: SideNavProp
         <Kbd className="bg-transparent shadow-none">⌘K</Kbd>
       </button>
 
+      {shell?.canUseAssistant ? (
+        <button
+          type="button"
+          onClick={() => {
+            onNavigate?.();
+            shell.openAssistant();
+          }}
+          className="mx-1 mb-2 flex h-7 shrink-0 items-center gap-1.5 rounded-[8px] px-2 text-sm text-label2 transition-colors hover:bg-fill2 hover:text-label"
+        >
+          <Glyph name="sparkle" size={14} />
+          <span className="flex-1 text-left">Assistant</span>
+        </button>
+      ) : null}
+
       <div className="-mx-1 min-h-0 flex-1 overflow-y-auto px-1 [scrollbar-width:none]">
         {groups.map((group) => (
           <div key={group.key}>

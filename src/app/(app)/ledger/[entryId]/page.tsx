@@ -5,6 +5,7 @@ import { EntryActions } from '@/components/ledger/entry-actions';
 import { EntryDetail } from '@/components/ledger/entry-detail';
 import { JournalEntryForm } from '@/components/ledger/entry-form';
 import type { EntrySeedLine } from '@/components/ledger/types';
+import { ReceiptLink } from '@/components/receipts/receipt-link';
 import { PageToolbar } from '@/components/shell/page-toolbar';
 import { Pill } from '@/components/ui/pill';
 import { can } from '@/lib/auth/roles';
@@ -112,6 +113,7 @@ export default async function EntryPage({ params }: { params: Promise<{ entryId:
           />
         }
       />
+      <ReceiptLink entryId={entry.id} />
       <EntryDetail entry={entry} lines={lines} audit={audit} />
     </div>
   );

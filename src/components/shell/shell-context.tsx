@@ -27,6 +27,9 @@ export interface ShellState {
   openNav: () => void;
   openSearch: () => void;
   openMore: () => void;
+  /** Whether this person may use the receipt assistant: it needs the `ledger.post` capability. */
+  canUseAssistant: boolean;
+  openAssistant: () => void;
 }
 
 const ShellContext = React.createContext<ShellState | null>(null);

@@ -2,7 +2,7 @@ import { cookies } from "next/headers";
 
 import { AppShell } from "@/components/shell/app-shell";
 import { NAV_COLLAPSE_COOKIE } from "@/components/shell/nav";
-import { ROLE_LABELS } from "@/lib/auth/roles";
+import { ROLE_LABELS, can } from "@/lib/auth/roles";
 import { requireUser } from "@/lib/auth/session";
 import { queueCounts } from "@/lib/banking/queue";
 import { today } from "@/lib/dates";
@@ -29,6 +29,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       reviewCount={counts.byStage.review}
       account={{ name: user.fullName ?? user.email, email: user.email, roleLabel: ROLE_LABELS[user.role] }}
       period={{ year: period.year, month: period.month, status: period.status }}
+      canUseAssistant={can(user.role, "ledger.post")}
     >
       {children}
     </AppShell>

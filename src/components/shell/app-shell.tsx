@@ -8,6 +8,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 
 import { GlobalSearch, type SearchTarget } from "./global-search";
 import { MoreSheet } from "./more-sheet";
+import { ReceiptAssistant } from "@/components/receipts/assistant";
 import { NAV_COLLAPSE_COOKIE } from "./nav";
 import { ShellProvider, type ShellAccount, type ShellPeriod, type ShellState } from "./shell-context";
 import { SideNav } from "./side-nav";
@@ -21,6 +22,8 @@ export interface AppShellProps {
   account?: ShellAccount | null;
   period?: ShellPeriod | null;
   searchTargets?: SearchTarget[];
+  /** Whether to offer the receipt assistant. Decided on the server from the person's role. */
+  canUseAssistant?: boolean;
 }
 
 const ONE_YEAR_SECONDS = 60 * 60 * 24 * 365;
@@ -40,11 +43,13 @@ export function AppShell({
   account = null,
   period = null,
   searchTargets,
+  canUseAssistant = false,
 }: AppShellProps) {
   const [sidebarHidden, setSidebarHidden] = React.useState(defaultCollapsed);
   const [drawerOpen, setDrawerOpen] = React.useState(false);
   const [searchOpen, setSearchOpen] = React.useState(false);
   const [moreOpen, setMoreOpen] = React.useState(false);
+  const [assistantOpen, setAssistantOpen] = React.useState(false);
 
   const toggleSidebar = React.useCallback(() => {
     setSidebarHidden((hidden) => {
@@ -74,8 +79,10 @@ export function AppShell({
       openNav: () => setDrawerOpen(true),
       openSearch: () => setSearchOpen(true),
       openMore: () => setMoreOpen(true),
+      canUseAssistant,
+      openAssistant: () => setAssistantOpen(true),
     }),
-    [reviewCount, account, period, sidebarHidden, toggleSidebar],
+    [reviewCount, account, period, sidebarHidden, toggleSidebar, canUseAssistant],
   );
 
   return (
@@ -122,6 +129,7 @@ export function AppShell({
 
         <MoreSheet open={moreOpen} onOpenChange={setMoreOpen} />
         <GlobalSearch open={searchOpen} onOpenChange={setSearchOpen} targets={searchTargets} />
+        {canUseAssistant ? <ReceiptAssistant open={assistantOpen} onOpenChange={setAssistantOpen} /> : null}
       </TooltipProvider>
     </ShellProvider>
   );
