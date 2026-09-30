@@ -41,13 +41,19 @@ export type IngestResult =
 // A type alias so it can be the row type of `execute<T>` (see `AllowedAccount`).
 type FiledReceipt = {
   id: string;
-  /** Read before and it failed: filing the same file again reads it again rather than saying "already filed". */
+  /**
+   * Nothing usable came of it (the read failed, the model found it illegible) or the member skipped
+   * it: choosing the same file again reads it again rather than saying "already filed".
+   */
   retryable: boolean;
 };
 
 async function findProposalByHash(exec: LedgerDb, sha256: string): Promise<FiledReceipt | null> {
   const rows = await exec.execute<FiledReceipt>(sql`
-    select rp.id, (rp.status = 'proposed' and rp.error is not null) as retryable
+    select rp.id,
+           (rp.status = 'skipped'
+            or (rp.status = 'proposed'
+                and (rp.error is not null or rp.warnings @> '[{"code":"unreadable"}]'::jsonb))) as retryable
       from receipt_proposals rp
       join attachments a on a.id = rp.attachment_id
      where a.sha256 = ${sha256}
@@ -79,7 +85,8 @@ export async function ingestReceipt(input: IngestInput, deps: IngestDeps): Promi
   }
 
   const path = receiptStoragePath(check.sha256, input.filename, check.extension);
-  await deps.storage.put(path, input.bytes, check.mediaType);
+  // A retry's file is already stored under its original path; a new name would leave an orphan.
+  if (!filed?.retryable) await deps.storage.put(path, input.bytes, check.mediaType);
 
   // Sequential on purpose: the connection pool this app shares is small.
   const allowed = await loadAllowedAccounts(reader);
@@ -165,7 +172,7 @@ export async function ingestReceipt(input: IngestInput, deps: IngestDeps): Promi
     if (now !== null) {
       await tx
         .update(receiptProposals)
-        .set({ ...fields, updatedAt: new Date() })
+        .set({ ...fields, status: 'proposed', updatedAt: new Date() })
         .where(eq(receiptProposals.id, now.id));
       return { proposalId: now.id, alreadyFiled: false };
     }

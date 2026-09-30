@@ -1,10 +1,12 @@
 import { createHash } from 'node:crypto';
 
+import { eq, sql } from 'drizzle-orm';
 import { afterAll, describe, expect, it } from 'vitest';
 
 // First: loads .env.local before '@/db/client' is imported anywhere below.
 import { closeTestDb, hasDatabase, withRollback } from '@/lib/ledger/test-support';
 
+import { receiptProposals } from '@/db/schema';
 import { ACCOUNTS } from '@/lib/ledger/coa';
 import type { LedgerDb } from '@/lib/ledger/post';
 
@@ -216,6 +218,94 @@ describe.skipIf(!hasDatabase)('ingestReceipt', () => {
       expect(second.alreadyFiled).toBe(false);
       expect(second.proposal).toMatchObject({ error: null, canPost: true });
       expect(working.calls).toBe(1);
+    });
+  });
+
+  it('files a skipped receipt again when the same file is chosen again', async () => {
+    await withRollback(async (tx) => {
+      const { userId, storage } = await setup(tx);
+      const bytes = pdf('skipped');
+      const first = await ingestReceipt(
+        { userId, filename: 'a.pdf', bytes },
+        { storage, extractor: fakeExtractor(receipt(`ZZ Skipped ${Date.now()}`)), tx, today: () => TODAY },
+      );
+      expect(first.ok).toBe(true);
+      if (!first.ok) return;
+      await tx.update(receiptProposals).set({ status: 'skipped' }).where(eq(receiptProposals.id, first.proposal.id));
+
+      const working = fakeExtractor(receipt(`ZZ Skipped Back ${Date.now()}`));
+      const second = await ingestReceipt(
+        { userId, filename: 'a.pdf', bytes },
+        { storage, extractor: working, tx, today: () => TODAY },
+      );
+
+      expect(second.ok).toBe(true);
+      if (!second.ok) return;
+      expect(second.proposal.id).toBe(first.proposal.id);
+      expect(second.alreadyFiled).toBe(false);
+      expect(second.proposal).toMatchObject({ status: 'proposed', canPost: true });
+      expect(working.calls).toBe(1);
+    });
+  });
+
+  it('reads an illegible receipt again when the same file is chosen again', async () => {
+    await withRollback(async (tx) => {
+      const { userId, storage } = await setup(tx);
+      const bytes = pdf('illegible');
+      const blurry = fakeExtractor(
+        receipt(`ZZ Blurry ${Date.now()}`, { legible: false, totalCents: null, date: null, items: [] }),
+      );
+      const first = await ingestReceipt({ userId, filename: 'a.pdf', bytes }, { storage, extractor: blurry, tx, today: () => TODAY });
+      expect(first.ok && first.proposal.warnings.map((w) => w.code)).toContain('unreadable');
+      expect(first.ok && first.proposal.canPost).toBe(false);
+
+      const good = fakeExtractor(receipt(`ZZ Sharp ${Date.now()}`));
+      const second = await ingestReceipt({ userId, filename: 'a.pdf', bytes }, { storage, extractor: good, tx, today: () => TODAY });
+
+      expect(first.ok && second.ok).toBe(true);
+      if (!first.ok || !second.ok) return;
+      expect(second.proposal.id).toBe(first.proposal.id);
+      expect(second.alreadyFiled).toBe(false);
+      expect(second.proposal).toMatchObject({ status: 'proposed', canPost: true });
+      expect(second.proposal.warnings.map((w) => w.code)).not.toContain('unreadable');
+      expect(good.calls).toBe(1);
+    });
+  });
+
+  it('keeps one proposal and one attachment through a retry, and does not store the file twice', async () => {
+    await withRollback(async (tx) => {
+      const { userId } = await setup(tx);
+      const puts: string[] = [];
+      const inner = new MemoryReceiptStorage(new Map());
+      const storage: MemoryReceiptStorage = Object.assign(inner, {
+        put: async (path: string, bytes: Uint8Array, contentType: string) => {
+          puts.push(path);
+          await MemoryReceiptStorage.prototype.put.call(inner, path, bytes, contentType);
+        },
+      });
+      const bytes = pdf('orphan');
+      const first = await ingestReceipt(
+        { userId, filename: 'first.pdf', bytes },
+        { storage, extractor: fakeExtractor(new ExtractionError('timeout', 'Took too long.')), tx, today: () => TODAY },
+      );
+      expect(first.ok).toBe(true);
+      expect(puts).toHaveLength(1);
+
+      const second = await ingestReceipt(
+        { userId, filename: 'renamed.pdf', bytes },
+        { storage, extractor: fakeExtractor(receipt(`ZZ Orphan ${Date.now()}`)), tx, today: () => TODAY },
+      );
+
+      expect(second.ok).toBe(true);
+      expect(puts).toHaveLength(1); // the file is already stored under its original path
+      const counted = await tx.execute<{ n: number }>(
+        sql`select count(*)::int as n from attachments where sha256 = ${sha256(bytes)}`,
+      );
+      expect(counted[0].n).toBe(1);
+      const proposals = await tx.execute<{ n: number }>(
+        sql`select count(*)::int as n from receipt_proposals rp join attachments a on a.id = rp.attachment_id where a.sha256 = ${sha256(bytes)}`,
+      );
+      expect(proposals[0].n).toBe(1);
     });
   });
 

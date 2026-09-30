@@ -101,6 +101,24 @@ describe('replaceProposal', () => {
   });
 });
 
+describe('replaceProposal and a posted card', () => {
+  it('never takes a posted card back to proposed (a stale reply arriving after the post)', () => {
+    const posted = proposal('p1', { status: 'posted', entryId: 'e1', entryNo: 7, canPost: false });
+    const cards = [card(posted)];
+
+    const next = replaceProposal(cards, 'p1', proposal('p1', { status: 'proposed' }));
+
+    expect(next).toEqual(cards);
+  });
+
+  it('still lets a newer posted copy through', () => {
+    const cards = [card(proposal('p1'))];
+    const posted = proposal('p1', { status: 'posted', entryId: 'e1', entryNo: 7, canPost: false });
+
+    expect(replaceProposal(cards, 'p1', posted)[0]).toEqual(card(posted));
+  });
+});
+
 describe('settleUpload', () => {
   const placeholder: CardState = { key: 'k1', kind: 'uploading', filename: 'a.pdf' };
 
@@ -114,6 +132,15 @@ describe('settleUpload', () => {
     const next = settleUpload([placeholder, card(proposal('p1'))], 'k1', 'a.pdf', { proposal: proposal('p1') });
 
     expect(ids(next)).toEqual(['p1']);
+  });
+
+  it('shows the returned state on the card already on screen, so a revived card is no longer "Skipped"', () => {
+    const skipped = card(proposal('p1', { status: 'skipped', canPost: false }));
+
+    const next = settleUpload([placeholder, skipped], 'k1', 'a.pdf', { proposal: proposal('p1', { status: 'proposed' }) });
+
+    expect(ids(next)).toEqual(['p1']);
+    expect(next[0]).toMatchObject({ kind: 'proposal', proposal: { id: 'p1', status: 'proposed', canPost: true } });
   });
 
   it('turns the placeholder into a failed card carrying the reason', () => {

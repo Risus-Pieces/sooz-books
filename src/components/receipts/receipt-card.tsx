@@ -86,7 +86,16 @@ function ProposalCard({
             {proposal.vendorIsNew ? <span className="ml-1.5 text-xs font-normal text-label2">new</span> : null}
           </h3>
           <p className="truncate text-xs text-label2">
-            {proposal.date ? formatDateUS(proposal.date) : "No date"} · {proposal.filename}
+            {proposal.date ? formatDateUS(proposal.date) : "No date"} ·{" "}
+            <a
+              href={`/receipts/file/${proposal.attachmentId}`}
+              target="_blank"
+              rel="noreferrer"
+              aria-label={`Open receipt ${proposal.filename}`}
+              className="hover:underline focus-visible:underline"
+            >
+              {proposal.filename}
+            </a>
           </p>
         </div>
         <p className="num text-lg font-semibold">

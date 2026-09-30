@@ -40,13 +40,18 @@ export function markPosted(
   });
 }
 
+/** Swaps in a newer copy of a proposal, except that a posted card never goes back to proposed. */
 export function replaceProposal(cards: readonly CardState[], id: string, next: ProposalView): CardState[] {
-  return cards.map((c) => (c.kind === 'proposal' && c.proposal.id === id ? { ...c, proposal: next } : c));
+  return cards.map((c) => {
+    if (c.kind !== 'proposal' || c.proposal.id !== id) return c;
+    if (c.proposal.status === 'posted' && next.status !== 'posted') return c;
+    return { ...c, proposal: next };
+  });
 }
 
 /**
  * The end of one upload. A proposal replaces the placeholder (and is keyed by its own id from
- * then on); a receipt already on screen just drops the placeholder; an error becomes a failed card.
+ * then on); a receipt already on screen drops the placeholder and takes the returned state; an error becomes a failed card.
  */
 export function settleUpload(
   cards: readonly CardState[],
@@ -59,7 +64,13 @@ export function settleUpload(
   }
   const { proposal } = outcome;
   if (cards.some((c) => c.kind === 'proposal' && c.proposal.id === proposal.id)) {
-    return cards.filter((c) => c.key !== key);
+    // The placeholder goes; the card on screen takes the returned state (a skipped card filed
+    // again comes back as proposed, not as the stale "Skipped").
+    return replaceProposal(
+      cards.filter((c) => c.key !== key),
+      proposal.id,
+      proposal,
+    );
   }
   return cards.map((c): CardState => (c.key === key ? { key: proposal.id, kind: 'proposal', proposal } : c));
 }
