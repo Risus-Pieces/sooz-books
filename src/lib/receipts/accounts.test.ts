@@ -50,6 +50,22 @@ describe.skipIf(!hasDatabase)('loadAllowedAccounts', () => {
     });
   });
 
+  it("offers an asset account the owner made of their own, and prepaids and equipment, but not cash or the other inventory", async () => {
+    await withRollback(async (tx) => {
+      // As in production: Merch was created by hand, as a top-level asset with no subtype.
+      await tx.insert(accounts).values({ code: 'TM-merch', name: 'Merch', type: 'asset', subtype: null });
+      const codes = new Set((await loadAllowedAccounts(tx)).map((a) => a.code));
+
+      expect(codes.has('TM-merch')).toBe(true);
+      expect(codes.has('1410')).toBe(true); // Prepaid Expenses
+      expect(codes.has('1530')).toBe(true); // Computers & Capitalized Software
+      expect(codes.has('1010')).toBe(false); // Operating Checking
+      expect(codes.has('1110')).toBe(false); // Shopify Clearing
+      expect(codes.has('1590')).toBe(false); // Accumulated Depreciation
+      expect(codes.has('1340')).toBe(false); // Goods in Transit
+    });
+  });
+
   it('leaves out cost-of-goods and suspense expense accounts', async () => {
     await withRollback(async (tx) => {
       const cogs = await expenseLeaf(tx, 'cogs');

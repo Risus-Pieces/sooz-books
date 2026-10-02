@@ -13,12 +13,15 @@ export type AllowedAccount = {
 };
 
 /**
- * The accounts a receipt may debit: postable expense accounts, plus the two inventory accounts
- * that ingredients and packaging capitalize to.
+ * The accounts a receipt may debit: postable expense accounts, the two inventory accounts that
+ * ingredients and packaging capitalize to, and the asset accounts that are things a business buys
+ * (prepaids, deposits, equipment, and any account the owner has made of their own, such as Merch).
  *
  * Never a rollup (something nests under it), a bank or control account, or an inactive one. Never
  * cost of goods: those accounts are released from inventory as units ship, not bought into.
- * Never suspense, depreciation or income tax, which no receipt belongs to.
+ * Never suspense, depreciation or income tax, which no receipt belongs to. Never the other
+ * inventory accounts, cash, clearing, receivables or contra-assets, which money moves through
+ * rather than being spent on.
  */
 export async function loadAllowedAccounts(exec: LedgerDb): Promise<AllowedAccount[]> {
   const rows = await exec.execute<AllowedAccount>(sql`
@@ -31,6 +34,13 @@ export async function loadAllowedAccounts(exec: LedgerDb): Promise<AllowedAccoun
        and (
          (a.type = 'expense' and coalesce(a.subtype, '') not in ('cogs', 'suspense', 'depreciation', 'income_tax'))
          or a.code in (${ACCOUNTS.INVENTORY_INGREDIENTS}, ${ACCOUNTS.INVENTORY_PACKAGING})
+         or (
+           a.type = 'asset'
+           and coalesce(a.subtype, '') not in (
+             'cash', 'bank', 'undeposited_funds', 'clearing',
+             'accounts_receivable', 'other_receivable', 'contra_asset', 'inventory'
+           )
+         )
        )
      order by a.code`);
   return [...rows];
