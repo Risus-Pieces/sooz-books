@@ -84,6 +84,41 @@ export async function lockStaging(tx: LedgerDb, id: string, userId: string): Pro
   return row.staging;
 }
 
+/**
+ * Voids every unspent bank-decision stage of this person's that covers any of these rows, except the
+ * one just made. Staging the same rows again is how someone changes their mind, and the stage they
+ * walked away from must not stay confirmable.
+ */
+export async function supersedeStagings(
+  exec: LedgerDb,
+  userId: string,
+  kind: StageKind,
+  txnIds: readonly string[],
+  exceptId: string,
+): Promise<void> {
+  if (txnIds.length === 0) return;
+  const list = sql.join(txnIds.map((id) => sql`${id}`), sql`, `);
+  await exec.execute(sql`
+    update mcp_stagings
+       set committed_at = now(), result = '{"superseded": true}'::jsonb
+     where user_id = ${userId}::uuid
+       and kind = ${kind}
+       and committed_at is null
+       and id <> ${exceptId}::uuid
+       and exists (
+         select 1 from jsonb_array_elements(payload -> 'items') as item
+          where item ->> 'txnId' in (${list})
+       )`);
+}
+
+/** Withdraws a stage without posting it. */
+export async function cancelStaging(exec: LedgerDb, id: string, userId: string): Promise<void> {
+  await exec.transaction(async (tx) => {
+    await lockStaging(tx, id, userId);
+    await markCommitted(tx, id, { cancelled: true });
+  });
+}
+
 export async function markCommitted(tx: LedgerDb, id: string, result: unknown): Promise<void> {
   await tx
     .update(mcpStagings)

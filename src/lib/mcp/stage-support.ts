@@ -1,11 +1,25 @@
 import { and, eq, sql } from 'drizzle-orm';
 
 import { bankAccounts, bankTransactions, journalEntries, journalLines } from '@/db/schema';
+import type { AccountSubtype } from '@/lib/ledger/coa';
 import type { LedgerDb } from '@/lib/ledger/post';
 
 import { McpInputError } from './errors';
 
 export const ACCOUNT_TYPES = ['asset', 'liability', 'equity', 'revenue', 'expense'] as const;
+
+/**
+ * The report grouping an account may be given through the connector. Subtype decides where an account
+ * lands in the statements, so the ones that carry money-handling meaning — cash and bank, receivables
+ * and payables, clearing, retained earnings, opening balances, suspense — are left to the app.
+ */
+export const ACCOUNT_SUBTYPES = [
+  'contra_asset', 'inventory', 'prepaid', 'deposit', 'fixed_asset', 'credit_card', 'accrued_liability',
+  'tax_payable', 'customer_deposit', 'deferred_revenue', 'debt', 'other_liability', 'equity', 'contra_equity',
+  'sales', 'shipping_income', 'other_revenue', 'contra_revenue', 'cogs', 'fulfillment', 'operating_expense',
+  'marketing', 'payroll', 'research_development', 'professional_fees', 'occupancy', 'technology',
+  'general_admin', 'compliance', 'depreciation', 'other_expense', 'income_tax',
+] as const satisfies readonly AccountSubtype[];
 
 /** The facts about a bank row a person needs to recognise it. `description` is what the bank printed. */
 export async function bankSummary(

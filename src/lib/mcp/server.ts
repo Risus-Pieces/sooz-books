@@ -10,6 +10,8 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 
 import { commitStaged } from './commit';
+import { cancelStaging } from './staging';
+import { db } from '@/db/client';
 import { describeError } from './errors';
 import {
   REPORT_NAMES,
@@ -201,6 +203,22 @@ export function createMcpServer(user: McpUser): McpServer {
       annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false },
     },
     async ({ stage_id }) => guarded(async () => renderCommit(await commitStaged(user, stage_id))),
+  );
+
+  server.registerTool(
+    'cancel_staged',
+    {
+      title: 'Cancel a staged change',
+      description:
+        'Withdraws a staged change the user turned down or that is no longer wanted, so it cannot be confirmed later. Use it whenever the user says no to a preview.',
+      inputSchema: { stage_id: z.string() },
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+    },
+    async ({ stage_id }) =>
+      guarded(async () => {
+        await cancelStaging(db, stage_id, user.id);
+        return 'Cancelled. That staged change can no longer be confirmed.';
+      }),
   );
 
   return server;

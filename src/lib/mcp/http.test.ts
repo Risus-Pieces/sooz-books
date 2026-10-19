@@ -85,6 +85,7 @@ describe.skipIf(!hasDatabase)('/mcp with a valid sign-in', () => {
       const body = (await response.json()) as { result: { tools: { name: string; inputSchema: { properties: object } }[] } };
       const names = body.result.tools.map((tool) => tool.name).sort();
       expect(names).toEqual([
+        'cancel_staged',
         'commit_staged',
         'get_journal_entry',
         'list_accounts',
@@ -119,12 +120,23 @@ describe.skipIf(!hasDatabase)('/mcp with a valid sign-in', () => {
     });
   });
 
+  it('turns away a valid session that was never issued to a connected app', async () => {
+    await withRollback(async (tx) => {
+      const userId = await seededUserId(tx);
+      const response = await handleMcpRequest(rpc('tools/list', {}, 'a-browser-session-token'), {
+        verify: async () => ({ userId, clientId: null }),
+        exec: tx,
+      });
+      expect(response.status).toBe(401);
+    });
+  });
+
   it('turns away an account that has been switched off', async () => {
     await withRollback(async (tx) => {
       const userId = await seededUserId(tx);
       await tx.update(appUsers).set({ active: false }).where(eq(appUsers.id, userId));
       const response = await handleMcpRequest(rpc('tools/list', {}, 'good'), {
-        verify: async () => ({ userId, clientId: null }),
+        verify: async () => ({ userId, clientId: 'claude' }),
         exec: tx,
       });
       expect(response.status).toBe(403);
@@ -133,7 +145,7 @@ describe.skipIf(!hasDatabase)('/mcp with a valid sign-in', () => {
 
   it('turns away a valid sign-in that is not a Sooz Books user', async () => {
     const response = await handleMcpRequest(rpc('tools/list', {}, 'good'), {
-      verify: async () => ({ userId: '00000000-0000-4000-8000-0000000000aa', clientId: null }),
+      verify: async () => ({ userId: '00000000-0000-4000-8000-0000000000aa', clientId: 'claude' }),
     });
     expect(response.status).toBe(403);
   });

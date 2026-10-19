@@ -52,8 +52,9 @@ people in with the accounts they already have. We write only the resource-server
 - `/oauth/consent` shows who is asking and lets the signed-in person Approve or Deny; `/oauth/decision`
   records it. Both reuse the existing login (`/login?next=…`).
 - `/mcp` requires `Authorization: Bearer <token>`. The token is checked with `supabase.auth.getUser(token)`
-  (authoritative, handles revocation), then joined to an **active** `app_users` row for the role. Anything
-  else is `401` with a `WWW-Authenticate: Bearer resource_metadata=…` header so the client starts sign-in.
+  (authoritative, handles revocation), then joined to an **active** `app_users` row for the role. Only a
+  token **issued to a connected app** (it carries a `client_id`) is accepted, so an ordinary browser session
+  token does not work here. A deactivated account gets `403`. Anything else is `401` with a `WWW-Authenticate: Bearer resource_metadata=…` header so the client starts sign-in.
 - `src/proxy.ts` lets `/mcp`, `/oauth/…` metadata through without a browser session (they do their own auth);
   `/oauth/consent` still requires one.
 
@@ -110,3 +111,41 @@ keeps who staged and committed what and when, and the OAuth client id from the t
 - Route test: no token → 401 with the discovery header; bad token → 401; deactivated user → 401; a valid
   token (verifier injected) lists the tools.
 - Not verifiable without the owner's dashboard step and a real Claude client: the end-to-end connector sign-in.
+
+## After the security review (2026-10-19)
+
+An independent adversarial review tried to break the design. The stage/commit core held under concurrency,
+replay, cross-user and expiry attacks. It found, and this branch fixed:
+
+- What posted could differ from what was previewed (vendor, memo, customer, channel re-derived from a
+  suggestion at commit time). The stage now stores the fully resolved choice and commit passes all of it.
+- `confirm_different_transaction` silently switched the duplicate guard off. It is now honoured only when the
+  guard actually fired, shown as a `DUPLICATE WARNING` in the preview, and not stored otherwise.
+- A stage the person turned down stayed confirmable. Staging the same rows again voids the old stage, and
+  `cancel_staged` withdraws one.
+- New-account previews hid `subtype` and `description`; both are shown, `subtype` is limited to a safe list,
+  and descriptions are fenced.
+- Error text containing bank text, and report memos, reached the model unfenced; the fence also missed
+  differently-spelled closing tags. Errors are fenced, every `<`/`>` inside fenced text is neutralised, and
+  reports carry the untrusted-data note.
+- Any valid session token worked at `/mcp`. Only tokens issued to a connected app (with a `client_id`) work now.
+- With dynamic client registration on, an attacker could register a client named "Claude" and phish a consent.
+  The consent screen and the decision route now complete a connection only to `claude.ai`, `claude.com` or
+  loopback (Claude Code).
+- Smaller: exact-match `/mcp` in the proxy, a `Sec-Fetch-Site` check on the decision route, `maxDuration`.
+
+### Known limits (not fixed here)
+
+1. **The server cannot tell a person's "yes" from a model that stages and commits in one turn.** The design
+   puts approval in the chat, so the human check is Claude's own tool-permission prompt, and that prompt shows
+   only a stage id. A model steered by injected text could stage and commit a bad entry. Everything above
+   makes that harder (fencing, one-time stages, the role limits) but does not make it impossible. The
+   real fix is approval outside the chat: a pending-approvals page in the app that a stage links to, at least
+   for journal entries, new accounts and large batches. Offered to the owner as a follow-up; it changes the
+   workflow they chose, so it is their decision.
+2. The `bank-statements` storage bucket grants any `authenticated` JWT read/write (migration 0013). That
+   predates this work and applies to every signed-in user, but a connector token is such a JWT. Worth
+   scoping to the app's own server access.
+3. No screen yet to list or revoke connected apps; revoke in the Supabase dashboard.
+4. `client_id` as the claim name in Supabase OAuth access tokens is taken from Supabase's documentation and is
+   not verified against a live token. If a real connection is refused with "not valid", check this first.

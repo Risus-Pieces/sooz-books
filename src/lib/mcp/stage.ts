@@ -13,7 +13,7 @@ import { z } from 'zod';
 import { db } from '@/db/client';
 import { vendors } from '@/db/schema';
 import { requireCapability } from '@/lib/auth/roles';
-import { previewApproval } from '@/lib/banking/post';
+import { isBankingError, previewApproval } from '@/lib/banking/post';
 import { isCalendarDate } from '@/lib/dates';
 import { getAccountByCodeIn } from '@/lib/ledger/accounts';
 import { memberEquityAccount } from '@/lib/ledger/member-equity';
@@ -22,9 +22,9 @@ import { parseMoney } from '@/lib/money';
 
 import { resolveAccount } from './accounts';
 import { McpInputError, describeError } from './errors';
-import { createStaging } from './staging';
+import { createStaging, supersedeStagings } from './staging';
 import type { McpUser } from './types';
-import { ACCOUNT_TYPES, bankSummary, postedLineCount } from './stage-support';
+import { ACCOUNT_SUBTYPES, ACCOUNT_TYPES, bankSummary, postedLineCount } from './stage-support';
 
 export interface StageCtx {
   /** Tests run inside a rolled-back transaction; production leaves this out. */
@@ -63,8 +63,12 @@ export const bankPayloadSchema = z.object({
     z.object({
       action: z.enum(['accept', 'personal', 'exclude']),
       txnId: uuid,
+      // Everything below is the choice exactly as it was previewed, resolved at staging time. Commit
+      // passes it all explicitly, so a suggestion that changes in between cannot change what posts.
       accountId: uuid.optional(),
       vendorId: uuid.nullable().optional(),
+      customerId: uuid.nullable().optional(),
+      channelId: uuid.nullable().optional(),
       memo: z.string().optional(),
       confirmedNew: z.boolean().optional(),
     }),
@@ -90,6 +94,8 @@ export interface BankPreview {
     /** What the bank printed. Untrusted. */
     description: string;
     lines: PreviewLine[];
+    /** Things the person must know before saying yes, e.g. that the duplicate guard was overridden. */
+    warnings: string[];
   }[];
   exclusions: { txnId: string; date: string; bank: string; amountCents: number; description: string }[];
   problems: { txnId: string; reason: string }[];
@@ -148,17 +154,27 @@ export async function stageBankDecisions(
         accountId = account.id;
       }
 
-      const shown = await previewApproval(
-        {
-          txnId,
-          accountId,
-          ...(vendorId === undefined ? {} : { vendorId }),
-          ...(item.action === 'personal' ? { customerId: null, channelId: null } : {}),
-          ...(memo === undefined || memo.trim() === '' ? {} : { memo }),
-          ...(item.confirm_different_transaction === true ? { confirmedNew: true } : {}),
-        },
-        bankCtx,
-      );
+      const asked = {
+        txnId,
+        accountId,
+        ...(vendorId === undefined ? {} : { vendorId }),
+        ...(item.action === 'personal' ? { customerId: null, channelId: null } : {}),
+        ...(memo === undefined || memo.trim() === '' ? {} : { memo }),
+      };
+      // The duplicate guard is only overridden when it actually fired, and the person is told.
+      const warnings: string[] = [];
+      let confirmedNew = false;
+      let shown;
+      try {
+        shown = await previewApproval(asked, bankCtx);
+      } catch (error) {
+        if (!(isBankingError(error) && error.code === 'already_booked' && item.confirm_different_transaction === true)) {
+          throw error;
+        }
+        warnings.push(`DUPLICATE WARNING: ${error.message} Posting anyway because you said this is a different transaction.`);
+        shown = await previewApproval({ ...asked, confirmedNew: true }, bankCtx);
+        confirmedNew = true;
+      }
       const summary = await bankSummary(exec, txnId);
       if (shown.vendorId !== null) vendorIds.add(shown.vendorId);
       vendorOf.push({ index: preview.entries.length, vendorId: shown.vendorId });
@@ -171,6 +187,7 @@ export async function stageBankDecisions(
         memo: shown.memo,
         vendor: null,
         description: summary.description,
+        warnings,
         lines: shown.lines.map((line) => ({
           account: `${line.accountCode} ${line.accountName}`,
           debitCents: line.debitCents,
@@ -181,9 +198,11 @@ export async function stageBankDecisions(
         action: item.action,
         txnId,
         accountId,
-        ...(item.action === 'accept' && vendorId !== undefined ? { vendorId } : {}),
-        ...(memo === undefined || memo.trim() === '' ? {} : { memo }),
-        ...(item.confirm_different_transaction === true ? { confirmedNew: true } : {}),
+        vendorId: shown.vendorId,
+        customerId: shown.customerId,
+        channelId: shown.channelId,
+        memo: shown.memo,
+        ...(confirmedNew ? { confirmedNew: true } : {}),
       });
     } catch (error) {
       preview.problems.push({ txnId, reason: describeError(error) });
@@ -206,6 +225,9 @@ export async function stageBankDecisions(
     payload,
     preview,
   });
+  // A newer stage for the same rows replaces the old one: a stage the person turned down must not
+  // stay confirmable behind their back.
+  await supersedeStagings(exec, user.id, 'bank_decisions', payload.items.map((item) => item.txnId), id);
   return { stageId: id, expiresAt, preview };
 }
 
@@ -324,7 +346,7 @@ export const newAccountInput = z.object({
   name: z.string().min(1).max(100),
   type: z.enum(ACCOUNT_TYPES),
   parent_code: z.string().min(1).optional(),
-  subtype: z.string().min(1).optional(),
+  subtype: z.enum(ACCOUNT_SUBTYPES).optional(),
   description: z.string().max(300).optional(),
 });
 export type NewAccountInput = z.infer<typeof newAccountInput>;
@@ -344,6 +366,9 @@ export interface AccountPreview {
   name: string;
   type: string;
   parent: string | null;
+  subtype: string | null;
+  /** Free text from the caller. Untrusted. */
+  description: string | null;
   warnings: string[];
 }
 
@@ -385,7 +410,15 @@ export async function stageNewAccount(
     subtype: input.subtype ?? null,
     description: input.description ?? null,
   };
-  const preview: AccountPreview = { code, name, type: input.type, parent: parentLabel, warnings };
+  const preview: AccountPreview = {
+    code,
+    name,
+    type: input.type,
+    parent: parentLabel,
+    subtype: payload.subtype,
+    description: payload.description,
+    warnings,
+  };
   const { id, expiresAt } = await createStaging(exec, {
     userId: user.id,
     clientId: user.clientId,

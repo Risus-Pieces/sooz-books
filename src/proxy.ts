@@ -23,15 +23,16 @@ import { redirectWithSession, updateSession } from '@/lib/supabase/middleware';
  * (see `@/lib/mcp/auth`) and answers 401 with the way to sign in, which a redirect to /login would
  * hide. The OAuth consent screen is deliberately not here: it needs a signed-in person.
  */
-const PUBLIC_PREFIXES = ['/login', '/auth/', '/mcp', '/.well-known/'] as const;
+const PUBLIC_PREFIXES = ['/login', '/auth/', '/.well-known/'] as const;
+const PUBLIC_EXACT = ['/mcp'] as const;
 
 export async function proxy(request: NextRequest): Promise<NextResponse> {
   const refresh = await updateSession(request);
   const { pathname, search } = request.nextUrl;
 
-  const isPublic = PUBLIC_PREFIXES.some(
-    (prefix) => pathname === prefix || pathname.startsWith(prefix),
-  );
+  const isPublic =
+    PUBLIC_EXACT.some((path) => pathname === path) ||
+    PUBLIC_PREFIXES.some((prefix) => pathname === prefix || pathname.startsWith(prefix));
 
   if (!refresh.user && !isPublic) {
     const url = request.nextUrl.clone();

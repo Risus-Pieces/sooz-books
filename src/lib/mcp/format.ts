@@ -19,7 +19,9 @@ const FENCE_CLOSE = '</untrusted-data>';
 /** Text from outside the books. A closing tag inside it is defanged so it cannot end the fence early. */
 export function untrusted(text: string | null | undefined): string {
   if (text === null || text === undefined || text.trim() === '') return '—';
-  const clean = text.replace(/\s+/g, ' ').trim().replaceAll('<untrusted-data>', '‹untrusted-data›').replaceAll('</untrusted-data>', '‹/untrusted-data›');
+  // Every angle bracket goes, not just the closing tag: tag matching is case- and space-tolerant in
+  // practice, and nothing a person needs to read in a bank line depends on one.
+  const clean = text.replace(/\s+/g, ' ').trim().replaceAll('<', '‹').replaceAll('>', '›');
   return `${FENCE_OPEN}${clean}${FENCE_CLOSE}`;
 }
 

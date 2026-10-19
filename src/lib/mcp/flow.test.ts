@@ -5,7 +5,7 @@ import { closeTestDb, hasDatabase, withRollback } from '@/lib/ledger/test-suppor
 
 import { eq } from 'drizzle-orm';
 
-import { accounts, bankTransactions, journalEntries, mcpStagings } from '@/db/schema';
+import { accounts, bankTransactions, journalEntries, journalLines, mcpStagings, vendors } from '@/db/schema';
 import { ForbiddenError } from '@/lib/auth/roles';
 import { ACCOUNTS } from '@/lib/ledger/coa';
 import { ClosedPeriodError, UnbalancedEntryError } from '@/lib/ledger/errors';
@@ -13,6 +13,7 @@ import { closePeriod } from '@/lib/ledger/periods';
 import { postJournalEntry } from '@/lib/ledger/post';
 
 import { commitStaged } from './commit';
+import { cancelStaging } from './staging';
 import { stageBankDecisions, stageJournalEntry, stageNewAccount } from './stage';
 import { StagingError } from './staging';
 import { accountIdOf, expenseLeaf, immediate, mcpUser, newBank, newTxn } from './test-support';
@@ -359,3 +360,140 @@ describe.skipIf(!hasDatabase)('new accounts', () => {
   });
 });
 
+
+describe.skipIf(!hasDatabase)('what is shown is what posts', () => {
+  it('posts the vendor and memo that were previewed even if the suggestion changes before confirming', async () => {
+    await withRollback(async (tx) => {
+      await immediate(tx);
+      const user = await mcpUser(tx);
+      const bank = await newBank(tx);
+      const txnId = await newTxn(tx, bank.id, DAY, -4_250, 'PAPER CO');
+      const [before] = await tx.insert(vendors).values({ name: 'TEST vendor before' }).returning({ id: vendors.id });
+      const [after] = await tx.insert(vendors).values({ name: 'TEST vendor after' }).returning({ id: vendors.id });
+      await tx.update(bankTransactions).set({ suggestedVendorId: before.id, suggestedMemo: 'memo as shown' }).where(eq(bankTransactions.id, txnId));
+      const staged = await stageBankDecisions(user, { items: [{ txn_id: txnId, action: 'accept', account: ACCOUNTS.OFFICE_SUPPLIES }] }, { tx });
+      expect(staged.preview.entries[0]).toMatchObject({ vendor: 'TEST vendor before', memo: 'memo as shown' });
+
+      // The AI tier, or a re-import, rewrites the suggestion between staging and confirming.
+      await tx.update(bankTransactions).set({ suggestedVendorId: after.id, suggestedMemo: 'SOMETHING ELSE' }).where(eq(bankTransactions.id, txnId));
+      const done = await commitStaged(user, staged.stageId!, { tx });
+
+      if (done.kind !== 'bank_decisions') throw new Error('unreachable');
+      expect(done.result.failed).toEqual([]);
+      const [entry] = await tx.select({ id: journalEntries.id, memo: journalEntries.memo }).from(journalEntries).where(eq(journalEntries.entryNo, done.result.posted[0].entryNo));
+      const lines = await tx.select({ vendorId: journalLines.vendorId }).from(journalLines).where(eq(journalLines.entryId, entry.id));
+      expect(entry.memo).toBe('memo as shown');
+      expect(lines.some((line) => line.vendorId === before.id)).toBe(true);
+      expect(lines.some((line) => line.vendorId === after.id)).toBe(false);
+    });
+  });
+
+  it('posts a personal purchase to the draws account it showed', async () => {
+    await withRollback(async (tx) => {
+      await immediate(tx);
+      const user = await mcpUser(tx);
+      const bank = await newBank(tx);
+      const txnId = await newTxn(tx, bank.id, DAY, -2_000, 'MY COFFEE');
+      const staged = await stageBankDecisions(user, { items: [{ txn_id: txnId, action: 'personal' }] }, { tx });
+
+      const done = await commitStaged(user, staged.stageId!, { tx });
+
+      if (done.kind !== 'bank_decisions') throw new Error('unreachable');
+      expect(done.result.posted).toHaveLength(1);
+      const [entry] = await tx.select({ id: journalEntries.id }).from(journalEntries).where(eq(journalEntries.entryNo, done.result.posted[0].entryNo));
+      const lines = await tx.select({ code: accounts.code, debit: journalLines.debitCents }).from(journalLines).innerJoin(accounts, eq(accounts.id, journalLines.accountId)).where(eq(journalLines.entryId, entry.id));
+      expect(lines.find((line) => line.debit > 0)?.code).toBe('3020');
+    });
+  });
+});
+
+describe.skipIf(!hasDatabase)('the duplicate guard', () => {
+  async function alreadyBooked(tx: Parameters<Parameters<typeof withRollback>[0]>[0]) {
+    await immediate(tx);
+    const user = await mcpUser(tx);
+    const bank = await newBank(tx);
+    await postJournalEntry(
+      { date: DAY, memo: 'entered by hand', sourceType: 'manual', lines: [
+        { accountId: await accountIdOf(tx, ACCOUNTS.OFFICE_SUPPLIES), debitCents: 4_250 },
+        { accountId: bank.glId, creditCents: 4_250 },
+      ] },
+      { userId: user.id, tx },
+    );
+    const txnId = await newTxn(tx, bank.id, DAY, -4_250, 'PAPER CO');
+    return { user, txnId };
+  }
+
+  it('stops a row that looks already booked', async () => {
+    await withRollback(async (tx) => {
+      const { user, txnId } = await alreadyBooked(tx);
+      const staged = await stageBankDecisions(user, { items: [{ txn_id: txnId, action: 'accept', account: ACCOUNTS.OFFICE_SUPPLIES }] }, { tx });
+      expect(staged.stageId).toBeNull();
+      expect(staged.preview.problems[0].reason).toMatch(/already booked/i);
+    });
+  });
+
+  it('can be overridden, but the override is shown as a warning and stored', async () => {
+    await withRollback(async (tx) => {
+      const { user, txnId } = await alreadyBooked(tx);
+      const staged = await stageBankDecisions(user, { items: [{ txn_id: txnId, action: 'accept', account: ACCOUNTS.OFFICE_SUPPLIES, confirm_different_transaction: true }] }, { tx });
+      expect(staged.preview.entries[0].warnings[0]).toMatch(/DUPLICATE WARNING/);
+      const done = await commitStaged(user, staged.stageId!, { tx });
+      expect(done.kind === 'bank_decisions' && done.result.posted).toHaveLength(1);
+    });
+  });
+
+  it('ignores the override flag when nothing needed overriding', async () => {
+    await withRollback(async (tx) => {
+      await immediate(tx);
+      const user = await mcpUser(tx);
+      const bank = await newBank(tx);
+      const txnId = await newTxn(tx, bank.id, DAY, -999, 'FRESH');
+      const staged = await stageBankDecisions(user, { items: [{ txn_id: txnId, action: 'accept', account: ACCOUNTS.OFFICE_SUPPLIES, confirm_different_transaction: true }] }, { tx });
+      expect(staged.preview.entries[0].warnings).toEqual([]);
+      const [row] = await tx.select({ payload: mcpStagings.payload }).from(mcpStagings).where(eq(mcpStagings.id, staged.stageId!));
+      expect(JSON.stringify(row.payload)).not.toContain('confirmedNew');
+    });
+  });
+});
+
+describe.skipIf(!hasDatabase)('turning a stage down', () => {
+  it('voids an earlier stage for the same row when the row is staged again', async () => {
+    await withRollback(async (tx) => {
+      await immediate(tx);
+      const user = await mcpUser(tx);
+      const bank = await newBank(tx);
+      const txnId = await newTxn(tx, bank.id, DAY, -100);
+      const first = await stageBankDecisions(user, { items: [{ txn_id: txnId, action: 'accept', account: ACCOUNTS.OFFICE_SUPPLIES }] }, { tx });
+      const second = await stageBankDecisions(user, { items: [{ txn_id: txnId, action: 'personal' }] }, { tx });
+
+      await expect(commitStaged(user, first.stageId!, { tx })).rejects.toMatchObject({ code: 'used' });
+      await expect(commitStaged(user, second.stageId!, { tx })).resolves.toMatchObject({ kind: 'bank_decisions' });
+    });
+  });
+
+  it('can be cancelled outright, once', async () => {
+    await withRollback(async (tx) => {
+      const user = await mcpUser(tx);
+      const staged = await stageNewAccount(user, { code: '1460', name: 'Cancelled', type: 'asset' }, { tx });
+
+      await cancelStaging(tx, staged.stageId!, user.id);
+
+      await expect(commitStaged(user, staged.stageId!, { tx })).rejects.toMatchObject({ code: 'used' });
+      expect(await tx.select({ id: accounts.id }).from(accounts).where(eq(accounts.code, '1460'))).toHaveLength(0);
+    });
+  });
+});
+
+describe.skipIf(!hasDatabase)('account previews', () => {
+  it('shows the subtype and description that will be created, and only allows a subtype that is safe', async () => {
+    await withRollback(async (tx) => {
+      const user = await mcpUser(tx);
+      const staged = await stageNewAccount(
+        user,
+        { code: '1461', name: 'Merch — Hats', type: 'asset', subtype: 'inventory', description: 'Hats, caps' },
+        { tx },
+      );
+      expect(staged.preview).toMatchObject({ subtype: 'inventory', description: 'Hats, caps' });
+    });
+  });
+});

@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { getAppUser } from '@/lib/auth/session';
 import { CAPABILITIES, ROLE_LABELS } from '@/lib/auth/roles';
 import { CONNECTOR_CAPABILITIES } from '@/lib/mcp/capabilities';
+import { isTrustedRedirect } from '@/lib/mcp/redirects';
 import { createClient } from '@/lib/supabase/server';
 
 export const metadata: Metadata = { title: 'Connect to Sooz Books' };
@@ -46,6 +47,11 @@ export default async function ConsentPage({ searchParams }: { searchParams: Prom
     destination = new URL(data.redirect_uri).host;
   } catch {
     // Show whatever it was.
+  }
+  if (!isTrustedRedirect(data.redirect_uri)) {
+    return (
+      <Problem message={`Sooz Books only connects to Claude. This request would send you to ${destination}, so it was not offered. If you did not start it, ignore it.`} />
+    );
   }
   const allowed = CONNECTOR_CAPABILITIES.filter((cap) => CAPABILITIES[user.role].includes(cap));
 

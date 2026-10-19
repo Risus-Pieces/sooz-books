@@ -628,6 +628,8 @@ export interface ApprovalPreview {
   amountCents: number;
   memo: string;
   vendorId: string | null;
+  customerId: string | null;
+  channelId: string | null;
   lines: ApprovalPreviewLine[];
 }
 
@@ -655,6 +657,8 @@ export async function previewApproval(input: ApproveInput, ctx: BankingCtx): Pro
       amountCents: txn.amountCents,
       memo: choice.memo,
       vendorId: choice.vendorId,
+      customerId: choice.customerId,
+      channelId: choice.lines[0]?.channelId ?? null,
       lines: drafted.map((line) => {
         const account = byId.get(line.accountId ?? '');
         return {

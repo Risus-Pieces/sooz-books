@@ -9,7 +9,7 @@
 import { withActor } from '@/db/client';
 import type { StageKind } from '@/db/schema';
 import { type Capability, requireCapability } from '@/lib/auth/roles';
-import { approveBankTransaction, markPersonal } from '@/lib/banking/post';
+import { approveBankTransaction } from '@/lib/banking/post';
 import { excludeTransactions } from '@/app/(app)/banking/data';
 import { createAccount } from '@/lib/ledger/accounts';
 import { type LedgerDb, postJournalEntry } from '@/lib/ledger/post';
@@ -57,18 +57,15 @@ async function commitBank(tx: LedgerDb, payload: unknown, user: McpUser): Promis
       if (item.action === 'exclude') {
         await excludeTransactions([item.txnId], ctx);
         result.excluded.push(item.txnId);
-      } else if (item.action === 'personal') {
-        const done = await markPersonal(item.txnId, ctx, {
-          ...(item.memo === undefined ? {} : { memo: item.memo }),
-          ...(item.confirmedNew === true ? { confirmedNew: true } : {}),
-        });
-        result.posted.push({ txnId: item.txnId, entryNo: done.entryNo });
       } else {
+        // Accept and personal post alike: the choice stored at staging, every field explicit.
         const done = await approveBankTransaction(
           {
             txnId: item.txnId,
             ...(item.accountId === undefined ? {} : { accountId: item.accountId }),
             ...(item.vendorId === undefined ? {} : { vendorId: item.vendorId }),
+            ...(item.customerId === undefined ? {} : { customerId: item.customerId }),
+            ...(item.channelId === undefined ? {} : { channelId: item.channelId }),
             ...(item.memo === undefined ? {} : { memo: item.memo }),
             ...(item.confirmedNew === true ? { confirmedNew: true } : {}),
           },

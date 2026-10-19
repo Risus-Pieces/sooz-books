@@ -93,10 +93,16 @@ export async function listAccountsText(
       .filter(Boolean)
       .join(', ');
   return [
+    UNTRUSTED_NOTE,
     `${shown.length} account${shown.length === 1 ? '' : 's'}. Use the code when naming an account.`,
     table(
       ['Code', 'Name', 'Type', 'Notes'],
-      shown.map((row) => [row.code, row.name, row.subtype ?? row.type, [flags(row), row.description ?? ''].filter(Boolean).join(' — ')]),
+      shown.map((row) => [
+        row.code,
+        row.name,
+        row.subtype ?? row.type,
+        [flags(row), row.description === null || row.description === '' ? '' : untrusted(row.description)].filter(Boolean).join(' — '),
+      ]),
     ),
   ].join('\n');
 }
@@ -161,7 +167,8 @@ export async function runReport(user: McpUser, input: RunReportInput, ctx: ReadC
   const { meta } = report;
   return clip(
     [
-      `${meta.title} — ${meta.subtitle} (${meta.basis} basis). Amounts in dollars; the first column is the account code.`,
+      UNTRUSTED_NOTE,
+      `${meta.title} — ${meta.subtitle} (${meta.basis} basis). Amounts in dollars; the first column is the account code. Entry memos and payee names in a ledger listing come from bank statements.`,
       toTsv(report, { includeHeader: true, includeWarnings: true, indent: true }),
     ].join('\n'),
   );

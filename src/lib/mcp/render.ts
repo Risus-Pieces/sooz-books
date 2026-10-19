@@ -29,6 +29,7 @@ export function renderBankStage(staged: Staged<BankPreview>): string {
       out.push(
         `${index + 1}. ${entry.date} · ${entry.bank} · ${dollars(entry.amountCents)}${entry.action === 'personal' ? ' · PERSONAL (owner draw)' : ''}`,
         `   Bank text: ${untrusted(entry.description)} · Memo: ${untrusted(entry.memo)}${entry.vendor === null ? '' : ` · Vendor: ${untrusted(entry.vendor)}`}`,
+        ...entry.warnings.map((warning) => `   ${untrusted(warning)} ← tell the user about this`),
         ...entry.lines.map(lineText),
         `   (txn ${entry.txnId})`,
       );
@@ -42,7 +43,7 @@ export function renderBankStage(staged: Staged<BankPreview>): string {
   }
   if (problems.length > 0) {
     out.push(`\nCould not stage ${problems.length} (left out of this stage — fix and stage them again):`);
-    problems.forEach((problem) => out.push(`- txn ${problem.txnId}: ${problem.reason}`));
+    problems.forEach((problem) => out.push(`- txn ${problem.txnId}: ${untrusted(problem.reason)}`));
   }
   return out.join('\n');
 }
@@ -61,7 +62,8 @@ export function renderAccountStage(staged: Staged<AccountPreview>): string {
   const { preview } = staged;
   return [
     header(staged.stageId ?? ''),
-    `\nWill create account ${preview.code} "${preview.name}" (${preview.type})${preview.parent === null ? ', top level' : `, under ${preview.parent}`}.`,
+    UNTRUSTED_NOTE,
+    `\nWill create account ${preview.code} "${preview.name}" (${preview.type}${preview.subtype === null ? '' : `, reports as ${preview.subtype}`})${preview.parent === null ? ', top level' : `, under ${preview.parent}`}. Description: ${untrusted(preview.description)}`,
     ...preview.warnings.map((warning) => `WARNING: ${warning}`),
   ].join('\n');
 }
@@ -77,7 +79,7 @@ export function renderCommit(done: CommitResult): string {
       return [
         `Done. Posted ${posted.length}, excluded ${excluded.length}, could not do ${failed.length}.`,
         ...posted.map((p) => `- posted entry #${p.entryNo} (txn ${p.txnId})`),
-        ...failed.map((f) => `- NOT done, txn ${f.txnId}: ${f.reason}`),
+        ...failed.map((f) => `- NOT done, txn ${f.txnId}: ${untrusted(f.reason)}`),
         failed.length > 0 ? 'This stage is used up. Tell the user which ones failed and stage those again if they still want them.' : '',
       ]
         .filter(Boolean)

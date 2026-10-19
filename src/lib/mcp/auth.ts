@@ -36,6 +36,10 @@ export function clientIdOf(jwt: string): string | null {
 }
 
 export const verifyWithSupabase: TokenVerifier = async (token) => {
+  // Only a token issued to a connected app — one a person approved on the consent screen — is
+  // accepted. An ordinary browser session token also names a valid user, but it was never offered to
+  // Claude, and a rejected guess costs no call to the auth server.
+  if (clientIdOf(token) === null) return null;
   const { url, anonKey } = supabaseEnv();
   const supabase = createClient(url, anonKey, {
     auth: { autoRefreshToken: false, persistSession: false, detectSessionInUrl: false },
@@ -67,7 +71,7 @@ export async function authenticate(request: Request, deps: AuthDeps = {}): Promi
     return { ok: false, status: 401, error: 'invalid_token', message: 'Sign in to Sooz Books to use this connection.' };
   }
   const verified = await (deps.verify ?? verifyWithSupabase)(token);
-  if (verified === null) {
+  if (verified === null || verified.clientId === null) {
     return { ok: false, status: 401, error: 'invalid_token', message: 'That sign-in is not valid or has expired.' };
   }
 

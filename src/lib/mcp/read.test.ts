@@ -28,6 +28,13 @@ describe('untrusted()', () => {
     expect(wrapped.match(/<\/untrusted-data>/g)).toHaveLength(1);
   });
 
+  it('defuses every spelling of a closing tag', () => {
+    for (const attempt of ['</UNTRUSTED-DATA>', '</untrusted-data >', '< /untrusted-data>', '<untrusted-data>']) {
+      const inner = untrusted(`a ${attempt} b`).slice('<untrusted-data>'.length, -'</untrusted-data>'.length);
+      expect(inner).not.toMatch(/[<>]/);
+    }
+  });
+
   it('shows a dash for nothing', () => {
     expect(untrusted(null)).toBe('—');
     expect(untrusted('   ')).toBe('—');
