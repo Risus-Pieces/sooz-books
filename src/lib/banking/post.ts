@@ -582,26 +582,90 @@ export async function approveBankTransaction(
   ctx: BankingCtx,
 ): Promise<ApprovalResult> {
   return inBankingTx(ctx, async (tx) => {
-    const txn = await lockTxn(tx, input.txnId);
-    assertPostable(txn);
-    if (txn.status === 'transfer') {
-      throw new BankingError(
-        'wrong_status',
-        `${capitalise(describeTxn(txn))} is one leg of an internal transfer. Approve the pair as a ` +
-          `transfer, or unlink it first if it is not one.`,
-      );
-    }
-    if (txn.status === 'matched') {
-      throw new BankingError(
-        'wrong_status',
-        `${capitalise(describeTxn(txn))} is matched to an invoice or bill, which posts it.`,
-      );
-    }
-    await assertNotAlreadyBooked(tx, txn, input.confirmedNew === true);
-    const choice = await decide(tx, txn, input);
+    const { txn, choice } = await prepareApproval(tx, input);
     const result = await postRow(tx, txn, choice, ctx.userId, true);
     await learnVendor(tx, txn, choice.vendorId, ctx.userId);
     return result;
+  });
+}
+
+/** Every check that stands between a bank row and its entry, and the choice it resolves to. */
+async function prepareApproval(tx: Tx, input: ApproveInput): Promise<{ txn: LockedTxn; choice: Choice }> {
+  const txn = await lockTxn(tx, input.txnId);
+  assertPostable(txn);
+  if (txn.status === 'transfer') {
+    throw new BankingError(
+      'wrong_status',
+      `${capitalise(describeTxn(txn))} is one leg of an internal transfer. Approve the pair as a ` +
+        `transfer, or unlink it first if it is not one.`,
+    );
+  }
+  if (txn.status === 'matched') {
+    throw new BankingError(
+      'wrong_status',
+      `${capitalise(describeTxn(txn))} is matched to an invoice or bill, which posts it.`,
+    );
+  }
+  await assertNotAlreadyBooked(tx, txn, input.confirmedNew === true);
+  const choice = await decide(tx, txn, input);
+  return { txn, choice };
+}
+
+export interface ApprovalPreviewLine {
+  accountId: string;
+  accountCode: string;
+  accountName: string;
+  debitCents: number;
+  creditCents: number;
+}
+
+/** What approving a bank row would post, worked out without posting it. */
+export interface ApprovalPreview {
+  txnId: string;
+  bankAccountName: string;
+  txnDate: CalendarDate;
+  /** Signed: positive is money in. */
+  amountCents: number;
+  memo: string;
+  vendorId: string | null;
+  lines: ApprovalPreviewLine[];
+}
+
+/**
+ * Runs every check `approveBankTransaction` runs — status, reconciliation, duplicates, the
+ * account, the closed period — and returns the entry it would write, writing nothing. The check
+ * and the post share `prepareApproval`, so a preview that succeeds is a post that would not be
+ * refused for those reasons.
+ */
+export async function previewApproval(input: ApproveInput, ctx: BankingCtx): Promise<ApprovalPreview> {
+  return inBankingTx(ctx, async (tx) => {
+    const { txn, choice } = await prepareApproval(tx, input);
+    await assertPeriodOpen(tx, txn.txnDate);
+    const drafted = entryLines(txn, choice);
+    const ids = [...new Set(drafted.map((line) => line.accountId).filter((id): id is string => id !== undefined))];
+    const named = await tx
+      .select({ id: accounts.id, code: accounts.code, name: accounts.name })
+      .from(accounts)
+      .where(inArray(accounts.id, ids));
+    const byId = new Map(named.map((row) => [row.id, row]));
+    return {
+      txnId: txn.id,
+      bankAccountName: txn.bankName,
+      txnDate: txn.txnDate,
+      amountCents: txn.amountCents,
+      memo: choice.memo,
+      vendorId: choice.vendorId,
+      lines: drafted.map((line) => {
+        const account = byId.get(line.accountId ?? '');
+        return {
+          accountId: line.accountId ?? '',
+          accountCode: account?.code ?? '',
+          accountName: account?.name ?? '',
+          debitCents: line.debitCents ?? 0,
+          creditCents: line.creditCents ?? 0,
+        };
+      }),
+    };
   });
 }
 

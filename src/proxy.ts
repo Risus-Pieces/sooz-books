@@ -17,8 +17,13 @@ import { redirectWithSession, updateSession } from '@/lib/supabase/middleware';
  * lives at `@/lib/supabase/middleware`, which is what Supabase's own guides call it.
  */
 
-/** The only paths that may be reached without a session. */
-const PUBLIC_PREFIXES = ['/login', '/auth/'] as const;
+/**
+ * The only paths that may be reached without a browser session. `/mcp` and the discovery documents
+ * under `/.well-known/` are called by Claude, not by a browser: `/mcp` checks its own bearer token
+ * (see `@/lib/mcp/auth`) and answers 401 with the way to sign in, which a redirect to /login would
+ * hide. The OAuth consent screen is deliberately not here: it needs a signed-in person.
+ */
+const PUBLIC_PREFIXES = ['/login', '/auth/', '/mcp', '/.well-known/'] as const;
 
 export async function proxy(request: NextRequest): Promise<NextResponse> {
   const refresh = await updateSession(request);

@@ -50,6 +50,7 @@ src/db/schema/       Drizzle table definitions mirroring the live schema
 src/lib/ledger/      posting engine, reversals, periods, balances, chart of accounts
 src/lib/banking/     statement parsing, import profiles, fingerprints, rules, AI suggestions, reconcile
 src/lib/receipts/    the receipt assistant: read a receipt, propose an entry, post it on a person's tap
+src/lib/mcp/         the MCP connector: Claude reads the books and stages changes; commit_staged posts them
 src/lib/importers/   shopify, amazon, faire, distributor remittances, peasy, quickbooks
 src/lib/reports/     trial balance, P&L, balance sheet, cash flow, aging, margin, forecast
 src/lib/auth/        roles and capabilities

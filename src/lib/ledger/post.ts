@@ -585,6 +585,48 @@ export async function postJournalEntry(input: DraftEntry, ctx: PostContext): Pro
   return posted;
 }
 
+export interface EntryPreviewLine {
+  accountId: string;
+  accountCode: string;
+  accountName: string;
+  debitCents: number;
+  creditCents: number;
+  memo: string | null;
+}
+
+export interface EntryPreview {
+  date: CalendarDate;
+  memo: string | null;
+  lines: EntryPreviewLine[];
+  totalCents: number;
+}
+
+/**
+ * Runs every check `postJournalEntry` runs before it writes — shape, balance, accounts that exist
+ * and are postable, an open period — and returns the entry with its accounts named. Writes nothing,
+ * so a caller can show a person exactly what would post and be sure it would not be refused for
+ * those reasons.
+ */
+export async function previewJournalEntry(input: DraftEntry, exec: LedgerDb): Promise<EntryPreview> {
+  const entry = prepare(input);
+  const lookup = await resolveAccounts(exec, [entry]);
+  const resolved = entry.lines.map((line) => accountFor(line, entry, lookup));
+  await assertPeriodsOpen(exec, [entry]);
+  return {
+    date: entry.date,
+    memo: entry.memo,
+    totalCents: sumCents(entry.lines.map((line) => line.debitCents)),
+    lines: entry.lines.map((line, index) => ({
+      accountId: resolved[index].id,
+      accountCode: resolved[index].code,
+      accountName: resolved[index].name,
+      debitCents: line.debitCents,
+      creditCents: line.creditCents,
+      memo: line.memo,
+    })),
+  };
+}
+
 /**
  * Posts several entries as one unit: they all land or none of them do. Used by
  * imports and by any module that raises a document and its ledger effect

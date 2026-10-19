@@ -34,6 +34,7 @@ import {
   linkTransfer,
   markPersonal,
   postAutoPostMatches,
+  previewApproval,
   unlinkTransfer,
   unpostBankTransaction,
 } from './post';
@@ -753,4 +754,40 @@ describe.skipIf(!hasDatabase)('queue read model', () => {
     },
     T,
   );
+});
+
+describe.skipIf(!hasDatabase)('previewApproval', () => {
+  it('shows the entry approving would write, and writes nothing', async () => {
+    await withRollback(async (tx) => {
+      const f = await fixture(tx);
+      const expense = await f.code(ACCOUNTS.OFFICE_SUPPLIES);
+      const id = await txn(f, f.a, '2031-03-04', -4_250, { counterparty: 'Paper Co' });
+      const before = await tx.select({ id: journalEntries.id }).from(journalEntries);
+
+      const preview = await previewApproval({ txnId: id, accountId: expense }, { userId: f.userId, tx });
+
+      expect(preview.amountCents).toBe(-4_250);
+      expect(preview.txnDate).toBe('2031-03-04');
+      expect(preview.lines).toEqual([
+        expect.objectContaining({ accountId: expense, debitCents: 4_250, creditCents: 0 }),
+        expect.objectContaining({ accountId: f.a.glId, debitCents: 0, creditCents: 4_250 }),
+      ]);
+      expect(preview.lines[0].accountName).not.toBe('');
+      expect(await tx.select({ id: journalEntries.id }).from(journalEntries)).toHaveLength(before.length);
+      const [row] = await tx.select({ status: bankTransactions.status }).from(bankTransactions).where(eq(bankTransactions.id, id));
+      expect(row.status).toBe('unreviewed');
+    });
+  });
+
+  it('refuses for the same reasons approving does', async () => {
+    await withRollback(async (tx) => {
+      const f = await fixture(tx);
+      const expense = await f.code(ACCOUNTS.OFFICE_SUPPLIES);
+      const noAccount = await txn(f, f.a, '2031-03-04', -100);
+      const excluded = await txn(f, f.a, '2031-03-05', -200, { status: 'excluded' });
+
+      await expect(previewApproval({ txnId: noAccount }, { userId: f.userId, tx })).rejects.toMatchObject({ code: 'no_account' });
+      await expect(previewApproval({ txnId: excluded, accountId: expense }, { userId: f.userId, tx })).rejects.toMatchObject({ code: 'excluded' });
+    });
+  });
 });

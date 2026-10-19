@@ -28,6 +28,7 @@ access to the software should be able to do the same, each as themselves.
 - Creating or editing rules. A rule can be marked `auto_post`, which would let a later import post without any
   review; that must stay a deliberate act in the app. **(my call)**
 - Receipts: the in-app Receipt assistant already covers them. **(my call)**
+- Uploading a bank statement. A remote connector cannot open a file on the person's computer, so the file's contents would have to be retyped through the model, which is slow and unreliable for a statement. The file is dropped into the app's existing Import screen; Claude takes over from the review queue. **(my call)**
 - A way to approve in the app instead of in the chat. The owner said approval happens in the chat.
 
 ## Anti-goals
@@ -95,7 +96,6 @@ Stage kinds in v1:
 | `stage_bank_decisions` (up to 50 transactions: accept to an account, mark personal, or exclude) | `bank.approve` | `approveMany` / `markPersonal` / `excludeTransactions` |
 | `stage_journal_entry` | `ledger.post` | `postJournalEntry` (source `manual`) |
 | `stage_new_account` | `settings.manage` | `createAccount` |
-| `stage_statement_import` (CSV text, one bank account) | `bank.import` | `commitImport` |
 
 When Claude is unsure of an account it must ask; the tool descriptions say so, and `stage_bank_decisions`
 requires an explicit `accountId` for every accept (it does not silently fall back to the suggestion). **(my call)**

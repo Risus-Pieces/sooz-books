@@ -142,6 +142,27 @@ matches `app_settings.owner_email`; everyone else needs a single-use invitation 
 is stored only as a hash and expires in seven days. Calling Supabase's public sign-up endpoint
 directly gets nobody in.
 
+## Claude connector (MCP)
+
+`/mcp` is a remote [MCP](https://modelcontextprotocol.io) server, so people with access can work in
+the books by talking to Claude. Each person adds `https://<the app>/mcp` to Claude as a custom
+connector and signs in with their own login; Claude then acts as them, limited by their role.
+
+- **Read** tools: chart of accounts, reports (cash or accrual), journal entries, bank accounts, the
+  review queue.
+- **Change** tools are two steps. `stage_bank_decisions`, `stage_journal_entry` and `stage_new_account`
+  validate exactly as posting would and write only a row in `mcp_stagings`, returning a preview with
+  the accounts named. `commit_staged` takes only that stage's id and posts exactly what was stored,
+  once, within 15 minutes, for the person who staged it. Claude cannot post anything it did not show.
+- Not available through Claude: closing or re-opening periods, deleting or reversing entries,
+  creating rules, managing users, uploading a statement.
+- Bank text and memos are returned inside `<untrusted-data>` tags; they are data, not instructions.
+
+Sign-in uses Supabase Auth's OAuth 2.1 server (beta). One-time setup in the Supabase dashboard,
+Authentication → OAuth Server: turn it on, set the authorization path to `/oauth/consent`, turn on
+dynamic client registration, and make sure Site URL is the production URL. Migration `0048` creates
+`mcp_stagings` (apply it as `sooz_app`, like every table migration).
+
 ## Deploying
 
 ```bash

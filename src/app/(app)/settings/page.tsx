@@ -1,8 +1,10 @@
 import type { Metadata } from 'next';
+import { headers } from 'next/headers';
 
 import { sql } from '@/db/client';
 import { ROLE_LABELS, can, type Capability } from '@/lib/auth/roles';
 import { requireUser } from '@/lib/auth/session';
+import { publicOrigin } from '@/lib/mcp/auth';
 import type { GlyphName } from '@/lib/ui/glyphs';
 import type { Tint } from '@/lib/ui/tints';
 import { CompanyAvatar } from '@/components/shell/account-menu';
@@ -46,6 +48,7 @@ export default async function SettingsIndexPage({ searchParams }: { searchParams
 
   // Sequential on purpose: the connection pool this app shares is small.
   const company = await companyFacts();
+  const connectorUrl = `${publicOrigin(new Request('http://internal', { headers: await headers() }))}/mcp`;
   const counts = current === 'data' ? await dataCounts() : null;
 
   return (
@@ -79,6 +82,14 @@ export default async function SettingsIndexPage({ searchParams }: { searchParams
               </GroupRow>
               <GroupRow label="Role">
                 <Pill tone={ROLE_TONE[viewer.role]}>{ROLE_LABELS[viewer.role]}</Pill>
+              </GroupRow>
+            </InsetGroup>
+            <InsetGroup
+              header="Claude"
+              footer="In Claude, add a custom connector with this address, then sign in with your Sooz Books login. Claude acts as you and can do only what your role allows; nothing is posted until you confirm it in the chat."
+            >
+              <GroupRow label="Connector address">
+                <span className="truncate font-mono text-xs">{connectorUrl}</span>
               </GroupRow>
             </InsetGroup>
           </PaneBody>
