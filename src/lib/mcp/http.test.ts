@@ -91,6 +91,7 @@ describe.skipIf(!hasDatabase)('/mcp with a valid sign-in', () => {
         'list_accounts',
         'list_bank_accounts',
         'list_journal_entries',
+        'list_staged',
         'review_queue',
         'run_auto_post_rules',
         'run_report',
@@ -154,20 +155,27 @@ describe.skipIf(!hasDatabase)('/mcp with a valid sign-in', () => {
 });
 
 describe.skipIf(!hasDatabase)('/mcp with a scoped key', () => {
-  async function withKey(scopes?: ('read' | 'bank.sync' | 'bank.autopost')[]) {
+  async function withKey(scopes?: ('read' | 'bank.sync' | 'bank.autopost' | 'stage')[]) {
     const { createApiKey } = await import('@/lib/feeds/keys');
     const { db } = await import('@/db/client');
     const [owner] = await db.select({ id: appUsers.id, role: appUsers.role }).from(appUsers).where(eq(appUsers.role, 'owner')).orderBy(appUsers.id).limit(1);
     return createApiKey(owner, { name: `Test key ${Math.random().toString(36).slice(2, 8)}`, userId: owner.id, ...(scopes ? { scopes } : {}) });
   }
 
-  it('signs in with no auth server, and sees no tool that stages or confirms', async () => {
+  it('signs in with no auth server; may stage, never confirm', async () => {
     const key = await withKey();
     const response = await handleMcpRequest(rpc('tools/list', {}, key.token), { verify: async () => { throw new Error('a key must not reach the auth server'); } });
     expect(response.status).toBe(200);
     const body = (await response.json()) as { result: { tools: { name: string }[] } };
     const names = body.result.tools.map((tool) => tool.name);
-    expect(names).toEqual(expect.arrayContaining(['whoami', 'review_queue', 'run_report', 'sync_bank_feeds', 'run_auto_post_rules']));
+    expect(names).toEqual(expect.arrayContaining(['whoami', 'review_queue', 'list_staged', 'sync_bank_feeds', 'run_auto_post_rules', 'stage_bank_decisions', 'stage_journal_entry']));
+    expect(names).not.toContain('commit_staged');
+  });
+
+  it('without the stage scope, sees no staging tools either', async () => {
+    const key = await withKey(['read', 'bank.sync', 'bank.autopost']);
+    const response = await handleMcpRequest(rpc('tools/list', {}, key.token));
+    const names = ((await response.json()) as { result: { tools: { name: string }[] } }).result.tools.map((t) => t.name);
     for (const forbidden of ['stage_bank_decisions', 'stage_journal_entry', 'stage_new_account', 'commit_staged', 'cancel_staged']) {
       expect(names).not.toContain(forbidden);
     }

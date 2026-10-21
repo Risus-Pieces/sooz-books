@@ -3,7 +3,7 @@ import { afterAll, describe, expect, it } from 'vitest';
 // First: loads .env.local before '@/db/client' is imported anywhere below.
 import { closeTestDb, hasDatabase, withRollback } from '@/lib/ledger/test-support';
 
-import { eq } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 
 import { accounts, bankTransactions, journalEntries, journalLines, mcpStagings, vendors } from '@/db/schema';
 import { ForbiddenError } from '@/lib/auth/roles';
@@ -494,6 +494,55 @@ describe.skipIf(!hasDatabase)('account previews', () => {
         { tx },
       );
       expect(staged.preview).toMatchObject({ subtype: 'inventory', description: 'Hats, caps' });
+    });
+  });
+});
+
+describe.skipIf(!hasDatabase)('stages prepared overnight by a key', () => {
+  async function keyUser(tx: Parameters<Parameters<typeof withRollback>[0]>[0], scopes: ('read' | 'bank.sync' | 'bank.autopost' | 'stage')[] = ['read', 'stage']) {
+    const person = await mcpUser(tx);
+    return { person, agent: { ...person, clientId: null, key: { id: 'k', name: "Mo's nightly sync", scopes } } };
+  }
+
+  it('wait about a day and a half for the person, who confirms them; the key cannot', async () => {
+    await withRollback(async (tx) => {
+      await immediate(tx);
+      const { person, agent } = await keyUser(tx);
+      const staged = await stageJournalEntry(agent, { date: DAY, lines: [{ account: '6740', debit: '5.00' }, { account: '1330', credit: '5.00' }] }, { tx });
+
+      const [row] = await tx
+        .select({ hours: sql<number>`extract(epoch from (expires_at - created_at)) / 3600`, client: mcpStagings.clientId })
+        .from(mcpStagings)
+        .where(eq(mcpStagings.id, staged.stageId!));
+      expect(Number(row.hours)).toBe(36);
+      expect(row.client).toBe("key:Mo's nightly sync");
+
+      await expect(commitStaged(agent, staged.stageId!, { tx })).rejects.toThrow(/cannot confirm/);
+      await expect(commitStaged(person, staged.stageId!, { tx })).resolves.toMatchObject({ kind: 'journal_entry' });
+    });
+  });
+
+  it('are refused to a key without the stage scope', async () => {
+    await withRollback(async (tx) => {
+      const { agent } = await keyUser(tx, ['read']);
+      await expect(
+        stageJournalEntry(agent, { date: DAY, lines: [{ account: '6740', debit: '5.00' }, { account: '1330', credit: '5.00' }] }, { tx }),
+      ).rejects.toThrow(/not allowed to stage/);
+    });
+  });
+
+  it('are listed for the person, still waiting, with what was prepared', async () => {
+    await withRollback(async (tx) => {
+      const { person, agent } = await keyUser(tx);
+      const staged = await stageJournalEntry(agent, { date: DAY, memo: 'overnight', lines: [{ account: '6740', debit: '5.00' }, { account: '1330', credit: '5.00' }] }, { tx });
+      const { waitingStagings } = await import('./staging');
+      const { renderStoredStage } = await import('./render');
+      const waiting = await waitingStagings(tx, person.id);
+      expect(waiting.map((w) => w.id)).toContain(staged.stageId);
+      const text = renderStoredStage(waiting.find((w) => w.id === staged.stageId)!);
+      expect(text).toContain("Prepared by Mo's nightly sync");
+      expect(text).toContain('6740');
+      expect(text).toMatch(/about 36 hours/);
     });
   });
 });

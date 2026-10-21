@@ -22,7 +22,7 @@ describe.skipIf(!hasDatabase)('scoped keys', () => {
       const [row] = await tx.select().from(apiKeys).where(eq(apiKeys.id, created.id));
       expect(row.tokenHash).toBe(hashKey(created.token));
       expect(JSON.stringify(row)).not.toContain(created.token);
-      expect(row.scopes).toEqual(['read', 'bank.sync', 'bank.autopost']);
+      expect(row.scopes).toEqual(['read', 'bank.sync', 'bank.autopost', 'stage']);
     });
   });
 

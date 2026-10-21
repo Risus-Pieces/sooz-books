@@ -21,9 +21,10 @@ import { redirectWithSession, updateSession } from '@/lib/supabase/middleware';
  * The only paths that may be reached without a browser session. `/mcp` and the discovery documents
  * under `/.well-known/` are called by Claude, not by a browser: `/mcp` checks its own bearer token
  * (see `@/lib/mcp/auth`) and answers 401 with the way to sign in, which a redirect to /login would
- * hide. The OAuth consent screen is deliberately not here: it needs a signed-in person.
+ * hide. `/api/cron/` is called by Vercel Cron and checks `CRON_SECRET` itself. The OAuth consent screen
+ * is deliberately not here: it needs a signed-in person.
  */
-const PUBLIC_PREFIXES = ['/login', '/auth/', '/.well-known/'] as const;
+const PUBLIC_PREFIXES = ['/login', '/auth/', '/.well-known/', '/api/cron/'] as const;
 const PUBLIC_EXACT = ['/mcp'] as const;
 
 export async function proxy(request: NextRequest): Promise<NextResponse> {

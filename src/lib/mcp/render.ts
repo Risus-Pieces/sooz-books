@@ -2,13 +2,30 @@
 import type { CommitResult } from './commit';
 import { UNTRUSTED_NOTE, dollars, untrusted } from './format';
 import type { AccountPreview, BankPreview, JournalPreview, Staged } from './stage';
-import { STAGE_TTL_MINUTES } from './staging';
+import type { McpStaging } from '@/db/schema';
 
 const SHOW_AND_ASK =
   'Nothing has been posted. Show the user the full preview below (every account debited and credited) and ask for their explicit approval. Call commit_staged only after they say yes to THIS stage; if they want anything changed, stage again.';
 
-function header(stageId: string): string {
-  return [`STAGED — stage_id: ${stageId} (valid for ${STAGE_TTL_MINUTES} minutes, single use)`, SHOW_AND_ASK].join('\n');
+const LEFT_FOR_PERSON =
+  'Nothing has been posted, and this key cannot post it. It waits for the person to review it and confirm it themselves while signed in (list_staged shows everything waiting).';
+
+export interface RenderOptions {
+  /** The stage was made by an agent's key, which cannot confirm it. */
+  byKey?: boolean;
+}
+
+function validFor(expiresAt: Date | null): string {
+  if (expiresAt === null) return 'single use';
+  const minutes = Math.max(0, Math.round((expiresAt.getTime() - Date.now()) / 60_000));
+  return minutes >= 120 ? `valid for about ${Math.round(minutes / 60)} hours, single use` : `valid for ${minutes} minutes, single use`;
+}
+
+function header(staged: { stageId: string | null; expiresAt: Date | null }, options: RenderOptions = {}): string {
+  return [
+    `STAGED — stage_id: ${staged.stageId ?? ''} (${validFor(staged.expiresAt)})`,
+    options.byKey === true ? LEFT_FOR_PERSON : SHOW_AND_ASK,
+  ].join('\n');
 }
 
 function lineText(line: { account: string; debitCents: number; creditCents: number }): string {
@@ -17,10 +34,10 @@ function lineText(line: { account: string; debitCents: number; creditCents: numb
     : `   Credit  ${line.account}   ${dollars(line.creditCents)}`;
 }
 
-export function renderBankStage(staged: Staged<BankPreview>): string {
+export function renderBankStage(staged: Staged<BankPreview>, options: RenderOptions = {}): string {
   const { entries, exclusions, problems } = staged.preview;
   const out: string[] = [];
-  out.push(staged.stageId === null ? 'NOT STAGED — nothing could be staged.' : header(staged.stageId));
+  out.push(staged.stageId === null ? 'NOT STAGED — nothing could be staged.' : header(staged, options));
   out.push(UNTRUSTED_NOTE);
 
   if (entries.length > 0) {
@@ -48,20 +65,20 @@ export function renderBankStage(staged: Staged<BankPreview>): string {
   return out.join('\n');
 }
 
-export function renderJournalStage(staged: Staged<JournalPreview>): string {
+export function renderJournalStage(staged: Staged<JournalPreview>, options: RenderOptions = {}): string {
   const { preview } = staged;
   return [
-    header(staged.stageId ?? ''),
+    header(staged, options),
     UNTRUSTED_NOTE,
     `\nWill post a manual journal entry dated ${preview.date}, total ${dollars(preview.totalCents)}. Memo: ${untrusted(preview.memo)}`,
     ...preview.lines.map((line) => `${lineText(line)}${line.memo === null ? '' : `   — ${untrusted(line.memo)}`}`),
   ].join('\n');
 }
 
-export function renderAccountStage(staged: Staged<AccountPreview>): string {
+export function renderAccountStage(staged: Staged<AccountPreview>, options: RenderOptions = {}): string {
   const { preview } = staged;
   return [
-    header(staged.stageId ?? ''),
+    header(staged, options),
     UNTRUSTED_NOTE,
     `\nWill create account ${preview.code} "${preview.name}" (${preview.type}${preview.subtype === null ? '' : `, reports as ${preview.subtype}`})${preview.parent === null ? ', top level' : `, under ${preview.parent}`}. Description: ${untrusted(preview.description)}`,
     ...preview.warnings.map((warning) => `WARNING: ${warning}`),
@@ -85,5 +102,19 @@ export function renderCommit(done: CommitResult): string {
         .filter(Boolean)
         .join('\n');
     }
+  }
+}
+
+/** A stored stage, rendered as it was when it was made. */
+export function renderStoredStage(row: Pick<McpStaging, 'id' | 'kind' | 'preview' | 'expiresAt' | 'clientId'>): string {
+  const staged = { stageId: row.id, expiresAt: row.expiresAt };
+  const madeBy = row.clientId?.startsWith('key:') ? `Prepared by ${row.clientId.slice(4)}.\n` : '';
+  switch (row.kind) {
+    case 'bank_decisions':
+      return madeBy + renderBankStage({ ...staged, preview: row.preview as BankPreview });
+    case 'journal_entry':
+      return madeBy + renderJournalStage({ ...staged, preview: row.preview as JournalPreview });
+    case 'new_account':
+      return madeBy + renderAccountStage({ ...staged, preview: row.preview as AccountPreview });
   }
 }

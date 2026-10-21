@@ -6,10 +6,17 @@ import { isLedgerError } from '@/lib/ledger/errors';
 import { translateLedgerDbError } from '@/lib/ledger/post';
 import { isStagingError } from './staging';
 
-/** Stage and commit are for a signed-in person, never a scoped key. */
+/** Confirming (and cancelling) a staged change is for a signed-in person, never a scoped key. */
 export function assertNotKey(user: { key?: unknown }): void {
   if (user.key) {
-    throw new McpInputError('A scoped key cannot stage or confirm changes. Leave this for a person signed in to Sooz Books.');
+    throw new McpInputError('A scoped key cannot confirm changes. The person signs in and confirms the staged change themselves.');
+  }
+}
+
+/** A key may stage (which writes nothing to the ledger) only if its scopes say so. */
+export function assertMayStage(user: { key?: { name: string; scopes: readonly string[] } | null }): void {
+  if (user.key && !user.key.scopes.includes('stage')) {
+    throw new McpInputError(`The key "${user.key.name}" is not allowed to stage changes.`);
   }
 }
 

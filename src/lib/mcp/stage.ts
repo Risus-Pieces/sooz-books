@@ -21,8 +21,8 @@ import { type LedgerDb, previewJournalEntry } from '@/lib/ledger/post';
 import { parseMoney } from '@/lib/money';
 
 import { resolveAccount } from './accounts';
-import { McpInputError, assertNotKey, describeError } from './errors';
-import { createStaging, supersedeStagings } from './staging';
+import { McpInputError, assertMayStage, describeError } from './errors';
+import { KEY_STAGE_TTL_MINUTES, createStaging, supersedeStagings } from './staging';
 import type { McpUser } from './types';
 import { ACCOUNT_SUBTYPES, ACCOUNT_TYPES, bankSummary, postedLineCount } from './stage-support';
 
@@ -113,7 +113,7 @@ export async function stageBankDecisions(
   input: BankDecisionsInput,
   ctx: StageCtx = {},
 ): Promise<Staged<BankPreview>> {
-  assertNotKey(user);
+  assertMayStage(user);
   requireCapability(user.role, 'bank.approve');
   const exec = ctx.tx ?? db;
   const bankCtx = { userId: user.id, ...(ctx.tx === undefined ? {} : { tx: ctx.tx }) };
@@ -221,7 +221,8 @@ export async function stageBankDecisions(
   if (payload.items.length === 0) return { stageId: null, expiresAt: null, preview };
   const { id, expiresAt } = await createStaging(exec, {
     userId: user.id,
-    clientId: user.clientId,
+    clientId: user.key ? `key:${user.key.name}` : user.clientId,
+    ...(user.key ? { ttlMinutes: KEY_STAGE_TTL_MINUTES } : {}),
     kind: 'bank_decisions',
     payload,
     preview,
@@ -288,7 +289,7 @@ export async function stageJournalEntry(
   input: JournalEntryInput,
   ctx: StageCtx = {},
 ): Promise<Staged<JournalPreview>> {
-  assertNotKey(user);
+  assertMayStage(user);
   requireCapability(user.role, 'ledger.post');
   const exec = ctx.tx ?? db;
   if (!isCalendarDate(input.date)) throw new McpInputError(`"${input.date}" is not a date. Use YYYY-MM-DD.`);
@@ -331,7 +332,8 @@ export async function stageJournalEntry(
   };
   const { id, expiresAt } = await createStaging(exec, {
     userId: user.id,
-    clientId: user.clientId,
+    clientId: user.key ? `key:${user.key.name}` : user.clientId,
+    ...(user.key ? { ttlMinutes: KEY_STAGE_TTL_MINUTES } : {}),
     kind: 'journal_entry',
     payload,
     preview,
@@ -379,7 +381,7 @@ export async function stageNewAccount(
   input: NewAccountInput,
   ctx: StageCtx = {},
 ): Promise<Staged<AccountPreview>> {
-  assertNotKey(user);
+  assertMayStage(user);
   requireCapability(user.role, 'settings.manage');
   const exec = ctx.tx ?? db;
   const code = input.code.trim();
@@ -424,7 +426,8 @@ export async function stageNewAccount(
   };
   const { id, expiresAt } = await createStaging(exec, {
     userId: user.id,
-    clientId: user.clientId,
+    clientId: user.key ? `key:${user.key.name}` : user.clientId,
+    ...(user.key ? { ttlMinutes: KEY_STAGE_TTL_MINUTES } : {}),
     kind: 'new_account',
     payload,
     preview,

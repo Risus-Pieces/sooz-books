@@ -40,7 +40,7 @@ export const plaidAccounts = pgTable('plaid_accounts', {
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
-export const API_KEY_SCOPES = ['read', 'bank.sync', 'bank.autopost'] as const;
+export const API_KEY_SCOPES = ['read', 'bank.sync', 'bank.autopost', 'stage'] as const;
 export type ApiKeyScope = (typeof API_KEY_SCOPES)[number];
 
 /** A scoped key an unattended agent uses instead of a person's sign-in. Only the hash is stored. */

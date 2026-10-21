@@ -11,7 +11,7 @@ import { z } from 'zod';
 
 import { commitStaged } from './commit';
 import { runAutoPostText, syncBankFeedsText } from './feeds';
-import { cancelStaging } from './staging';
+import { cancelStaging, waitingStagings } from './staging';
 import { db } from '@/db/client';
 import { describeError } from './errors';
 import {
@@ -24,7 +24,7 @@ import {
   runReport,
   whoami,
 } from './read';
-import { renderAccountStage, renderBankStage, renderCommit, renderJournalStage } from './render';
+import { renderAccountStage, renderBankStage, renderCommit, renderJournalStage, renderStoredStage } from './render';
 import {
   bankDecisionsInput,
   journalEntryInput,
@@ -67,7 +67,7 @@ export function createMcpServer(user: McpUser): McpServer {
 
   // A scoped key sees only what its scopes allow, and never the tools that stage or confirm changes.
   const isKey = Boolean(user.key);
-  const may = (scope: 'read' | 'bank.sync' | 'bank.autopost'): boolean => !user.key || user.key.scopes.includes(scope);
+  const may = (scope: 'read' | 'bank.sync' | 'bank.autopost' | 'stage'): boolean => !user.key || user.key.scopes.includes(scope);
 
   server.registerTool(
     'whoami',
@@ -176,7 +176,7 @@ export function createMcpServer(user: McpUser): McpServer {
     );
   }
 
-  if (!isKey) {
+  if (!isKey || may('stage')) {
     server.registerTool(
       'stage_bank_decisions',
       {
@@ -186,11 +186,11 @@ export function createMcpServer(user: McpUser): McpServer {
         annotations: STAGES,
       },
       async (input) =>
-        guarded(async () => renderBankStage(await stageBankDecisions(user, input))),
+        guarded(async () => renderBankStage(await stageBankDecisions(user, input), { byKey: isKey })),
     );
   }
 
-  if (!isKey) {
+  if (!isKey || may('stage')) {
     server.registerTool(
       'stage_journal_entry',
       {
@@ -199,11 +199,11 @@ export function createMcpServer(user: McpUser): McpServer {
         inputSchema: journalEntryInput.shape,
         annotations: STAGES,
       },
-      async (input) => guarded(async () => renderJournalStage(await stageJournalEntry(user, input))),
+      async (input) => guarded(async () => renderJournalStage(await stageJournalEntry(user, input), { byKey: isKey })),
     );
   }
 
-  if (!isKey) {
+  if (!isKey || may('stage')) {
     server.registerTool(
       'stage_new_account',
       {
@@ -212,7 +212,7 @@ export function createMcpServer(user: McpUser): McpServer {
         inputSchema: newAccountInput.shape,
         annotations: STAGES,
       },
-      async (input) => guarded(async () => renderAccountStage(await stageNewAccount(user, input))),
+      async (input) => guarded(async () => renderAccountStage(await stageNewAccount(user, input), { byKey: isKey })),
     );
   }
 
@@ -230,7 +230,7 @@ export function createMcpServer(user: McpUser): McpServer {
     );
   }
 
-  if (!isKey) {
+  if (!isKey || may('stage')) {
     server.registerTool(
       'cancel_staged',
       {
@@ -244,6 +244,24 @@ export function createMcpServer(user: McpUser): McpServer {
         guarded(async () => {
           await cancelStaging(db, stage_id, user.id);
           return 'Cancelled. That staged change can no longer be confirmed.';
+        }),
+    );
+  }
+
+  if (may('read')) {
+    server.registerTool(
+      'list_staged',
+      {
+        title: 'Staged changes waiting',
+        description:
+          'Lists every change staged for you that is still waiting for a decision, including ones your overnight agent prepared, each with its full preview. Show the user each preview; confirm one with commit_staged only after they say yes to it, and withdraw ones they reject with cancel_staged.',
+        annotations: READ_ONLY,
+      },
+      async () =>
+        guarded(async () => {
+          const rows = await waitingStagings(db, user.id);
+          if (rows.length === 0) return 'Nothing is staged and waiting.';
+          return [`${rows.length} staged change${rows.length === 1 ? '' : 's'} waiting:`, ...rows.map((row) => renderStoredStage(row))].join('\n\n---\n\n');
         }),
     );
   }

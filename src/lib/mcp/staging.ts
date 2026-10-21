@@ -11,12 +11,18 @@
  * from "not yours" except for the first two, which say so: a person who confirms twice should be
  * told, not told it never existed.
  */
-import { and, eq, sql } from 'drizzle-orm';
+import { and, asc, eq, gt, isNull, sql } from 'drizzle-orm';
 
 import { type McpStaging, type StageKind, mcpStagings } from '@/db/schema';
 import type { LedgerDb } from '@/lib/ledger/post';
 
 export const STAGE_TTL_MINUTES = 15;
+/**
+ * A stage made overnight by an agent's key waits for the person to wake up and look: long enough for
+ * a 5 a.m. run to be reviewed that day or the next, short enough that nothing old is confirmed by
+ * accident.
+ */
+export const KEY_STAGE_TTL_MINUTES = 36 * 60;
 
 export type StagingErrorCode = 'not_found' | 'expired' | 'used';
 
@@ -44,6 +50,8 @@ export interface NewStaging {
   payload: unknown;
   /** What the person is shown. */
   preview: unknown;
+  /** Defaults to STAGE_TTL_MINUTES. */
+  ttlMinutes?: number;
 }
 
 export async function createStaging(exec: LedgerDb, input: NewStaging): Promise<{ id: string; expiresAt: Date }> {
@@ -55,7 +63,7 @@ export async function createStaging(exec: LedgerDb, input: NewStaging): Promise<
       kind: input.kind,
       payload: input.payload,
       preview: input.preview,
-      expiresAt: sql`now() + ${STAGE_TTL_MINUTES} * interval '1 minute'`,
+      expiresAt: sql`now() + ${input.ttlMinutes ?? STAGE_TTL_MINUTES} * interval '1 minute'`,
     })
     .returning({ id: mcpStagings.id, expiresAt: mcpStagings.expiresAt });
   return row;
@@ -124,4 +132,13 @@ export async function markCommitted(tx: LedgerDb, id: string, result: unknown): 
     .update(mcpStagings)
     .set({ committedAt: sql`now()`, result })
     .where(eq(mcpStagings.id, id));
+}
+
+/** This person's stages still waiting for a decision, oldest first. */
+export async function waitingStagings(exec: LedgerDb, userId: string): Promise<McpStaging[]> {
+  return exec
+    .select()
+    .from(mcpStagings)
+    .where(and(eq(mcpStagings.userId, userId), isNull(mcpStagings.committedAt), gt(mcpStagings.expiresAt, sql`now()`)))
+    .orderBy(asc(mcpStagings.createdAt));
 }
