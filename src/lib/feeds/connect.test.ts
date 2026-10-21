@@ -103,6 +103,32 @@ describe.skipIf(!hasDatabase)('connecting a bank', () => {
     });
   });
 
+  it('releases its bank accounts on disconnect, so a reconnect can feed them again', async () => {
+    await withRollback(async (tx) => {
+      const id = await seededUserId(tx);
+      const mine = await bank(tx, '6262');
+      const first = await connectItem({ id, role: 'owner' }, 'pt', { client: plaid([account('a1', '6262')]), env: ENV, tx });
+      await disconnectItem({ id, role: 'owner' }, first.plaidItemId, { client: plaid([]), env: ENV, tx });
+      const again = await connectItem({ id, role: 'owner' }, 'pt', { client: plaid([account('a2', '6262')]), env: ENV, tx });
+      expect(again.accounts[0].bankAccountName).not.toBeNull();
+      const rows = await tx.select({ bank: plaidAccounts.bankAccountId }).from(plaidAccounts).where(eq(plaidAccounts.plaidItemId, again.plaidItemId));
+      expect(rows[0].bank).toBe(mine);
+    });
+  });
+
+  it('will not map onto an inactive bank account or for a disconnected bank', async () => {
+    await withRollback(async (tx) => {
+      const id = await seededUserId(tx);
+      const mine = await bank(tx, '7272');
+      await tx.update(bankAccounts).set({ active: false }).where(eq(bankAccounts.id, mine));
+      const connected = await connectItem({ id, role: 'owner' }, 'pt', { client: plaid([account('b1', null)]), env: ENV, tx });
+      const [row] = await tx.select({ id: plaidAccounts.id }).from(plaidAccounts).where(eq(plaidAccounts.plaidItemId, connected.plaidItemId));
+      await expect(mapAccount({ id, role: 'owner' }, { plaidAccountRowId: row.id, bankAccountId: mine }, { tx })).rejects.toThrow(/active bank account/);
+      await disconnectItem({ id, role: 'owner' }, connected.plaidItemId, { client: plaid([]), env: ENV, tx });
+      await expect(mapAccount({ id, role: 'owner' }, { plaidAccountRowId: row.id, bankAccountId: null }, { tx })).rejects.toThrow(/not active/);
+    });
+  });
+
   it('is for someone who manages settings', async () => {
     await withRollback(async (tx) => {
       const id = await seededUserId(tx);

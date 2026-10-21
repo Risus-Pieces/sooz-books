@@ -118,6 +118,16 @@ export async function mapAccount(
   requireCapability(actor.role, 'settings.manage');
   if (input.syncFrom !== undefined && !isCalendarDate(input.syncFrom)) throw new PlaidError('invalid', 'The start date must be YYYY-MM-DD.');
   const work = async (tx: LedgerDb) => {
+    const [feed] = await tx
+      .select({ status: plaidItems.status })
+      .from(plaidAccounts)
+      .innerJoin(plaidItems, eq(plaidItems.id, plaidAccounts.plaidItemId))
+      .where(eq(plaidAccounts.id, input.plaidAccountRowId));
+    if (feed === undefined || feed.status !== 'active') throw new PlaidError('invalid', 'That bank connection is not active.');
+    if (input.bankAccountId !== null) {
+      const [target] = await tx.select({ active: bankAccounts.active }).from(bankAccounts).where(eq(bankAccounts.id, input.bankAccountId));
+      if (target === undefined || !target.active) throw new PlaidError('invalid', 'Choose an active bank account.');
+    }
     const syncFrom =
       input.bankAccountId === null ? null : (input.syncFrom ?? (await firstFeedDay(tx, input.bankAccountId)));
     if (input.bankAccountId !== null && input.syncFrom !== undefined) {
@@ -145,8 +155,12 @@ export async function disconnectItem(actor: Actor, plaidItemId: string, deps: Co
   } catch {
     // Revoked at Plaid or not, it stops syncing here.
   }
-  const work = (tx: LedgerDb) =>
-    tx.update(plaidItems).set({ status: 'disconnected', disconnectedAt: new Date() }).where(eq(plaidItems.id, plaidItemId));
+  // Release its bank accounts too: one bank account takes one feed, and a reconnected bank must be
+  // able to feed the same accounts again.
+  const work = async (tx: LedgerDb) => {
+    await tx.update(plaidAccounts).set({ bankAccountId: null, syncFrom: null }).where(eq(plaidAccounts.plaidItemId, plaidItemId));
+    await tx.update(plaidItems).set({ status: 'disconnected', disconnectedAt: new Date() }).where(eq(plaidItems.id, plaidItemId));
+  };
   if (deps.tx) await work(deps.tx);
   else await withActor(actor.id, work);
 }

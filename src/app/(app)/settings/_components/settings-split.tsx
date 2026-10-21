@@ -18,7 +18,7 @@ export const ROLE_TONE: Record<RoleKey, PillTone> = {
   viewer: 'neutral',
 };
 
-export type SettingsPaneKey = 'company' | 'users' | 'appearance' | 'data';
+export type SettingsPaneKey = 'company' | 'users' | 'keys' | 'feeds' | 'appearance' | 'data';
 
 export interface SettingsPane {
   key: SettingsPaneKey;
@@ -32,6 +32,8 @@ export interface SettingsPane {
 export const SETTINGS_PANES: readonly SettingsPane[] = [
   { key: 'company', label: 'Company', href: '/settings?pane=company', glyph: 'building', tint: 'blue' },
   { key: 'users', label: 'Users & Invites', href: '/settings/users', glyph: 'people', tint: 'indigo' },
+  { key: 'keys', label: 'API Keys', href: '/settings/keys', glyph: 'key', tint: 'orange' },
+  { key: 'feeds', label: 'Bank Feeds', href: '/settings/feeds', glyph: 'bank', tint: 'green' },
   { key: 'appearance', label: 'Appearance', href: '/settings?pane=appearance', glyph: 'appearance', tint: 'gray' },
   { key: 'data', label: 'Data', href: '/settings?pane=data', glyph: 'doc-text', tint: 'teal' },
 ];
@@ -42,6 +44,11 @@ export function paneFor(key: SettingsPaneKey): SettingsPane {
 
 export function isPaneKey(value: string | undefined): value is SettingsPaneKey {
   return SETTINGS_PANES.some((p) => p.key === value);
+}
+
+/** True for a pane drawn by the Settings index itself (`?pane=`), not by a page of its own. */
+export function isIndexPane(key: SettingsPaneKey): boolean {
+  return paneFor(key).href.startsWith('/settings?pane=');
 }
 
 /** The chosen pane's content column, centred beside the list on a desktop. */

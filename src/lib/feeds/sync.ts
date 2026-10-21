@@ -16,13 +16,14 @@ import { and, eq, inArray, isNotNull, isNull } from 'drizzle-orm';
 import { db, withActor } from '@/db/client';
 import { bankAccounts, bankTransactions, plaidAccounts, plaidItems } from '@/db/schema';
 import type { AiTierOptions } from '@/lib/banking/ai-tier';
-import { type StatementStorage, commitImport, previewImport } from '@/lib/banking/import';
+import { ImportError, type StatementStorage, commitImport, previewImport } from '@/lib/banking/import';
+import { isQueryError, postgresErrorOf } from '@/lib/db-errors';
 import { type AutoPostReport, postAutoPostMatches } from '@/lib/banking/post';
 import { PLAID_IMPORTER_ID, type PlaidFeedLine, toPlaidCsv } from '@/lib/importers/plaid';
 import type { LedgerDb } from '@/lib/ledger/post';
 import { formatMoneyPlain, parseMoney } from '@/lib/money';
 
-import { decryptToken } from './crypto';
+import { TokenKeyError, decryptToken } from './crypto';
 import {
   type PlaidClient,
   type PlaidTransaction,
@@ -123,6 +124,17 @@ async function noteChanged(exec: LedgerDb, actorId: string, transactionIds: read
   return rows.length;
 }
 
+/**
+ * What may be stored and shown about a failure. Plaid's and the import pipeline's own errors are written
+ * for people; a raw database error can carry SQL and bound values, so it is replaced and only logged.
+ */
+function safeMessage(error: unknown): string {
+  if (error instanceof PlaidError || error instanceof ImportError || error instanceof TokenKeyError) return error.message;
+  if (postgresErrorOf(error) !== null || isQueryError(error)) return 'The database refused part of the import. Nothing from this run was kept; it will be tried again.';
+  if (error instanceof Error && error.message.length <= 300 && !/\b(select|insert|update|delete)\b/i.test(error.message)) return error.message;
+  return 'The bank feed failed. It will be tried again next time.';
+}
+
 /** Syncs one Plaid item. Never throws: a failure is reported and recorded on the item. */
 export async function syncItem(plaidItemId: string, deps: SyncDeps = {}): Promise<ItemSyncReport> {
   const [item] = await db.select().from(plaidItems).where(eq(plaidItems.id, plaidItemId));
@@ -209,7 +221,8 @@ export async function syncItem(plaidItemId: string, deps: SyncDeps = {}): Promis
       tx.update(plaidItems).set({ cursor: pages.cursor, lastSyncedAt: new Date(), lastError: null }).where(eq(plaidItems.id, item.id)),
     );
   } catch (error) {
-    report.error = error instanceof Error ? error.message : 'The bank feed failed.';
+    report.error = safeMessage(error);
+    console.error('bank feed sync failed', { plaidItemId: item.id, error });
     await withActor(item.createdBy, (tx) =>
       tx.update(plaidItems).set({ lastError: report.error }).where(eq(plaidItems.id, item.id)),
     );

@@ -16,7 +16,7 @@ import { GroupRow, InsetGroup, ListRow } from '@/components/ui/inset-group';
 import { Pill } from '@/components/ui/pill';
 
 import { AppearancePicker } from './_components/appearance-picker';
-import { PaneBody, ROLE_TONE, SettingsSplit, isPaneKey, paneFor, type SettingsPaneKey } from './_components/settings-split';
+import { PaneBody, ROLE_TONE, SettingsSplit, isIndexPane, isPaneKey, paneFor, type SettingsPaneKey } from './_components/settings-split';
 
 export const metadata: Metadata = {
   title: 'Settings',
@@ -42,7 +42,7 @@ interface DataCounts {
 export default async function SettingsIndexPage({ searchParams }: { searchParams: Promise<SearchParams> }) {
   const [viewer, params] = await Promise.all([requireUser('/settings'), searchParams]);
   const requested = first(params.pane);
-  const paneOpen = isPaneKey(requested) && requested !== 'users';
+  const paneOpen = isPaneKey(requested) && isIndexPane(requested);
   const current: SettingsPaneKey = paneOpen && isPaneKey(requested) ? requested : 'company';
   const pane = paneFor(current);
 
