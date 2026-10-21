@@ -1,3 +1,4 @@
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { sql as sqlTag, type ExtractTablesWithRelations } from 'drizzle-orm';
 import type { PgTransaction } from 'drizzle-orm/pg-core';
 import { drizzle, type PostgresJsDatabase, type PostgresJsQueryResultHKT } from 'drizzle-orm/postgres-js';
@@ -24,6 +25,8 @@ const cache = globalThis as typeof globalThis & {
   __soozBooksSql?: postgres.Sql;
   __soozBooksDb?: PostgresJsDatabase<Schema>;
 };
+
+const viaStore = new AsyncLocalStorage<string>();
 
 /** Raw postgres.js client, for the handful of queries Drizzle cannot express. */
 const url = assertDbEnv();
@@ -72,7 +75,24 @@ export async function withActor<T>(
   fn: (tx: Tx) => Promise<T>,
 ): Promise<T> {
   return db.transaction(async (tx) => {
-    await tx.execute(sqlTag`select set_config('app.user_id', ${userId ?? ''}, true)`);
+    await tx.execute(
+      sqlTag`select set_config('app.user_id', ${userId ?? ''}, true), set_config('app.via', ${viaStore.getStore() ?? ''}, true)`,
+    );
     return fn(tx);
   });
+}
+
+/**
+ * How the writes inside `fn` are being made when it is not by the person directly — `cron:bank-sync`,
+ * `key:<name>`. Every `withActor` transaction started inside `fn`, however deep, records it in
+ * `app.via`, which the audit trigger writes beside the actor. Carried in async context rather than
+ * as an argument so that no write path can forget to pass it on.
+ */
+export function actingVia<T>(via: string, fn: () => Promise<T>): Promise<T> {
+  return viaStore.run(via, fn);
+}
+
+/** The `via` of the current call, if any. */
+export function currentVia(): string | null {
+  return viaStore.getStore() ?? null;
 }

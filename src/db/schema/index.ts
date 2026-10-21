@@ -6,5 +6,6 @@ export * from './channels';
 export * from './trade';
 export * from './inventory';
 export * from './planning';
+export * from './feeds';
 export * from './mcp';
 export * from './receipts';

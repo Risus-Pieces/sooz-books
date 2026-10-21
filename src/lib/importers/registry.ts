@@ -19,6 +19,7 @@
 import type { ParsedFile } from '@/lib/banking/types';
 
 import { genericBankImporter } from './generic';
+import { plaidImporter } from './plaid';
 import { relayImporter } from './relay';
 import {
   AUTO_SELECT_CONFIDENCE,
@@ -42,6 +43,7 @@ export type AnyImporter = Importer<ImportableRow>;
 
 const REGISTRY: readonly AnyImporter[] = Object.freeze([
   relayImporter as unknown as AnyImporter,
+  plaidImporter as unknown as AnyImporter,
 ]);
 
 /** Asked only when no dedicated importer recognised the file. */

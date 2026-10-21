@@ -172,6 +172,8 @@ export const auditLog = pgTable(
     rowId: text('row_id').notNull(),
     op: text('op', { enum: ['INSERT', 'UPDATE', 'DELETE'] }).notNull(),
     actorId: uuid('actor_id'),
+    /** How the change was made when not by the person directly: `cron:bank-sync`, `key:<name>`. */
+    via: text('via'),
     at: timestamp('at', { withTimezone: true }).notNull().defaultNow(),
     before: jsonb('before').$type<Record<string, unknown>>(),
     after: jsonb('after').$type<Record<string, unknown>>(),
