@@ -76,8 +76,7 @@ export function detectPlaid(file: ParsedFile): DetectionResult {
 
 export function parsePlaid(file: ParsedFile, ctx: ImporterContext): ImporterParseResult<GenericRow> {
   // Always the fixed mapping, whatever the account has saved.
-  const { profile: _ignored, ...rest } = ctx;
-  return parseGeneric(file, { ...rest, profile: PLAID_PROFILE });
+  return parseGeneric(file, { ...ctx, profile: PLAID_PROFILE });
 }
 
 export const plaidImporter: Importer<GenericRow> = Object.freeze({
