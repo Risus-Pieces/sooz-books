@@ -16,6 +16,8 @@ import { appUsers } from '@/db/schema';
 import type { LedgerDb } from '@/lib/ledger/post';
 import { supabaseEnv } from '@/lib/supabase/server';
 
+import { authenticateKey, looksLikeKey } from '@/lib/feeds/keys';
+
 import type { McpUser } from './types';
 
 export interface VerifiedToken {
@@ -70,6 +72,22 @@ export async function authenticate(request: Request, deps: AuthDeps = {}): Promi
   if (token === null) {
     return { ok: false, status: 401, error: 'invalid_token', message: 'Sign in to Sooz Books to use this connection.' };
   }
+  // A scoped key (`sbk_…`) is checked against its stored hash; it never goes to the auth server.
+  if (looksLikeKey(token)) {
+    const holder = await authenticateKey(token, deps.exec);
+    if (holder === null) {
+      return { ok: false, status: 401, error: 'invalid_token', message: 'That key is not valid or has been revoked.' };
+    }
+    return {
+      ok: true,
+      user: {
+        ...holder.user,
+        clientId: null,
+        key: { id: holder.keyId, name: holder.keyName, scopes: holder.scopes },
+      },
+    };
+  }
+
   const verified = await (deps.verify ?? verifyWithSupabase)(token);
   if (verified === null || verified.clientId === null) {
     return { ok: false, status: 401, error: 'invalid_token', message: 'That sign-in is not valid or has expired.' };

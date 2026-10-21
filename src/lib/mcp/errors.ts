@@ -6,6 +6,13 @@ import { isLedgerError } from '@/lib/ledger/errors';
 import { translateLedgerDbError } from '@/lib/ledger/post';
 import { isStagingError } from './staging';
 
+/** Stage and commit are for a signed-in person, never a scoped key. */
+export function assertNotKey(user: { key?: unknown }): void {
+  if (user.key) {
+    throw new McpInputError('A scoped key cannot stage or confirm changes. Leave this for a person signed in to Sooz Books.');
+  }
+}
+
 /** A problem with what Claude asked for, which Claude can fix by asking differently. */
 export class McpInputError extends Error {
   constructor(message: string) {

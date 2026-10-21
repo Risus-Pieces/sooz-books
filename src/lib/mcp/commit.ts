@@ -14,7 +14,7 @@ import { excludeTransactions } from '@/app/(app)/banking/data';
 import { createAccount } from '@/lib/ledger/accounts';
 import { type LedgerDb, postJournalEntry } from '@/lib/ledger/post';
 
-import { describeError } from './errors';
+import { assertNotKey, describeError } from './errors';
 import { accountPayloadSchema, bankPayloadSchema, journalPayloadSchema } from './stage';
 import { lockStaging, markCommitted } from './staging';
 import type { McpUser } from './types';
@@ -121,6 +121,7 @@ export interface CommitCtx {
 }
 
 export async function commitStaged(user: McpUser, stageId: string, ctx: CommitCtx = {}): Promise<CommitResult> {
+  assertNotKey(user);
   const run = async (tx: LedgerDb): Promise<CommitResult> => {
     const row = await lockStaging(tx, stageId, user.id);
     requireCapability(user.role, KIND_CAPABILITY[row.kind]);

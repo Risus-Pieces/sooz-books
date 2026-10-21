@@ -21,7 +21,7 @@ import { type LedgerDb, previewJournalEntry } from '@/lib/ledger/post';
 import { parseMoney } from '@/lib/money';
 
 import { resolveAccount } from './accounts';
-import { McpInputError, describeError } from './errors';
+import { McpInputError, assertNotKey, describeError } from './errors';
 import { createStaging, supersedeStagings } from './staging';
 import type { McpUser } from './types';
 import { ACCOUNT_SUBTYPES, ACCOUNT_TYPES, bankSummary, postedLineCount } from './stage-support';
@@ -113,6 +113,7 @@ export async function stageBankDecisions(
   input: BankDecisionsInput,
   ctx: StageCtx = {},
 ): Promise<Staged<BankPreview>> {
+  assertNotKey(user);
   requireCapability(user.role, 'bank.approve');
   const exec = ctx.tx ?? db;
   const bankCtx = { userId: user.id, ...(ctx.tx === undefined ? {} : { tx: ctx.tx }) };
@@ -287,6 +288,7 @@ export async function stageJournalEntry(
   input: JournalEntryInput,
   ctx: StageCtx = {},
 ): Promise<Staged<JournalPreview>> {
+  assertNotKey(user);
   requireCapability(user.role, 'ledger.post');
   const exec = ctx.tx ?? db;
   if (!isCalendarDate(input.date)) throw new McpInputError(`"${input.date}" is not a date. Use YYYY-MM-DD.`);
@@ -377,6 +379,7 @@ export async function stageNewAccount(
   input: NewAccountInput,
   ctx: StageCtx = {},
 ): Promise<Staged<AccountPreview>> {
+  assertNotKey(user);
   requireCapability(user.role, 'settings.manage');
   const exec = ctx.tx ?? db;
   const code = input.code.trim();

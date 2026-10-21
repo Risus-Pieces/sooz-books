@@ -46,8 +46,21 @@ const CAPABILITY_WORDS: Record<Capability, string> = {
   'users.manage': 'manage users (not through Claude)',
 };
 
+const KEY_SCOPE_WORDS: Record<string, string> = {
+  read: 'read the books, reports and the review queue',
+  'bank.sync': 'pull new bank transactions from the bank feed',
+  'bank.autopost': 'run the auto-post rules an owner approved',
+};
+
 export function whoami(user: McpUser): string {
   const allowed = CONNECTOR_CAPABILITIES.filter((cap) => CAPABILITIES[user.role].includes(cap));
+  if (user.key) {
+    return [
+      `Connected with the scoped key "${user.key.name}", acting for ${user.fullName ?? user.email} (${user.email}).`,
+      `This key may: ${user.key.scopes.map((scope) => KEY_SCOPE_WORDS[scope]).join('; ')}.`,
+      'A key cannot stage or confirm changes; anything that needs a decision waits in the review queue for a person.',
+    ].join('\n');
+  }
   return [
     `Signed in as ${user.fullName ?? user.email} (${user.email}), role: ${user.role}.`,
     allowed.length === 0

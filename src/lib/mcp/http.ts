@@ -8,7 +8,10 @@
 import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js';
 
 import { type AuthDeps, authenticate, resourceMetadataUrl } from './auth';
+import { actingVia } from '@/db/client';
+
 import { createMcpServer } from './server';
+import { viaOf } from './types';
 
 function json(body: unknown, status: number, headers: Record<string, string> = {}): Response {
   return new Response(JSON.stringify(body), {
@@ -28,12 +31,18 @@ export async function handleMcpRequest(request: Request, deps: AuthDeps = {}): P
     return json({ error: auth.error, error_description: auth.message }, auth.status, { 'www-authenticate': challenge });
   }
 
-  const server = createMcpServer(auth.user);
-  const transport = new WebStandardStreamableHTTPServerTransport({ sessionIdGenerator: undefined, enableJsonResponse: true });
-  await server.connect(transport);
-  try {
-    return await transport.handleRequest(request);
-  } finally {
-    await transport.close();
-  }
+  const user = auth.user;
+  const serve = async (): Promise<Response> => {
+    const server = createMcpServer(user);
+    const transport = new WebStandardStreamableHTTPServerTransport({ sessionIdGenerator: undefined, enableJsonResponse: true });
+    await server.connect(transport);
+    try {
+      return await transport.handleRequest(request);
+    } finally {
+      await transport.close();
+    }
+  };
+  // Every write a key's call makes is recorded in the audit log as made through that key.
+  const via = viaOf(user);
+  return via === null ? serve() : actingVia(via, serve);
 }

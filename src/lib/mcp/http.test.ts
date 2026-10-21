@@ -92,10 +92,12 @@ describe.skipIf(!hasDatabase)('/mcp with a valid sign-in', () => {
         'list_bank_accounts',
         'list_journal_entries',
         'review_queue',
+        'run_auto_post_rules',
         'run_report',
         'stage_bank_decisions',
         'stage_journal_entry',
         'stage_new_account',
+        'sync_bank_feeds',
         'whoami',
       ]);
       // No tool takes an account or an amount along with a commit: the only way to post is a stage id.
@@ -148,5 +150,59 @@ describe.skipIf(!hasDatabase)('/mcp with a valid sign-in', () => {
       verify: async () => ({ userId: '00000000-0000-4000-8000-0000000000aa', clientId: 'claude' }),
     });
     expect(response.status).toBe(403);
+  });
+});
+
+describe.skipIf(!hasDatabase)('/mcp with a scoped key', () => {
+  async function withKey(scopes?: ('read' | 'bank.sync' | 'bank.autopost')[]) {
+    const { createApiKey } = await import('@/lib/feeds/keys');
+    const { db } = await import('@/db/client');
+    const [owner] = await db.select({ id: appUsers.id, role: appUsers.role }).from(appUsers).where(eq(appUsers.role, 'owner')).orderBy(appUsers.id).limit(1);
+    return createApiKey(owner, { name: `Test key ${Math.random().toString(36).slice(2, 8)}`, userId: owner.id, ...(scopes ? { scopes } : {}) });
+  }
+
+  it('signs in with no auth server, and sees no tool that stages or confirms', async () => {
+    const key = await withKey();
+    const response = await handleMcpRequest(rpc('tools/list', {}, key.token), { verify: async () => { throw new Error('a key must not reach the auth server'); } });
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as { result: { tools: { name: string }[] } };
+    const names = body.result.tools.map((tool) => tool.name);
+    expect(names).toEqual(expect.arrayContaining(['whoami', 'review_queue', 'run_report', 'sync_bank_feeds', 'run_auto_post_rules']));
+    for (const forbidden of ['stage_bank_decisions', 'stage_journal_entry', 'stage_new_account', 'commit_staged', 'cancel_staged']) {
+      expect(names).not.toContain(forbidden);
+    }
+  });
+
+  it('is refused even if it calls a staging tool by name', async () => {
+    const key = await withKey();
+    const response = await handleMcpRequest(rpc('tools/call', { name: 'commit_staged', arguments: { stage_id: 'x' } }, key.token));
+    const body = (await response.json()) as { result?: { isError?: boolean }; error?: unknown };
+    expect(body.error ?? body.result?.isError).toBeTruthy();
+  });
+
+  it('sees only the tools its scopes allow', async () => {
+    const key = await withKey(['read']);
+    const response = await handleMcpRequest(rpc('tools/list', {}, key.token));
+    const names = ((await response.json()) as { result: { tools: { name: string }[] } }).result.tools.map((t) => t.name);
+    expect(names).not.toContain('sync_bank_feeds');
+    expect(names).not.toContain('run_auto_post_rules');
+    expect(names).toContain('review_queue');
+  });
+
+  it('says who it acts for, through which key', async () => {
+    const key = await withKey();
+    const response = await handleMcpRequest(rpc('tools/call', { name: 'whoami', arguments: {} }, key.token));
+    const body = (await response.json()) as { result: { content: { text: string }[] } };
+    expect(body.result.content[0].text).toMatch(/scoped key "Test key/);
+  });
+
+  it('stops working the moment it is revoked, and an unknown key never works', async () => {
+    const { revokeApiKey } = await import('@/lib/feeds/keys');
+    const { db } = await import('@/db/client');
+    const [owner] = await db.select({ id: appUsers.id, role: appUsers.role }).from(appUsers).where(eq(appUsers.role, 'owner')).orderBy(appUsers.id).limit(1);
+    const key = await withKey();
+    await revokeApiKey(owner, key.id);
+    expect((await handleMcpRequest(rpc('tools/list', {}, key.token))).status).toBe(401);
+    expect((await handleMcpRequest(rpc('tools/list', {}, 'sbk_not-a-real-key'))).status).toBe(401);
   });
 });
