@@ -163,6 +163,20 @@ Authentication → OAuth Server: turn it on, set the authorization path to `/oau
 dynamic client registration, and make sure Site URL is the production URL. Migration `0048` creates
 `mcp_stagings` (apply it as `sooz_app`, like every table migration).
 
+## Bank feed and scoped keys
+
+Sooz Books pulls Relay from Plaid every night (Vercel Cron → `/api/cron/bank-sync`, guarded by `CRON_SECRET`):
+new posted transactions go through the ordinary import pipeline into the review queue, from the day after the last
+transaction the books already hold, then the rules an owner marked auto-post run. Nothing else posts on its own.
+Env: `PLAID_CLIENT_ID`, `PLAID_SECRET`, `PLAID_ENV` (`sandbox`/`production`), `PLAID_TOKEN_KEY` (32 random bytes,
+base64; encrypts Plaid access tokens). An owner connects the bank in Settings → Bank feeds.
+
+A scoped key (`sbk_…`, Settings, shown once, stored hashed) lets an unattended agent use `/mcp` without signing in:
+read, sync, run auto-post rules, and stage changes that wait 36 hours. It can never confirm one; the person does that
+signed in (`list_staged`, then `commit_staged`). Its writes are tagged `key:<name>` in `audit_log.via`.
+
+Migrations: `0049` as `sooz_app`; `0050` (audit `via`) as postgres, like `0016`/`0043`.
+
 ## Deploying
 
 ```bash
