@@ -148,6 +148,17 @@ describe.skipIf(!hasDatabase)('connecting a bank', () => {
     });
   });
 
+  it('starts a reconnected feed after the day the old feed already filled', async () => {
+    await withRollback(async (tx) => {
+      const mine = await bank(tx, '1212');
+      await tx.insert(bankTransactions).values({ bankAccountId: mine, txnDate: '2031-08-04', description: 'FEE', descriptionNormalized: 'FEE', amountCents: -1500, fingerprint: 'x:plaid:old-connection-1' });
+      expect(await firstFeedDay(tx, mine)).toBe('2031-08-05');
+      // A statement line that same day makes it the statement's last day again.
+      await tx.insert(bankTransactions).values({ bankAccountId: mine, txnDate: '2031-08-04', description: 'X', descriptionNormalized: 'X', amountCents: -100, fingerprint: randomUUID() });
+      expect(await firstFeedDay(tx, mine)).toBe('2031-08-04');
+    });
+  });
+
   it('is for someone who manages settings', async () => {
     await withRollback(async (tx) => {
       const id = await seededUserId(tx);

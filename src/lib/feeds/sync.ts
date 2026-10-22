@@ -19,7 +19,7 @@ import type { AiTierOptions } from '@/lib/banking/ai-tier';
 import { ImportError, type StatementStorage, commitImport, previewImport } from '@/lib/banking/import';
 import { isQueryError, postgresErrorOf } from '@/lib/db-errors';
 import { type AutoPostReport, postAutoPostMatches } from '@/lib/banking/post';
-import { PLAID_IMPORTER_ID, type PlaidFeedLine, toPlaidCsv } from '@/lib/importers/plaid';
+import { PLAID_FINGERPRINT_PREFIX, PLAID_IMPORTER_ID, type PlaidFeedLine, isFeedFingerprint, toPlaidCsv } from '@/lib/importers/plaid';
 import type { LedgerDb } from '@/lib/ledger/post';
 import { formatMoneyPlain, parseMoney } from '@/lib/money';
 
@@ -116,7 +116,7 @@ async function readAll(client: PlaidClient, accessToken: string, cursor: string 
 
 async function noteChanged(exec: LedgerDb, actorId: string, transactionIds: readonly string[]): Promise<number> {
   if (transactionIds.length === 0) return 0;
-  const fingerprints = transactionIds.map((id) => `x:${id}`);
+  const fingerprints = transactionIds.map((id) => `${PLAID_FINGERPRINT_PREFIX}${id}`);
   const rows = await exec
     .select({ id: bankTransactions.id, notes: bankTransactions.notes })
     .from(bankTransactions)
@@ -149,22 +149,29 @@ function safeMessage(error: unknown): string {
 const OWNER_GONE = 'The person who connected this bank no longer has access. An owner should reconnect it.';
 
 /**
- * Flags feed lines dated on the statement's last day when the statement also has lines that day: the
- * import already recognised the ones it could, but a payee the bank worded differently in the two
- * places would get past it, so a person takes a look.
+ * Feed lines dated on the statement's last day, when the statement also has lines that day, may be the
+ * same money as one of them. They are never dropped for looking alike; they are flagged, and taken off
+ * any auto-post rule (back to plain review) so a person pairs them before anything posts.
  */
 async function noteOverlapDay(actorId: string, bankAccountId: string, day: string): Promise<void> {
   const rows = await db
-    .select({ id: bankTransactions.id, fingerprint: bankTransactions.fingerprint, notes: bankTransactions.notes, journalEntryId: bankTransactions.journalEntryId })
+    .select({ id: bankTransactions.id, fingerprint: bankTransactions.fingerprint, notes: bankTransactions.notes, journalEntryId: bankTransactions.journalEntryId, status: bankTransactions.status })
     .from(bankTransactions)
     .where(and(eq(bankTransactions.bankAccountId, bankAccountId), eq(bankTransactions.txnDate, day)));
-  if (!rows.some((row) => !row.fingerprint.startsWith('x:'))) return;
-  const note = 'Dated the last day of the statement already imported. Check it is not the same money as a statement line.';
-  const toNote = rows.filter((row) => row.fingerprint.startsWith('x:') && row.journalEntryId === null && !(row.notes ?? '').includes(note));
+  if (!rows.some((row) => !isFeedFingerprint(row.fingerprint))) return;
+  const note = 'Dated the last day of the statement already imported. It may be the same money as a statement line: check before approving.';
+  const toNote = rows.filter((row) => isFeedFingerprint(row.fingerprint) && row.journalEntryId === null && !(row.notes ?? '').includes(note));
   if (toNote.length === 0) return;
   await withActor(actorId, async (tx) => {
     for (const row of toNote) {
-      await tx.update(bankTransactions).set({ notes: row.notes ? `${row.notes}\n${note}` : note }).where(eq(bankTransactions.id, row.id));
+      await tx
+        .update(bankTransactions)
+        .set({
+          notes: row.notes ? `${row.notes}\n${note}` : note,
+          // Off the auto-post path: a rule match is kept as a suggestion, but a person decides.
+          ...(row.status === 'categorized' ? { status: 'unreviewed' as const, ruleId: null } : {}),
+        })
+        .where(eq(bankTransactions.id, row.id));
     }
   });
 }
@@ -263,9 +270,15 @@ export async function syncItem(plaidItemId: string, deps: SyncDeps = {}): Promis
     report.changedLater = await noteChanged(db, actorId, pages.changed);
 
     // Only now: every line read has been written, so the next run may start after them.
-    await withActor(actorId, (tx) =>
-      tx.update(plaidItems).set({ cursor: pages.cursor, lastSyncedAt: new Date(), lastError: null }).where(eq(plaidItems.id, item.id)),
-    );
+    await withActor(actorId, async (tx) => {
+      // Advance the cursor only if nobody reset it meanwhile: an owner confirming a mapping during this
+      // run asks for the history to be read again, and this run skipped that account's lines.
+      await tx
+        .update(plaidItems)
+        .set({ cursor: pages.cursor })
+        .where(and(eq(plaidItems.id, item.id), item.cursor === null ? isNull(plaidItems.cursor) : eq(plaidItems.cursor, item.cursor)));
+      await tx.update(plaidItems).set({ lastSyncedAt: new Date(), lastError: null }).where(eq(plaidItems.id, item.id));
+    });
   } catch (error) {
     report.error = safeMessage(error);
     console.error('bank feed sync failed', { plaidItemId: item.id, error });

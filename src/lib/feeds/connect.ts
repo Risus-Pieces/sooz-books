@@ -7,12 +7,12 @@
  * change or remove the mapping in Settings), and syncs from the day after the latest transaction the
  * books already hold for it, so the CSV history and the feed never cover the same day twice.
  */
-import { and, desc, eq, max } from 'drizzle-orm';
+import { and, desc, eq, max, notLike } from 'drizzle-orm';
 
 import { db, withActor } from '@/db/client';
 import { bankAccounts, bankTransactions, plaidAccounts, plaidItems } from '@/db/schema';
 import { requireCapability } from '@/lib/auth/roles';
-import { type CalendarDate, isCalendarDate, today } from '@/lib/dates';
+import { type CalendarDate, addDays, isCalendarDate, today } from '@/lib/dates';
 import type { LedgerDb } from '@/lib/ledger/post';
 import type { AppRole } from '@/lib/types';
 
@@ -47,18 +47,26 @@ export async function startLink(actor: Actor, deps: ConnectDeps = {}): Promise<s
 }
 
 /**
- * The first day the feed may bring in for this bank account: the last day the books already hold.
+ * The first day the feed may bring in for this bank account.
  *
- * That day itself is included because a statement exported mid-day misses whatever the bank posted
- * later that day. Its lines that the statement already brought in are recognised as duplicates by the
- * import (by date, amount and payee against the statement's rows), and the rest are flagged for a look.
+ * When the books' last day came from a statement, that day itself: a statement exported mid-day misses
+ * whatever the bank posted later that day. The feed's lines for it come in flagged and kept out of
+ * auto-post, for a person to pair with the statement's. When the last day came from an earlier feed (a
+ * bank reconnected), the next day: a new connection's ids are new, and that day is already complete.
  */
 export async function firstFeedDay(exec: LedgerDb, bankAccountId: string): Promise<CalendarDate> {
   const [row] = await exec
     .select({ last: max(bankTransactions.txnDate) })
     .from(bankTransactions)
     .where(eq(bankTransactions.bankAccountId, bankAccountId));
-  return row?.last ?? today();
+  const last = row?.last ?? null;
+  if (last === null) return today();
+  const [statementRow] = await exec
+    .select({ id: bankTransactions.id })
+    .from(bankTransactions)
+    .where(and(eq(bankTransactions.bankAccountId, bankAccountId), eq(bankTransactions.txnDate, last), notLike(bankTransactions.fingerprint, 'x:plaid:%')))
+    .limit(1);
+  return statementRow === undefined ? addDays(last, 1) : last;
 }
 
 export interface ConnectedItem {

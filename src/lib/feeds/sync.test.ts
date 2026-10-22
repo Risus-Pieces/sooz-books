@@ -118,8 +118,8 @@ describe.skipIf(!hasDatabase)('the bank sync', () => {
     expect(report.accounts).toEqual([expect.objectContaining({ bankAccountId, inserted: 2, duplicates: 0 })]);
     expect(report.ignored).toEqual({ pending: 1, unmapped: 1, beforeStart: 1, notUsd: 1 });
     expect((await rows()).map((r) => [r.date, r.amount, r.fingerprint])).toEqual([
-      ['2031-05-02', -1_250, 'x:t1'],
-      ['2031-05-03', 30_000, 'x:t2'],
+      ['2031-05-02', -1_250, 'x:plaid:t1'],
+      ['2031-05-03', 30_000, 'x:plaid:t2'],
     ]);
     expect((await item()).cursor).toBe('c2');
   });
@@ -153,8 +153,8 @@ describe.skipIf(!hasDatabase)('the bank sync', () => {
     });
     expect(report.changedLater).toBe(2);
     const all = await rows();
-    expect(all.find((r) => r.fingerprint === 'x:t1')).toMatchObject({ amount: -1_250, notes: expect.stringContaining('changed or withdrew') });
-    expect(all.find((r) => r.fingerprint === 'x:t3')?.notes).toMatch(/changed or withdrew/);
+    expect(all.find((r) => r.fingerprint === 'x:plaid:t1')).toMatchObject({ amount: -1_250, notes: expect.stringContaining('changed or withdrew') });
+    expect(all.find((r) => r.fingerprint === 'x:plaid:t3')?.notes).toMatch(/changed or withdrew/);
     expect((await item()).lastError).toBeNull();
   });
 
@@ -169,8 +169,8 @@ describe.skipIf(!hasDatabase)('the bank sync', () => {
     const mine = run.items.find((r) => r.plaidItemId === itemRowId);
     expect(mine?.error).toBeNull();
     const all = await rows();
-    const fee = all.find((r) => r.fingerprint === 'x:fee');
-    const paper = all.find((r) => r.fingerprint === 'x:paper');
+    const fee = all.find((r) => r.fingerprint === 'x:plaid:fee');
+    const paper = all.find((r) => r.fingerprint === 'x:plaid:paper');
     expect(fee?.entry).not.toBeNull();
     expect(paper?.entry).toBeNull();
     expect(run.autoPost.posted.some((p) => p.entryId === fee?.entry)).toBe(true);
@@ -185,7 +185,7 @@ describe.skipIf(!hasDatabase)('the bank sync', () => {
     const [row] = await client.db
       .select({ id: schema.bankTransactions.id })
       .from(schema.bankTransactions)
-      .where(and(eq(schema.bankTransactions.bankAccountId, bankAccountId), eq(schema.bankTransactions.fingerprint, 'x:audited')));
+      .where(and(eq(schema.bankTransactions.bankAccountId, bankAccountId), eq(schema.bankTransactions.fingerprint, 'x:plaid:audited')));
     const events = await client.db
       .select({ via: schema.auditLog.via, actor: schema.auditLog.actorId })
       .from(schema.auditLog)
@@ -201,7 +201,7 @@ describe.skipIf(!hasDatabase)('the bank sync', () => {
     const second = await syncItem(itemRowId, { env: ENV, storage: null, ai: false, client: fakePlaid([page([fee('wire2')], 'w2')]) });
     expect(second.accounts[0]).toMatchObject({ inserted: 1, duplicates: 0 });
     const fingerprints = (await rows()).map((r) => r.fingerprint);
-    expect(fingerprints).toEqual(expect.arrayContaining(['x:wire1', 'x:wire2']));
+    expect(fingerprints).toEqual(expect.arrayContaining(['x:plaid:wire1', 'x:plaid:wire2']));
   });
 
   it('does not auto-post for a caller who may not approve, or when told not to', async () => {
@@ -209,7 +209,7 @@ describe.skipIf(!hasDatabase)('the bank sync', () => {
     const viewer = await syncAllFeeds({ actor: { id: ownerId, role: 'bookkeeper' }, autoPost: false, env: ENV, storage: null, ai: false, client: fakePlaid([page([txn('fee2', '2031-05-21', '8.00', { name: 'ZZFEED FEE MONTHLY' })], 'c7')]) });
     expect(viewer.autoPost.posted).toEqual([]);
     const all = await rows();
-    expect(all.find((r) => r.fingerprint === 'x:fee2')?.entry).toBeNull();
+    expect(all.find((r) => r.fingerprint === 'x:plaid:fee2')?.entry).toBeNull();
   });
 
   it('skips a connection whose owner no longer has access, unattended', async () => {
@@ -219,7 +219,7 @@ describe.skipIf(!hasDatabase)('the bank sync', () => {
     try {
       const report = await syncItem(itemRowId, { env: ENV, storage: null, ai: false, client: fakePlaid([page([txn('ghost', '2031-05-22', '1.00')], 'c8')]) });
       expect(report.error).toMatch(/no longer has access/);
-      expect((await rows()).some((r) => r.fingerprint === 'x:ghost')).toBe(false);
+      expect((await rows()).some((r) => r.fingerprint === 'x:plaid:ghost')).toBe(false);
     } finally {
       await client.db.update(schema.appUsers).set({ active: true }).where(eq(schema.appUsers.id, ownerId));
     }
@@ -231,9 +231,44 @@ describe.skipIf(!hasDatabase)('the bank sync', () => {
     try {
       const report = await syncItem(itemRowId, { env: ENV, storage: null, ai: false, client: fakePlaid([page([txn('unconfirmed', '2031-05-23', '1.00')], 'c9')]) });
       expect(report.ignored.unmapped).toBe(1);
-      expect((await rows()).some((r) => r.fingerprint === 'x:unconfirmed')).toBe(false);
+      expect((await rows()).some((r) => r.fingerprint === 'x:plaid:unconfirmed')).toBe(false);
     } finally {
       await client.db.update(schema.plaidAccounts).set({ confirmedAt: new Date() }).where(eq(schema.plaidAccounts.plaidItemId, itemRowId));
     }
+  });
+
+  it('on the statement day, brings in every feed line night after night, flagged and kept from auto-post', async () => {
+    const { syncAllFeeds } = await import('./sync');
+    // The statement already has one $8 fee on the feed's first day.
+    await client.withActor(ownerId, (tx) =>
+      tx.insert(schema.bankTransactions).values({ bankAccountId, txnDate: '2031-05-01', description: 'ZZFEED FEE MONTHLY', descriptionNormalized: 'ZZFEED FEE MONTHLY', amountCents: -800, fingerprint: `statement-${Math.random()}` }),
+    );
+    const fee = (id: string) => txn(id, '2031-05-01', '8.00', { name: 'ZZFEED FEE MONTHLY' });
+    await syncAllFeeds({ env: ENV, storage: null, ai: false, client: fakePlaid([page([fee('day1-a')], 'o1')]) });
+    await syncAllFeeds({ env: ENV, storage: null, ai: false, client: fakePlaid([page([fee('day1-b')], 'o2')]) });
+
+    const day = (await rows()).filter((r) => r.date === '2031-05-01');
+    const feed = day.filter((r) => r.fingerprint.startsWith('x:plaid:'));
+    expect(feed.map((r) => r.fingerprint).sort()).toEqual(['x:plaid:day1-a', 'x:plaid:day1-b']);
+    for (const row of feed) {
+      expect(row.entry).toBeNull();
+      expect(row.notes).toMatch(/same money as a statement line/);
+      expect(row.status).toBe('unreviewed');
+    }
+  });
+
+  it('does not lose the history a reset asked for when the reset lands during a run', async () => {
+    const { syncItem } = await import('./sync');
+    const resetting: PlaidClient = {
+      ...fakePlaid([]),
+      syncTransactions: async () => {
+        // An owner confirms a mapping while this run is reading Plaid.
+        await client.db.update(schema.plaidItems).set({ cursor: null }).where(eq(schema.plaidItems.id, itemRowId));
+        return page([], 'after-reset');
+      },
+    };
+    const report = await syncItem(itemRowId, { env: ENV, storage: null, ai: false, client: resetting });
+    expect(report.error).toBeNull();
+    expect((await item()).cursor).toBeNull();
   });
 });

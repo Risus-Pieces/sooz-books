@@ -103,7 +103,10 @@ export async function supersedeStagings(
   kind: StageKind,
   txnIds: readonly string[],
   exceptId: string,
-  /** Only stages made through the same client: an overnight key never withdraws what the person staged. */
+  /**
+   * Who staged it. A key replaces only what that key staged; the person replaces what they staged from
+   * any of their own apps, never what an overnight key prepared (they withdraw that with cancel_staged).
+   */
   clientId: string | null,
 ): Promise<void> {
   if (txnIds.length === 0) return;
@@ -115,7 +118,7 @@ export async function supersedeStagings(
        and kind = ${kind}
        and committed_at is null
        and id <> ${exceptId}::uuid
-       and client_id is not distinct from ${clientId}
+       and ${clientId !== null && clientId.startsWith('key:') ? sql`client_id = ${clientId}` : sql`(client_id is null or client_id not like 'key:%')`}
        and exists (
          select 1 from jsonb_array_elements(payload -> 'items') as item
           where item ->> 'txnId' in (${list})

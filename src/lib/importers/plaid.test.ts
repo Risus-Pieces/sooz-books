@@ -31,8 +31,8 @@ describe('the Plaid feed importer', () => {
   it('reads signed amounts as integer cents, oldest first, with commas and quotes intact', async () => {
     const parsed = parsePlaid(await file(toPlaidCsv(LINES)), { bankAccountId: BANK });
     expect(parsed.rows.map((row) => [row.date, row.amountCents, row.externalId])).toEqual([
-      ['2026-10-01', 25_000, 'tx-1'],
-      ['2026-10-02', -150, 'tx-2'],
+      ['2026-10-01', 25_000, 'plaid:tx-1'],
+      ['2026-10-02', -150, 'plaid:tx-2'],
     ]);
     expect(parsed.rows[0].description).toBe('ZELLE FROM RISUS, "TOP-UP"');
     expect(parsed.rows[1].counterparty).toBe('Relay');
@@ -40,7 +40,7 @@ describe('the Plaid feed importer', () => {
 
   it("keys each row on Plaid's id, so a re-sync is the same row", async () => {
     const parsed = parsePlaid(await file(toPlaidCsv(LINES)), { bankAccountId: BANK });
-    expect(plaidImporter.fingerprint(parsed.rows[0], { bankAccountId: BANK })).toBe('x:tx-1');
+    expect(plaidImporter.fingerprint(parsed.rows[0], { bankAccountId: BANK })).toBe('x:plaid:tx-1');
   });
 
   it("ignores a mapping saved on the account, which was made for that bank's own export", async () => {

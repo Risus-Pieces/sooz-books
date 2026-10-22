@@ -74,9 +74,20 @@ export function detectPlaid(file: ParsedFile): DetectionResult {
     : { importerId: PLAID_IMPORTER_ID, label: PLAID_IMPORTER_LABEL, confidence: 0, reasons: ['Not the Plaid feed layout.'] };
 }
 
+/** Feed rows' fingerprints are `x:plaid:<id>`, so a feed row is told apart from a statement row that has ids of its own. */
+export const PLAID_FINGERPRINT_PREFIX = 'x:plaid:';
+
+export function isFeedFingerprint(fingerprint: string): boolean {
+  return fingerprint.startsWith(PLAID_FINGERPRINT_PREFIX);
+}
+
 export function parsePlaid(file: ParsedFile, ctx: ImporterContext): ImporterParseResult<GenericRow> {
   // Always the fixed mapping, whatever the account has saved.
-  return parseGeneric(file, { ...ctx, profile: PLAID_PROFILE });
+  const parsed = parseGeneric(file, { ...ctx, profile: PLAID_PROFILE });
+  return {
+    ...parsed,
+    rows: parsed.rows.map((row) => (row.externalId === null || row.externalId === '' ? row : { ...row, externalId: `plaid:${row.externalId}` })),
+  };
 }
 
 export const plaidImporter: Importer<GenericRow> = Object.freeze({

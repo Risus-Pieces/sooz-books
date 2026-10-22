@@ -559,4 +559,16 @@ describe.skipIf(!hasDatabase)('stages prepared overnight by a key', () => {
       await expect(commitStaged(person, mine.stageId!, { tx })).resolves.toMatchObject({ kind: 'bank_decisions' });
     });
   });
+
+  it("lets the person replace their own stage from another of their apps", async () => {
+    await withRollback(async (tx) => {
+      await immediate(tx);
+      const { person } = await keyUser(tx);
+      const bank = await newBank(tx);
+      const txnId = await newTxn(tx, bank.id, DAY, -100);
+      const desktop = await stageBankDecisions({ ...person, clientId: 'claude-desktop' }, { items: [{ txn_id: txnId, action: 'exclude' }] }, { tx });
+      await stageBankDecisions({ ...person, clientId: 'claude-web' }, { items: [{ txn_id: txnId, action: 'accept', account: ACCOUNTS.OFFICE_SUPPLIES }] }, { tx });
+      await expect(commitStaged(person, desktop.stageId!, { tx })).rejects.toMatchObject({ code: 'used' });
+    });
+  });
 });

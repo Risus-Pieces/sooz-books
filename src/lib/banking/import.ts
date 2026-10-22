@@ -550,8 +550,6 @@ function classifyRows(
   fingerprintOf: (row: ImportableRow, occurrence: number) => string,
 ): { classified: Classified[]; issues: Issue[] } {
   const ledger = new Map<string, ExistingTxn[]>();
-  // The same buckets, holding only rows with no bank-provided id: what a file-based import wrote.
-  const fileLedger = new Map<string, ExistingTxn[]>();
   const byFingerprint = new Map<string, ExistingTxn>();
   for (const txn of existing) {
     byFingerprint.set(txn.fingerprint, txn);
@@ -559,15 +557,9 @@ function classifyRows(
     const bucket = ledger.get(key);
     if (bucket === undefined) ledger.set(key, [txn]);
     else bucket.push(txn);
-    if (!txn.fingerprint.startsWith('x:')) {
-      const fileBucket = fileLedger.get(key);
-      if (fileBucket === undefined) fileLedger.set(key, [txn]);
-      else fileBucket.push(txn);
-    }
   }
 
   const seen = new Map<string, number>();
-  const seenWithId = new Map<string, number>();
   const classified: Classified[] = [];
   const issues: Issue[] = [];
   const fileCounts = new Map<string, number>();
@@ -592,25 +584,18 @@ function classifyRows(
 
     const key = naturalKey(row.date, row.amountCents, row.description);
 
-    // A row the bank identified (a feed's transaction id) is a duplicate only of that same id. Counting
-    // it against the day's lookalikes would assume the source covers whole days, which a nightly feed
-    // does not: a second, identical $15 fee posted the next night would be taken for the first. It is
-    // still matched against rows an uploaded statement wrote, which carry no id, so a feed that starts
-    // on the statement's last day does not bring that day's lines in twice.
+    // A row the bank identified (a feed's transaction id) is a duplicate only of that same id, never of
+    // a lookalike. Counting lookalikes assumes the source covers whole days, which a nightly feed does
+    // not: a second, identical $15 fee posted the next night would be taken for the first and lost.
+    // Where a feed line may be the same money as a statement line, it comes in and is flagged for a
+    // person instead (see `@/lib/feeds/sync`): a flagged pair costs a click, a dropped line costs money.
     if (row.externalId !== null && row.externalId !== '') {
       const same = byFingerprint.get(fingerprintOf(row, 0));
-      if (same !== undefined) {
-        classified.push({ row, class: 'duplicate', occurrence: 0, fingerprint: same.fingerprint, existingTxnId: same.id });
-        continue;
-      }
-      const index = seenWithId.get(key) ?? 0;
-      seenWithId.set(key, index + 1);
-      const fromFiles = fileLedger.get(key) ?? [];
-      if (index < fromFiles.length) {
-        classified.push({ row, class: 'duplicate', occurrence: index, fingerprint: fromFiles[index].fingerprint, existingTxnId: fromFiles[index].id });
-        continue;
-      }
-      classified.push({ row, class: 'new', occurrence: 0, fingerprint: fingerprintOf(row, 0), existingTxnId: null });
+      classified.push(
+        same === undefined
+          ? { row, class: 'new', occurrence: 0, fingerprint: fingerprintOf(row, 0), existingTxnId: null }
+          : { row, class: 'duplicate', occurrence: 0, fingerprint: same.fingerprint, existingTxnId: same.id },
+      );
       continue;
     }
 

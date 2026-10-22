@@ -98,3 +98,32 @@ marked `auto_post`.
 - Mo's actual constraint, relayed by the owner: his sync runs at 5 a.m. and notifies him of what it prepares, so the
   15-minute stage window was the blocker, not approval itself. Hence keys may stage with a 36-hour window, and
   `list_staged` exists, while confirming stays with the signed-in person. **(my call)**
+
+## After the security review (2026-10-21)
+
+Two adversarial review rounds. Fixed, each with a regression test:
+
+- **Feed lines are de-duplicated only by Plaid's id** (`x:plaid:<id>`), never by date/amount/payee lookalikes: a
+  nightly feed does not cover whole days, so a second identical fee arriving the next night would otherwise be
+  dropped for good. Where a feed line may be the same money as a statement line (the feed's first day, which is the
+  statement's last day), it comes in **flagged and taken off auto-post** for a person to pair. A flagged pair costs a
+  click; a dropped line costs money nobody sees. **(my call, the reviewer's conservative option)**
+- The feed starts on the statement's last day (a mid-day export misses later postings), or the day after when that
+  day already came from an earlier feed (a reconnected bank's new ids would otherwise double it).
+- Any mapping change resets the cursor so lines passed over while an account was unmapped are read again; a run in
+  progress does not overwrite that reset.
+- A match by last four digits is only a proposal until an owner confirms it (`plaid_accounts.confirmed_at`).
+- Plaid's original bank wording is requested, so rules written against Relay's statements still match.
+- Who acts: the person who started a sync (Settings or connector); unattended, the owner who connected the bank, and
+  only while that owner is active and allowed. Auto-post requires `bank.approve`, and a key's `bank.autopost` scope.
+- A statement uploaded for a feed account warns about overlap. Keys replace or withdraw only their own stages; the
+  person's restaging from any of their apps replaces their own. Key ids are in the audit trail.
+
+### Known limits
+- One failing account pauses its whole bank connection until fixed (the cursor is per connection).
+- Relay's returned-payment pairing exists only for Relay CSV rows, not feed rows.
+- If Plaid dates a line a day off from the statement around the start day, the overlap flag misses it (check with
+  the first real sync).
+- Settings creates keys with all four scopes; narrower keys need code or SQL.
+- The encrypted Plaid token is copied into the permanent audit log on insert and disconnect (useless without
+  `PLAID_TOKEN_KEY`, and revoked at Plaid on disconnect).
