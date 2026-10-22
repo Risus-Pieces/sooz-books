@@ -520,8 +520,10 @@ describe.skipIf(!DATABASE_URL || RELAY_TXNS.length === 0)('seeded rules over the
     expect(byName.get('Member contribution — Chase College')).toBe(5);
     expect(byName.get('Member contribution — BofA SafeBalance')).toBe(7);
 
+    // The seeded rules are global. A rule scoped to one bank account belongs to a test that made
+    // its own throwaway account (the bank-feed suite does), and runs alongside this one.
     const autoPostRules = new Set(
-      loaded.rules.filter((r) => r.autoPost).map((r) => r.name),
+      loaded.rules.filter((r) => r.autoPost && r.bankAccountId === null).map((r) => r.name),
     );
     expect([...autoPostRules].sort()).toEqual([
       'Member contribution — BofA SafeBalance',

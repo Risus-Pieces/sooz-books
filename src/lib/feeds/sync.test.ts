@@ -88,7 +88,13 @@ beforeAll(async () => {
   });
 });
 
-afterAll(closeTestDb);
+afterAll(async () => {
+  if (hasDatabase && bankAccountId !== '') {
+    // The suite's own rules, so no other suite ever sees them. Rows and entries stay in the throwaway database.
+    await client.db.delete(schema.categorizationRules).where(eq(schema.categorizationRules.bankAccountId, bankAccountId));
+  }
+  await closeTestDb();
+});
 
 describe.skipIf(!hasDatabase)('the bank sync', () => {
   it('imports posted, mapped lines from the start date, money-in positive, keyed on the Plaid id', async () => {

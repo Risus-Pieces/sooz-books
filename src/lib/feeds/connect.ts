@@ -12,7 +12,7 @@ import { and, desc, eq, max } from 'drizzle-orm';
 import { db, withActor } from '@/db/client';
 import { bankAccounts, bankTransactions, plaidAccounts, plaidItems } from '@/db/schema';
 import { requireCapability } from '@/lib/auth/roles';
-import { type CalendarDate, addDays, isCalendarDate, today } from '@/lib/dates';
+import { type CalendarDate, isCalendarDate, today } from '@/lib/dates';
 import type { LedgerDb } from '@/lib/ledger/post';
 import type { AppRole } from '@/lib/types';
 
