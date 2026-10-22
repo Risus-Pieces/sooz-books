@@ -133,9 +133,10 @@ export async function disconnectBank(plaidItemId: string): Promise<ActionResult<
 /** The nightly sync, now, run by the person who pressed the button. */
 export async function syncBankFeedsNow(): Promise<ActionResult<SyncSummary>> {
   try {
-    await requireCapability('settings.manage');
+    const actor = await requireCapability('settings.manage');
     if (!feedsConfigured()) return notSetUp();
-    const run = await syncAllFeeds();
+    // Written as the person who pressed it, and auto-posting only if they may approve.
+    const run = await syncAllFeeds({ actor: { id: actor.id, role: actor.role } });
     refreshFeeds();
     revalidatePath('/banking/review');
     revalidatePath('/ledger');

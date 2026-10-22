@@ -5,8 +5,9 @@
  * an agent that runs at night. The token is shown once; only its sha256 is stored, so the table alone
  * cannot be used to act. Only someone who may manage users creates or revokes keys.
  *
- * A key can never stage or commit a change. Its scopes are reading the books, running the bank sync
- * and running the auto-post rules an owner already approved — nothing that decides what an entry is.
+ * A key can never confirm (commit) a change. Its scopes are reading the books, running the bank sync,
+ * running the auto-post rules an owner already approved, and staging changes that wait for the person to
+ * confirm while signed in.
  */
 import { createHash, randomBytes } from 'node:crypto';
 

@@ -24,6 +24,9 @@ import type { LedgerDb } from '@/lib/ledger/post';
 import { formatMoneyPlain, parseMoney } from '@/lib/money';
 
 import { TokenKeyError, decryptToken } from './crypto';
+import { appUsers } from '@/db/schema';
+import { can } from '@/lib/auth/roles';
+import type { AppRole } from '@/lib/types';
 import {
   type PlaidClient,
   type PlaidTransaction,
@@ -33,6 +36,14 @@ import {
 } from './plaid-client';
 
 export interface SyncDeps {
+  /**
+   * Who is running the sync. A person (Sync now, or the connector) writes as themselves; left out — the
+   * nightly cron — each connection writes as the owner who made it, and only while that owner is still
+   * active and allowed to.
+   */
+  actor?: { id: string; role: AppRole };
+  /** Run the owner-approved auto-post rules afterwards. Default true; the caller must hold `bank.approve`. */
+  autoPost?: boolean;
   client?: PlaidClient;
   /** `undefined` archives to Supabase Storage as an upload does; `null` archives nothing. */
   storage?: StatementStorage | null;
@@ -135,6 +146,29 @@ function safeMessage(error: unknown): string {
   return 'The bank feed failed. It will be tried again next time.';
 }
 
+const OWNER_GONE = 'The person who connected this bank no longer has access. An owner should reconnect it.';
+
+/**
+ * Flags feed lines dated on the statement's last day when the statement also has lines that day: the
+ * import already recognised the ones it could, but a payee the bank worded differently in the two
+ * places would get past it, so a person takes a look.
+ */
+async function noteOverlapDay(actorId: string, bankAccountId: string, day: string): Promise<void> {
+  const rows = await db
+    .select({ id: bankTransactions.id, fingerprint: bankTransactions.fingerprint, notes: bankTransactions.notes, journalEntryId: bankTransactions.journalEntryId })
+    .from(bankTransactions)
+    .where(and(eq(bankTransactions.bankAccountId, bankAccountId), eq(bankTransactions.txnDate, day)));
+  if (!rows.some((row) => !row.fingerprint.startsWith('x:'))) return;
+  const note = 'Dated the last day of the statement already imported. Check it is not the same money as a statement line.';
+  const toNote = rows.filter((row) => row.fingerprint.startsWith('x:') && row.journalEntryId === null && !(row.notes ?? '').includes(note));
+  if (toNote.length === 0) return;
+  await withActor(actorId, async (tx) => {
+    for (const row of toNote) {
+      await tx.update(bankTransactions).set({ notes: row.notes ? `${row.notes}\n${note}` : note }).where(eq(bankTransactions.id, row.id));
+    }
+  });
+}
+
 /** Syncs one Plaid item. Never throws: a failure is reported and recorded on the item. */
 export async function syncItem(plaidItemId: string, deps: SyncDeps = {}): Promise<ItemSyncReport> {
   const [item] = await db.select().from(plaidItems).where(eq(plaidItems.id, plaidItemId));
@@ -151,6 +185,17 @@ export async function syncItem(plaidItemId: string, deps: SyncDeps = {}): Promis
     return report;
   }
 
+  const actorId = deps.actor?.id ?? item.createdBy;
+  if (deps.actor === undefined) {
+    // Unattended: write as the owner who connected the bank, and only while they still may.
+    const [owner] = await db.select({ active: appUsers.active, role: appUsers.role }).from(appUsers).where(eq(appUsers.id, item.createdBy));
+    if (owner === undefined || !owner.active || !can(owner.role, 'bank.import')) {
+      report.error = OWNER_GONE;
+      await withActor(null, (tx) => tx.update(plaidItems).set({ lastError: report.error }).where(eq(plaidItems.id, item.id)));
+      return report;
+    }
+  }
+
   try {
     const client = clientFor(deps);
     const mapped = await db
@@ -163,7 +208,7 @@ export async function syncItem(plaidItemId: string, deps: SyncDeps = {}): Promis
       })
       .from(plaidAccounts)
       .innerJoin(bankAccounts, eq(bankAccounts.id, plaidAccounts.bankAccountId))
-      .where(and(eq(plaidAccounts.plaidItemId, item.id), isNotNull(plaidAccounts.bankAccountId)));
+      .where(and(eq(plaidAccounts.plaidItemId, item.id), isNotNull(plaidAccounts.bankAccountId), isNotNull(plaidAccounts.confirmedAt)));
     const byPlaidId = new Map(mapped.map((row) => [row.plaidAccountId, row]));
 
     const pages = await readAll(client, decryptToken(item.accessTokenEnc, deps.env), item.cursor);
@@ -196,7 +241,7 @@ export async function syncItem(plaidItemId: string, deps: SyncDeps = {}): Promis
         bankAccountId,
         filename: `plaid-${account.mask ?? 'account'}-${dates[0]}-to-${dates[dates.length - 1]}.csv`,
         bytes,
-        userId: item.createdBy,
+        userId: actorId,
         importerId: PLAID_IMPORTER_ID,
         delivery: 'api',
         ...(deps.storage === undefined ? {} : { storage: deps.storage }),
@@ -206,24 +251,25 @@ export async function syncItem(plaidItemId: string, deps: SyncDeps = {}): Promis
       }
       const committed = await commitImport({
         batchId: previewed.batchId,
-        userId: item.createdBy,
+        userId: actorId,
         bytes,
         ...(deps.storage === undefined ? {} : { storage: deps.storage }),
         ...(deps.ai === undefined ? {} : { ai: deps.ai }),
       });
       report.accounts.push({ bankAccountId, bankAccountName: account.name, inserted: committed.inserted, duplicates: committed.duplicates });
+      if (account.syncFrom !== null) await noteOverlapDay(actorId, bankAccountId, account.syncFrom);
     }
 
-    report.changedLater = await noteChanged(db, item.createdBy, pages.changed);
+    report.changedLater = await noteChanged(db, actorId, pages.changed);
 
     // Only now: every line read has been written, so the next run may start after them.
-    await withActor(item.createdBy, (tx) =>
+    await withActor(actorId, (tx) =>
       tx.update(plaidItems).set({ cursor: pages.cursor, lastSyncedAt: new Date(), lastError: null }).where(eq(plaidItems.id, item.id)),
     );
   } catch (error) {
     report.error = safeMessage(error);
     console.error('bank feed sync failed', { plaidItemId: item.id, error });
-    await withActor(item.createdBy, (tx) =>
+    await withActor(actorId, (tx) =>
       tx.update(plaidItems).set({ lastError: report.error }).where(eq(plaidItems.id, item.id)),
     );
   }
@@ -244,14 +290,24 @@ export async function syncAllFeeds(deps: SyncDeps = {}): Promise<SyncRunReport> 
   for (const item of items) {
     const report = await syncItem(item.id, deps);
     run.items.push(report);
+    if (deps.autoPost === false || report.error === OWNER_GONE) continue;
+
+    // Auto-posting is approving: whoever it runs as must be allowed to approve.
+    let poster: string | null = null;
+    if (deps.actor !== undefined) poster = can(deps.actor.role, 'bank.approve') ? deps.actor.id : null;
+    else {
+      const [owner] = await db.select({ active: appUsers.active, role: appUsers.role }).from(appUsers).where(eq(appUsers.id, item.createdBy));
+      poster = owner !== undefined && owner.active && can(owner.role, 'bank.approve') ? item.createdBy : null;
+    }
+    if (poster === null) continue;
 
     const fed = await db
       .select({ bankAccountId: plaidAccounts.bankAccountId })
       .from(plaidAccounts)
-      .where(and(eq(plaidAccounts.plaidItemId, item.id), isNotNull(plaidAccounts.bankAccountId)));
+      .where(and(eq(plaidAccounts.plaidItemId, item.id), isNotNull(plaidAccounts.bankAccountId), isNotNull(plaidAccounts.confirmedAt)));
     for (const { bankAccountId } of fed) {
       if (bankAccountId === null) continue;
-      const posted = await postAutoPostMatches({ userId: item.createdBy }, { bankAccountId });
+      const posted = await postAutoPostMatches({ userId: poster }, { bankAccountId });
       run.autoPost.posted.push(...posted.posted);
       run.autoPost.failed.push(...posted.failed);
     }

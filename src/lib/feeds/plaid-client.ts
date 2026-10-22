@@ -124,6 +124,8 @@ export function createPlaidClient(config: PlaidConfig, fetchImpl: typeof fetch =
         access_token: accessToken,
         ...(cursor === null ? {} : { cursor }),
         count: 500,
+        // The bank's own wording, which the rules and the CSV history were written against.
+        options: { include_original_description: true },
       });
     },
     async removeItem(accessToken) {

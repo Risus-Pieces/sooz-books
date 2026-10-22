@@ -6,6 +6,9 @@
 -- from `sync_from`, the day after the last transaction the books already held for it, so the CSV
 -- history and the feed can never overlap.
 --
+-- A match by last four digits is only proposed: the account feeds nothing until an owner confirms it
+-- (`confirmed_at`), because another bank's account can share the same four digits.
+--
 -- An API key lets an unattended agent act for the person who made it, limited to `scopes`. Only the
 -- sha256 of the token is stored; the token is shown once.
 --
@@ -34,8 +37,10 @@ create table plaid_accounts (
   name              text not null,
   mask              text,
   sync_from         date,
+  confirmed_at      timestamptz,
   created_at        timestamptz not null default now(),
-  constraint plaid_accounts_mapped_has_start check (bank_account_id is null or sync_from is not null)
+  constraint plaid_accounts_mapped_has_start check (bank_account_id is null or sync_from is not null),
+  constraint plaid_accounts_confirmed_is_mapped check (confirmed_at is null or bank_account_id is not null)
 );
 
 create table api_keys (

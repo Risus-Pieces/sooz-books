@@ -37,6 +37,8 @@ export const plaidAccounts = pgTable('plaid_accounts', {
   name: text('name').notNull(),
   mask: text('mask'),
   syncFrom: date('sync_from', { mode: 'string' }),
+  /** Null while the mapping is only a proposal; nothing syncs until an owner confirms it. */
+  confirmedAt: timestamp('confirmed_at', { withTimezone: true }),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
 

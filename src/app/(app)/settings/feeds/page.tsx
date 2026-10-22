@@ -110,9 +110,10 @@ export default async function BankFeedsSettingsPage() {
       mask: account.mask,
       bankAccountId: account.bankAccountId,
       syncFrom: account.syncFrom ? mediumDate(account.syncFrom) : null,
+      confirmed: account.confirmed,
     })),
   }));
-  const syncing = items.reduce((n, item) => n + item.accounts.filter((a) => a.bankAccountId !== null).length, 0);
+  const syncing = items.reduce((n, item) => n + item.accounts.filter((a) => a.bankAccountId !== null && a.confirmed).length, 0);
 
   return (
     <div className="flex flex-col gap-3.5 max-md:gap-3">

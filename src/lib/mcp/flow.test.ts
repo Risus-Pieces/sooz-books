@@ -515,7 +515,7 @@ describe.skipIf(!hasDatabase)('stages prepared overnight by a key', () => {
         .from(mcpStagings)
         .where(eq(mcpStagings.id, staged.stageId!));
       expect(Number(row.hours)).toBe(36);
-      expect(row.client).toBe("key:Mo's nightly sync");
+      expect(row.client).toBe("key:Mo's nightly sync#k");
 
       await expect(commitStaged(agent, staged.stageId!, { tx })).rejects.toThrow(/cannot confirm/);
       await expect(commitStaged(person, staged.stageId!, { tx })).resolves.toMatchObject({ kind: 'journal_entry' });
@@ -540,9 +540,23 @@ describe.skipIf(!hasDatabase)('stages prepared overnight by a key', () => {
       const waiting = await waitingStagings(tx, person.id);
       expect(waiting.map((w) => w.id)).toContain(staged.stageId);
       const text = renderStoredStage(waiting.find((w) => w.id === staged.stageId)!);
-      expect(text).toContain("Prepared by Mo's nightly sync");
+      expect(text).toContain("Mo's nightly sync#k");
       expect(text).toContain('6740');
       expect(text).toMatch(/about 36 hours/);
+    });
+  });
+
+  it('may withdraw or replace only what the key itself prepared', async () => {
+    await withRollback(async (tx) => {
+      await immediate(tx);
+      const { person, agent } = await keyUser(tx);
+      const bank = await newBank(tx);
+      const txnId = await newTxn(tx, bank.id, DAY, -100);
+      const mine = await stageBankDecisions(person, { items: [{ txn_id: txnId, action: 'accept', account: ACCOUNTS.OFFICE_SUPPLIES }] }, { tx });
+      // The overnight key staging the same row must not void what the person staged.
+      await stageBankDecisions(agent, { items: [{ txn_id: txnId, action: 'exclude' }] }, { tx });
+      await expect(cancelStaging(tx, mine.stageId!, person.id, "key:Mo's nightly sync#k")).rejects.toMatchObject({ code: 'not_found' });
+      await expect(commitStaged(person, mine.stageId!, { tx })).resolves.toMatchObject({ kind: 'bank_decisions' });
     });
   });
 });

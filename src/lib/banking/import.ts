@@ -26,7 +26,7 @@
  *     not raised.
  */
 
-import { and, eq, gte, inArray, isNull, lte, sql as sqlTag } from 'drizzle-orm';
+import { and, eq, gte, inArray, isNotNull, isNull, lte, sql as sqlTag } from 'drizzle-orm';
 
 import type { Tx } from '@/db/client';
 import {
@@ -36,12 +36,15 @@ import {
   importProfiles,
   type BankTxnStatus,
   type ImportIssue,
+  plaidAccounts,
+  plaidItems,
 } from '@/db/schema';
 import { addDays, type CalendarDate } from '@/lib/dates';
 import { isUniqueViolation, postgresErrorOf } from '@/lib/db-errors';
 import { formatMoney } from '@/lib/money';
 
 import { GENERIC_IMPORTER_ID, missingProfileColumns } from '@/lib/importers/generic';
+import { PLAID_IMPORTER_ID } from '@/lib/importers/plaid';
 import { RETURN_WINDOW_DAYS } from '@/lib/importers/relay';
 import {
   detectImporter,
@@ -547,14 +550,24 @@ function classifyRows(
   fingerprintOf: (row: ImportableRow, occurrence: number) => string,
 ): { classified: Classified[]; issues: Issue[] } {
   const ledger = new Map<string, ExistingTxn[]>();
+  // The same buckets, holding only rows with no bank-provided id: what a file-based import wrote.
+  const fileLedger = new Map<string, ExistingTxn[]>();
+  const byFingerprint = new Map<string, ExistingTxn>();
   for (const txn of existing) {
+    byFingerprint.set(txn.fingerprint, txn);
     const key = naturalKey(txn.txnDate, txn.amountCents, txn.descriptionNormalized);
     const bucket = ledger.get(key);
     if (bucket === undefined) ledger.set(key, [txn]);
     else bucket.push(txn);
+    if (!txn.fingerprint.startsWith('x:')) {
+      const fileBucket = fileLedger.get(key);
+      if (fileBucket === undefined) fileLedger.set(key, [txn]);
+      else fileBucket.push(txn);
+    }
   }
 
   const seen = new Map<string, number>();
+  const seenWithId = new Map<string, number>();
   const classified: Classified[] = [];
   const issues: Issue[] = [];
   const fileCounts = new Map<string, number>();
@@ -578,6 +591,29 @@ function classifyRows(
     }
 
     const key = naturalKey(row.date, row.amountCents, row.description);
+
+    // A row the bank identified (a feed's transaction id) is a duplicate only of that same id. Counting
+    // it against the day's lookalikes would assume the source covers whole days, which a nightly feed
+    // does not: a second, identical $15 fee posted the next night would be taken for the first. It is
+    // still matched against rows an uploaded statement wrote, which carry no id, so a feed that starts
+    // on the statement's last day does not bring that day's lines in twice.
+    if (row.externalId !== null && row.externalId !== '') {
+      const same = byFingerprint.get(fingerprintOf(row, 0));
+      if (same !== undefined) {
+        classified.push({ row, class: 'duplicate', occurrence: 0, fingerprint: same.fingerprint, existingTxnId: same.id });
+        continue;
+      }
+      const index = seenWithId.get(key) ?? 0;
+      seenWithId.set(key, index + 1);
+      const fromFiles = fileLedger.get(key) ?? [];
+      if (index < fromFiles.length) {
+        classified.push({ row, class: 'duplicate', occurrence: index, fingerprint: fromFiles[index].fingerprint, existingTxnId: fromFiles[index].id });
+        continue;
+      }
+      classified.push({ row, class: 'new', occurrence: 0, fingerprint: fingerprintOf(row, 0), existingTxnId: null });
+      continue;
+    }
+
     const index = seen.get(key) ?? 0;
     seen.set(key, index + 1);
 
@@ -1375,6 +1411,7 @@ export async function previewImport(input: PreviewImportInput): Promise<ImportPr
   issues.push(...returns.issues);
 
   issues.push(...(await openingBalanceIssues(parsed, account, summary.dateRange)));
+  if (importer.id !== PLAID_IMPORTER_ID) issues.push(...(await feedOverlapIssues(account.id, summary.dateRange)));
 
   const profileConfirmationRequired = importer.id === GENERIC_IMPORTER_ID && loaded === null;
 
@@ -1456,6 +1493,33 @@ export async function previewImport(input: PreviewImportInput): Promise<ImportPr
     priorImport: prior,
     blocked,
   };
+}
+
+/**
+ * A statement for an account the bank feed already fills. The feed's rows carry the bank's own ids and
+ * often its own wording, so a statement covering the same days can bring the same money in a second
+ * time. Said loudly rather than refused: a statement is also how a gap in the feed is filled.
+ */
+async function feedOverlapIssues(
+  bankAccountId: string,
+  range: { min: CalendarDate; max: CalendarDate } | null,
+): Promise<Issue[]> {
+  if (range === null) return [];
+  const { db } = await import('@/db/client');
+  const [feed] = await db
+    .select({ syncFrom: plaidAccounts.syncFrom })
+    .from(plaidAccounts)
+    .innerJoin(plaidItems, eq(plaidItems.id, plaidAccounts.plaidItemId))
+    .where(and(eq(plaidAccounts.bankAccountId, bankAccountId), eq(plaidItems.status, 'active'), isNotNull(plaidAccounts.confirmedAt)));
+  if (feed === undefined || feed.syncFrom === null || range.max < feed.syncFrom) return [];
+  return [
+    {
+      severity: 'warn',
+      code: 'feed.overlap',
+      message: `The bank feed already brings this account in from ${feed.syncFrom}. Rows in this file from that date on may be the same money as feed rows, worded differently.`,
+      remedy: 'Import only the days before the feed started, or check the review queue for pairs before approving.',
+    },
+  ];
 }
 
 /**

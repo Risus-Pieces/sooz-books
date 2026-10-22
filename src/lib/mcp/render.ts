@@ -80,7 +80,7 @@ export function renderAccountStage(staged: Staged<AccountPreview>, options: Rend
   return [
     header(staged, options),
     UNTRUSTED_NOTE,
-    `\nWill create account ${preview.code} "${preview.name}" (${preview.type}${preview.subtype === null ? '' : `, reports as ${preview.subtype}`})${preview.parent === null ? ', top level' : `, under ${preview.parent}`}. Description: ${untrusted(preview.description)}`,
+    `\nWill create account ${untrusted(preview.code)} ${untrusted(preview.name)} (${preview.type}${preview.subtype === null ? '' : `, reports as ${preview.subtype}`})${preview.parent === null ? ', top level' : `, under ${preview.parent}`}. Description: ${untrusted(preview.description)}`,
     ...preview.warnings.map((warning) => `WARNING: ${warning}`),
   ].join('\n');
 }
@@ -108,7 +108,7 @@ export function renderCommit(done: CommitResult): string {
 /** A stored stage, rendered as it was when it was made. */
 export function renderStoredStage(row: Pick<McpStaging, 'id' | 'kind' | 'preview' | 'expiresAt' | 'clientId'>): string {
   const staged = { stageId: row.id, expiresAt: row.expiresAt };
-  const madeBy = row.clientId?.startsWith('key:') ? `Prepared by ${row.clientId.slice(4)}.\n` : '';
+  const madeBy = row.clientId?.startsWith('key:') ? `Prepared by the key ${untrusted(row.clientId.slice(4))}.\n` : '';
   switch (row.kind) {
     case 'bank_decisions':
       return madeBy + renderBankStage({ ...staged, preview: row.preview as BankPreview });

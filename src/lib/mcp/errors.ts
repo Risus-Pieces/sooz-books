@@ -6,7 +6,7 @@ import { isLedgerError } from '@/lib/ledger/errors';
 import { translateLedgerDbError } from '@/lib/ledger/post';
 import { isStagingError } from './staging';
 
-/** Confirming (and cancelling) a staged change is for a signed-in person, never a scoped key. */
+/** Confirming a staged change is for a signed-in person, never a scoped key. */
 export function assertNotKey(user: { key?: unknown }): void {
   if (user.key) {
     throw new McpInputError('A scoped key cannot confirm changes. The person signs in and confirms the staged change themselves.');

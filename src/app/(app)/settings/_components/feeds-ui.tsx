@@ -30,6 +30,8 @@ export interface FeedAccountView {
   bankAccountId: string | null;
   /** "Oct 22, 2026", or null while it feeds nothing. */
   syncFrom: string | null;
+  /** False while the bank account is only proposed (matched by last four digits) and feeds nothing. */
+  confirmed: boolean;
 }
 
 export interface FeedItemView {
@@ -248,6 +250,19 @@ function FeedAccountRow({ account, bankAccounts }: { account: FeedAccountView; b
     },
   ];
 
+  const proposed = account.bankAccountId !== null && !account.confirmed;
+
+  const confirm = () => {
+    startTransition(async () => {
+      const result = await chooseFeedAccount(account.id, account.bankAccountId);
+      if (!result.ok) {
+        toast.error('Not confirmed', { description: result.error.message });
+        return;
+      }
+      toast.success(`${label} will sync`);
+    });
+  };
+
   const choose = (next: string) => {
     const bankAccountId = parseMappingValue(next);
     if (bankAccountId === undefined || next === value) return;
@@ -270,9 +285,18 @@ function FeedAccountRow({ account, bankAccounts }: { account: FeedAccountView; b
       <div className="min-w-0 flex-1 basis-40">
         <p className="truncate text-sm font-medium max-sm:text-lg max-sm:font-normal">{label}</p>
         <p className="text-xs text-label2 max-sm:text-sm">
-          {account.syncFrom ? `From ${account.syncFrom}` : 'Not syncing'}
+          {proposed
+            ? 'Matched by its last four digits. Not syncing until you confirm.'
+            : account.syncFrom && account.bankAccountId !== null
+              ? `From ${account.syncFrom}`
+              : 'Not syncing'}
         </p>
       </div>
+      {proposed ? (
+        <Button type="button" size="sm" onClick={confirm} disabled={pending}>
+          Confirm
+        </Button>
+      ) : null}
       <PopUpButton
         aria-label={`Bank account for ${label}`}
         value={value}

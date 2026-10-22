@@ -78,7 +78,7 @@ beforeAll(async () => {
     bankAccountId = bank.id;
     const [it] = await tx.insert(schema.plaidItems).values({ itemId: `item-${tag}`, institutionName: 'Relay', accessTokenEnc: encryptToken('access-sandbox-x', ENV), createdBy: ownerId }).returning({ id: schema.plaidItems.id });
     itemRowId = it.id;
-    await tx.insert(schema.plaidAccounts).values({ plaidItemId: it.id, plaidAccountId: 'plaid-acct-1', bankAccountId: bank.id, name: 'Checking', mask: '4242', syncFrom: '2031-05-01' });
+    await tx.insert(schema.plaidAccounts).values({ plaidItemId: it.id, plaidAccountId: 'plaid-acct-1', bankAccountId: bank.id, name: 'Checking', mask: '4242', syncFrom: '2031-05-01', confirmedAt: new Date() });
     const [fees] = await tx.select({ id: schema.accounts.id }).from(schema.accounts).where(eq(schema.accounts.code, '6710'));
     const [office] = await tx.select({ id: schema.accounts.id }).from(schema.accounts).where(eq(schema.accounts.code, '6740'));
     await tx.insert(schema.categorizationRules).values([
@@ -186,5 +186,48 @@ describe.skipIf(!hasDatabase)('the bank sync', () => {
       .where(and(eq(schema.auditLog.tableName, 'bank_transactions'), eq(schema.auditLog.rowId, row.id)));
     expect(events.length).toBeGreaterThan(0);
     expect(events.every((event) => event.via === 'cron:bank-sync' && event.actor === ownerId)).toBe(true);
+  });
+
+  it('keeps a second identical same-day line that arrives on a later night', async () => {
+    const { syncItem } = await import('./sync');
+    const fee = (id: string) => txn(id, '2031-05-20', '15.00', { name: 'ZZFEED WIRE FEE' });
+    await syncItem(itemRowId, { env: ENV, storage: null, ai: false, client: fakePlaid([page([fee('wire1')], 'w1')]) });
+    const second = await syncItem(itemRowId, { env: ENV, storage: null, ai: false, client: fakePlaid([page([fee('wire2')], 'w2')]) });
+    expect(second.accounts[0]).toMatchObject({ inserted: 1, duplicates: 0 });
+    const fingerprints = (await rows()).map((r) => r.fingerprint);
+    expect(fingerprints).toEqual(expect.arrayContaining(['x:wire1', 'x:wire2']));
+  });
+
+  it('does not auto-post for a caller who may not approve, or when told not to', async () => {
+    const { syncAllFeeds } = await import('./sync');
+    const viewer = await syncAllFeeds({ actor: { id: ownerId, role: 'bookkeeper' }, autoPost: false, env: ENV, storage: null, ai: false, client: fakePlaid([page([txn('fee2', '2031-05-21', '8.00', { name: 'ZZFEED FEE MONTHLY' })], 'c7')]) });
+    expect(viewer.autoPost.posted).toEqual([]);
+    const all = await rows();
+    expect(all.find((r) => r.fingerprint === 'x:fee2')?.entry).toBeNull();
+  });
+
+  it('skips a connection whose owner no longer has access, unattended', async () => {
+    const { syncItem } = await import('./sync');
+    // Switch the owner who connected it off for the length of the test.
+    await client.db.update(schema.appUsers).set({ active: false }).where(eq(schema.appUsers.id, ownerId));
+    try {
+      const report = await syncItem(itemRowId, { env: ENV, storage: null, ai: false, client: fakePlaid([page([txn('ghost', '2031-05-22', '1.00')], 'c8')]) });
+      expect(report.error).toMatch(/no longer has access/);
+      expect((await rows()).some((r) => r.fingerprint === 'x:ghost')).toBe(false);
+    } finally {
+      await client.db.update(schema.appUsers).set({ active: true }).where(eq(schema.appUsers.id, ownerId));
+    }
+  });
+
+  it('ignores a mapping that is only proposed', async () => {
+    const { syncItem } = await import('./sync');
+    await client.db.update(schema.plaidAccounts).set({ confirmedAt: null }).where(eq(schema.plaidAccounts.plaidItemId, itemRowId));
+    try {
+      const report = await syncItem(itemRowId, { env: ENV, storage: null, ai: false, client: fakePlaid([page([txn('unconfirmed', '2031-05-23', '1.00')], 'c9')]) });
+      expect(report.ignored.unmapped).toBe(1);
+      expect((await rows()).some((r) => r.fingerprint === 'x:unconfirmed')).toBe(false);
+    } finally {
+      await client.db.update(schema.plaidAccounts).set({ confirmedAt: new Date() }).where(eq(schema.plaidAccounts.plaidItemId, itemRowId));
+    }
   });
 });

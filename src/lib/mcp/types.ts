@@ -14,12 +14,18 @@ export interface McpUser {
   clientId: string | null;
   /**
    * Set when the caller is an unattended agent holding one of this person's scoped keys rather than
-   * the person signed in. A key can read, sync and run auto-post rules; it can never stage or commit.
+   * the person signed in. Within its scopes a key can read, sync, run auto-post rules and stage changes
+   * for the person to confirm later; it can never confirm (commit) one.
    */
   key?: { id: string; name: string; scopes: readonly ApiKeyScope[] } | null;
 }
 
 /** How this caller's writes are recorded in the audit log, or null for the person themselves. */
 export function viaOf(user: McpUser): string | null {
-  return user.key ? `key:${user.key.name}` : null;
+  return keyClientId(user);
+}
+
+/** A key's name is for people and need not be unique; the short id makes it so. */
+export function keyClientId(user: McpUser): string | null {
+  return user.key ? `key:${user.key.name}#${user.key.id.slice(0, 8)}` : null;
 }

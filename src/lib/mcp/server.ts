@@ -33,7 +33,7 @@ import {
   stageJournalEntry,
   stageNewAccount,
 } from './stage';
-import type { McpUser } from './types';
+import { type McpUser, keyClientId } from './types';
 
 type ToolResult = { content: { type: 'text'; text: string }[]; isError?: boolean };
 
@@ -242,7 +242,7 @@ export function createMcpServer(user: McpUser): McpServer {
       },
       async ({ stage_id }) =>
         guarded(async () => {
-          await cancelStaging(db, stage_id, user.id);
+          await cancelStaging(db, stage_id, user.id, keyClientId(user) ?? undefined);
           return 'Cancelled. That staged change can no longer be confirmed.';
         }),
     );

@@ -5,7 +5,7 @@
  * auto-post rules were each approved by an owner in the app. Available to a signed-in person with the
  * capability, and to a scoped key with the matching scope.
  */
-import { requireCapability } from '@/lib/auth/roles';
+import { can, requireCapability } from '@/lib/auth/roles';
 import { postAutoPostMatches } from '@/lib/banking/post';
 import { syncAllFeeds } from '@/lib/feeds/sync';
 
@@ -19,7 +19,9 @@ function assertScope(user: McpUser, scope: 'bank.sync' | 'bank.autopost'): void 
 export async function syncBankFeedsText(user: McpUser): Promise<string> {
   assertScope(user, 'bank.sync');
   requireCapability(user.role, 'bank.import');
-  const run = await syncAllFeeds();
+  // The rules run only if this caller may run them: a key needs its auto-post scope, anyone needs bank.approve.
+  const autoPost = (!user.key || user.key.scopes.includes('bank.autopost')) && can(user.role, 'bank.approve');
+  const run = await syncAllFeeds({ actor: { id: user.id, role: user.role }, autoPost });
   if (run.items.length === 0) return 'No bank feed is connected. An owner connects Relay in Settings → Bank feeds.';
   const lines = run.items.flatMap((item) => [
     `${item.institution ?? 'Bank'}: ${item.error === null ? 'synced' : `FAILED — ${item.error}`}`,
@@ -28,7 +30,9 @@ export async function syncBankFeedsText(user: McpUser): Promise<string> {
   ]);
   return [
     ...lines.filter(Boolean),
-    `Auto-post rules posted ${run.autoPost.posted.length} line(s); ${run.autoPost.failed.length} could not post.`,
+    autoPost
+      ? `Auto-post rules posted ${run.autoPost.posted.length} line(s); ${run.autoPost.failed.length} could not post.`
+      : 'Auto-post rules were not run (this caller is not allowed to run them).',
     'Everything else is in the review queue for a person.',
   ].join('\n');
 }

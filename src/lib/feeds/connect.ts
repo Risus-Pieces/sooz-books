@@ -46,19 +46,26 @@ export async function startLink(actor: Actor, deps: ConnectDeps = {}): Promise<s
   return clientFor(deps).createLinkToken(actor.id);
 }
 
-/** The first day the feed may bring in for this bank account: the day after the last one the books hold. */
+/**
+ * The first day the feed may bring in for this bank account: the last day the books already hold.
+ *
+ * That day itself is included because a statement exported mid-day misses whatever the bank posted
+ * later that day. Its lines that the statement already brought in are recognised as duplicates by the
+ * import (by date, amount and payee against the statement's rows), and the rest are flagged for a look.
+ */
 export async function firstFeedDay(exec: LedgerDb, bankAccountId: string): Promise<CalendarDate> {
   const [row] = await exec
     .select({ last: max(bankTransactions.txnDate) })
     .from(bankTransactions)
     .where(eq(bankTransactions.bankAccountId, bankAccountId));
-  return row?.last ? addDays(row.last, 1) : today();
+  return row?.last ?? today();
 }
 
 export interface ConnectedItem {
   plaidItemId: string;
   institution: string | null;
-  accounts: { name: string; mask: string | null; bankAccountName: string | null; syncFrom: string | null }[];
+  /** `confirmed` is false for every account until an owner confirms its mapping in Settings. */
+  accounts: { name: string; mask: string | null; bankAccountName: string | null; syncFrom: string | null; confirmed: boolean }[];
 }
 
 export async function connectItem(actor: Actor, publicToken: string, deps: ConnectDeps = {}): Promise<ConnectedItem> {
@@ -84,7 +91,8 @@ export async function connectItem(actor: Actor, publicToken: string, deps: Conne
     const out: ConnectedItem = { plaidItemId: item.id, institution: institutionName, accounts: [] };
     for (const account of accounts) {
       const match = account.mask === null ? undefined : ours.filter((b) => b.mask === account.mask && !taken.has(b.id));
-      // Only an unambiguous match by the last four digits is mapped; anything else waits for an owner.
+      // Only an unambiguous match by the last four digits is proposed, and even that feeds nothing until
+      // an owner confirms it: another bank's account can share the same four digits.
       const bank = match !== undefined && match.length === 1 ? match[0] : null;
       const syncFrom = bank === null ? null : await firstFeedDay(tx, bank.id);
       if (bank !== null) taken.add(bank.id);
@@ -96,7 +104,7 @@ export async function connectItem(actor: Actor, publicToken: string, deps: Conne
         mask: account.mask,
         syncFrom,
       });
-      out.accounts.push({ name: account.official_name ?? account.name, mask: account.mask, bankAccountName: bank?.name ?? null, syncFrom });
+      out.accounts.push({ name: account.official_name ?? account.name, mask: account.mask, bankAccountName: bank?.name ?? null, syncFrom, confirmed: false });
     }
     return out;
   };
@@ -133,13 +141,18 @@ export async function mapAccount(
     if (input.bankAccountId !== null && input.syncFrom !== undefined) {
       const earliest = await firstFeedDay(tx, input.bankAccountId);
       if (input.syncFrom < earliest) {
-        throw new PlaidError('overlap', `The books already hold this account up to ${addDays(earliest, -1)}. Start on ${earliest} or later, or the same money would come in twice.`);
+        throw new PlaidError('overlap', `The books already hold this account up to ${earliest}. Start on ${earliest} or later, or the same money would come in twice.`);
       }
     }
-    await tx
+    const [mapping] = await tx
       .update(plaidAccounts)
-      .set({ bankAccountId: input.bankAccountId, syncFrom })
-      .where(eq(plaidAccounts.id, input.plaidAccountRowId));
+      .set({ bankAccountId: input.bankAccountId, syncFrom, confirmedAt: input.bankAccountId === null ? null : new Date() })
+      .where(eq(plaidAccounts.id, input.plaidAccountRowId))
+      .returning({ plaidItemId: plaidAccounts.plaidItemId });
+    // Read the bank's history again from the start: lines that arrived while this account was not
+    // mapped, or was mapped elsewhere, were passed over and would otherwise never come back. A re-read
+    // costs nothing — a line already in the books is the same row.
+    await tx.update(plaidItems).set({ cursor: null }).where(eq(plaidItems.id, mapping.plaidItemId));
   };
   if (deps.tx) await work(deps.tx);
   else await withActor(actor.id, work);
@@ -158,7 +171,7 @@ export async function disconnectItem(actor: Actor, plaidItemId: string, deps: Co
   // Release its bank accounts too: one bank account takes one feed, and a reconnected bank must be
   // able to feed the same accounts again.
   const work = async (tx: LedgerDb) => {
-    await tx.update(plaidAccounts).set({ bankAccountId: null, syncFrom: null }).where(eq(plaidAccounts.plaidItemId, plaidItemId));
+    await tx.update(plaidAccounts).set({ bankAccountId: null, syncFrom: null, confirmedAt: null }).where(eq(plaidAccounts.plaidItemId, plaidItemId));
     await tx.update(plaidItems).set({ status: 'disconnected', disconnectedAt: new Date() }).where(eq(plaidItems.id, plaidItemId));
   };
   if (deps.tx) await work(deps.tx);
@@ -170,7 +183,7 @@ export interface FeedView {
   institution: string | null;
   lastSyncedAt: Date | null;
   lastError: string | null;
-  accounts: { id: string; name: string; mask: string | null; bankAccountId: string | null; syncFrom: string | null }[];
+  accounts: { id: string; name: string; mask: string | null; bankAccountId: string | null; syncFrom: string | null; confirmed: boolean }[];
 }
 
 export async function listFeeds(exec: LedgerDb = db): Promise<FeedView[]> {
@@ -182,10 +195,16 @@ export async function listFeeds(exec: LedgerDb = db): Promise<FeedView[]> {
   const out: FeedView[] = [];
   for (const item of items) {
     const accounts = await exec
-      .select({ id: plaidAccounts.id, name: plaidAccounts.name, mask: plaidAccounts.mask, bankAccountId: plaidAccounts.bankAccountId, syncFrom: plaidAccounts.syncFrom })
+      .select({ id: plaidAccounts.id, name: plaidAccounts.name, mask: plaidAccounts.mask, bankAccountId: plaidAccounts.bankAccountId, syncFrom: plaidAccounts.syncFrom, confirmedAt: plaidAccounts.confirmedAt })
       .from(plaidAccounts)
       .where(and(eq(plaidAccounts.plaidItemId, item.id)));
-    out.push({ id: item.id, institution: item.institutionName, lastSyncedAt: item.lastSyncedAt, lastError: item.lastError, accounts });
+    out.push({
+      id: item.id,
+      institution: item.institutionName,
+      lastSyncedAt: item.lastSyncedAt,
+      lastError: item.lastError,
+      accounts: accounts.map(({ confirmedAt, ...rest }) => ({ ...rest, confirmed: confirmedAt !== null })),
+    });
   }
   return out;
 }

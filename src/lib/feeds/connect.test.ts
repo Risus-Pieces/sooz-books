@@ -53,7 +53,7 @@ describe.skipIf(!hasDatabase)('connecting a bank', () => {
       const connected = await connectItem({ id, role: 'owner' }, 'public-token', { client: plaid([account('p1', '7311'), account('p2', '0000')]), env: ENV, tx });
 
       expect(connected.accounts).toEqual([
-        expect.objectContaining({ mask: '7311', syncFrom: '2031-06-15' }),
+        expect.objectContaining({ mask: '7311', syncFrom: '2031-06-14', confirmed: false }),
         expect.objectContaining({ mask: '0000', bankAccountName: null, syncFrom: null }),
       ]);
       const [item] = await tx.select().from(plaidItems).where(eq(plaidItems.id, connected.plaidItemId));
@@ -85,8 +85,9 @@ describe.skipIf(!hasDatabase)('connecting a bank', () => {
       await expect(mapAccount({ id, role: 'owner' }, { plaidAccountRowId: row.id, bankAccountId: mine, syncFrom: '2031-06-01' }, { tx })).rejects.toThrow(/twice/);
       await mapAccount({ id, role: 'owner' }, { plaidAccountRowId: row.id, bankAccountId: mine }, { tx });
       const [after] = await tx.select().from(plaidAccounts).where(eq(plaidAccounts.id, row.id));
-      expect(after.syncFrom).toBe('2031-07-02');
-      expect(await firstFeedDay(tx, mine)).toBe('2031-07-02');
+      expect(after.syncFrom).toBe('2031-07-01');
+      expect(after.confirmedAt).not.toBeNull();
+      expect(await firstFeedDay(tx, mine)).toBe('2031-07-01');
     });
   });
 
@@ -126,6 +127,24 @@ describe.skipIf(!hasDatabase)('connecting a bank', () => {
       await expect(mapAccount({ id, role: 'owner' }, { plaidAccountRowId: row.id, bankAccountId: mine }, { tx })).rejects.toThrow(/active bank account/);
       await disconnectItem({ id, role: 'owner' }, connected.plaidItemId, { client: plaid([]), env: ENV, tx });
       await expect(mapAccount({ id, role: 'owner' }, { plaidAccountRowId: row.id, bankAccountId: null }, { tx })).rejects.toThrow(/not active/);
+    });
+  });
+
+  it('only proposes a match by last four digits; confirming it is what starts the feed, and re-reads history', async () => {
+    await withRollback(async (tx) => {
+      const id = await seededUserId(tx);
+      const mine = await bank(tx, '9393');
+      const connected = await connectItem({ id, role: 'owner' }, 'pt', { client: plaid([account('c1', '9393')]), env: ENV, tx });
+      const [row] = await tx.select().from(plaidAccounts).where(eq(plaidAccounts.plaidItemId, connected.plaidItemId));
+      expect(row.bankAccountId).toBe(mine);
+      expect(row.confirmedAt).toBeNull();
+
+      await tx.update(plaidItems).set({ cursor: 'somewhere-later' }).where(eq(plaidItems.id, connected.plaidItemId));
+      await mapAccount({ id, role: 'owner' }, { plaidAccountRowId: row.id, bankAccountId: mine }, { tx });
+      const [confirmed] = await tx.select().from(plaidAccounts).where(eq(plaidAccounts.id, row.id));
+      expect(confirmed.confirmedAt).not.toBeNull();
+      const [item] = await tx.select().from(plaidItems).where(eq(plaidItems.id, connected.plaidItemId));
+      expect(item.cursor).toBeNull();
     });
   });
 

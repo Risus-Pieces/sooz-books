@@ -103,6 +103,8 @@ export async function supersedeStagings(
   kind: StageKind,
   txnIds: readonly string[],
   exceptId: string,
+  /** Only stages made through the same client: an overnight key never withdraws what the person staged. */
+  clientId: string | null,
 ): Promise<void> {
   if (txnIds.length === 0) return;
   const list = sql.join(txnIds.map((id) => sql`${id}`), sql`, `);
@@ -113,16 +115,23 @@ export async function supersedeStagings(
        and kind = ${kind}
        and committed_at is null
        and id <> ${exceptId}::uuid
+       and client_id is not distinct from ${clientId}
        and exists (
          select 1 from jsonb_array_elements(payload -> 'items') as item
           where item ->> 'txnId' in (${list})
        )`);
 }
 
-/** Withdraws a stage without posting it. */
-export async function cancelStaging(exec: LedgerDb, id: string, userId: string): Promise<void> {
+/**
+ * Withdraws a stage without posting it. `onlyClientId`, when given, limits it to stages made through
+ * that client: a key may withdraw what it prepared, never what the person staged themselves.
+ */
+export async function cancelStaging(exec: LedgerDb, id: string, userId: string, onlyClientId?: string): Promise<void> {
   await exec.transaction(async (tx) => {
-    await lockStaging(tx, id, userId);
+    const row = await lockStaging(tx, id, userId);
+    if (onlyClientId !== undefined && row.clientId !== onlyClientId) {
+      throw new StagingError('not_found', 'There is no staged change with that id that this key prepared.');
+    }
     await markCommitted(tx, id, { cancelled: true });
   });
 }

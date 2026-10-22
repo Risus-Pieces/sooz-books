@@ -50,6 +50,7 @@ const KEY_SCOPE_WORDS: Record<string, string> = {
   read: 'read the books, reports and the review queue',
   'bank.sync': 'pull new bank transactions from the bank feed',
   'bank.autopost': 'run the auto-post rules an owner approved',
+  stage: 'prepare changes that wait up to 36 hours for the person to confirm',
 };
 
 export function whoami(user: McpUser): string {
@@ -58,7 +59,7 @@ export function whoami(user: McpUser): string {
     return [
       `Connected with the scoped key "${user.key.name}", acting for ${user.fullName ?? user.email} (${user.email}).`,
       `This key may: ${user.key.scopes.map((scope) => KEY_SCOPE_WORDS[scope]).join('; ')}.`,
-      'A key cannot stage or confirm changes; anything that needs a decision waits in the review queue for a person.',
+      'A key can never confirm a change. What it prepares waits for the person to review and confirm while signed in.',
     ].join('\n');
   }
   return [

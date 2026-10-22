@@ -23,7 +23,7 @@ import { parseMoney } from '@/lib/money';
 import { resolveAccount } from './accounts';
 import { McpInputError, assertMayStage, describeError } from './errors';
 import { KEY_STAGE_TTL_MINUTES, createStaging, supersedeStagings } from './staging';
-import type { McpUser } from './types';
+import { type McpUser, keyClientId } from './types';
 import { ACCOUNT_SUBTYPES, ACCOUNT_TYPES, bankSummary, postedLineCount } from './stage-support';
 
 export interface StageCtx {
@@ -221,7 +221,7 @@ export async function stageBankDecisions(
   if (payload.items.length === 0) return { stageId: null, expiresAt: null, preview };
   const { id, expiresAt } = await createStaging(exec, {
     userId: user.id,
-    clientId: user.key ? `key:${user.key.name}` : user.clientId,
+    clientId: keyClientId(user) ?? user.clientId,
     ...(user.key ? { ttlMinutes: KEY_STAGE_TTL_MINUTES } : {}),
     kind: 'bank_decisions',
     payload,
@@ -229,7 +229,7 @@ export async function stageBankDecisions(
   });
   // A newer stage for the same rows replaces the old one: a stage the person turned down must not
   // stay confirmable behind their back.
-  await supersedeStagings(exec, user.id, 'bank_decisions', payload.items.map((item) => item.txnId), id);
+  await supersedeStagings(exec, user.id, 'bank_decisions', payload.items.map((item) => item.txnId), id, keyClientId(user) ?? user.clientId);
   return { stageId: id, expiresAt, preview };
 }
 
@@ -332,7 +332,7 @@ export async function stageJournalEntry(
   };
   const { id, expiresAt } = await createStaging(exec, {
     userId: user.id,
-    clientId: user.key ? `key:${user.key.name}` : user.clientId,
+    clientId: keyClientId(user) ?? user.clientId,
     ...(user.key ? { ttlMinutes: KEY_STAGE_TTL_MINUTES } : {}),
     kind: 'journal_entry',
     payload,
@@ -426,7 +426,7 @@ export async function stageNewAccount(
   };
   const { id, expiresAt } = await createStaging(exec, {
     userId: user.id,
-    clientId: user.key ? `key:${user.key.name}` : user.clientId,
+    clientId: keyClientId(user) ?? user.clientId,
     ...(user.key ? { ttlMinutes: KEY_STAGE_TTL_MINUTES } : {}),
     kind: 'new_account',
     payload,
