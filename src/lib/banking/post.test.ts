@@ -762,8 +762,6 @@ describe.skipIf(!hasDatabase)('previewApproval', () => {
       const f = await fixture(tx);
       const expense = await f.code(ACCOUNTS.OFFICE_SUPPLIES);
       const id = await txn(f, f.a, '2031-03-04', -4_250, { counterparty: 'Paper Co' });
-      const before = await tx.select({ id: journalEntries.id }).from(journalEntries);
-
       const preview = await previewApproval({ txnId: id, accountId: expense }, { userId: f.userId, tx });
 
       expect(preview.amountCents).toBe(-4_250);
@@ -773,7 +771,7 @@ describe.skipIf(!hasDatabase)('previewApproval', () => {
         expect.objectContaining({ accountId: f.a.glId, debitCents: 0, creditCents: 4_250 }),
       ]);
       expect(preview.lines[0].accountName).not.toBe('');
-      expect(await tx.select({ id: journalEntries.id }).from(journalEntries)).toHaveLength(before.length);
+      expect(await tx.select({ id: journalEntries.id }).from(journalEntries).where(eq(journalEntries.sourceId, id))).toHaveLength(0);
       const [row] = await tx.select({ status: bankTransactions.status }).from(bankTransactions).where(eq(bankTransactions.id, id));
       expect(row.status).toBe('unreviewed');
     });

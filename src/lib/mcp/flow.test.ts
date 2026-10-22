@@ -29,7 +29,6 @@ describe.skipIf(!hasDatabase)('stage_bank_decisions', () => {
       const user = await mcpUser(tx);
       const bank = await newBank(tx);
       const txnId = await newTxn(tx, bank.id, DAY, -4_250, 'PAPER CO #12');
-      const entriesBefore = await tx.select({ id: journalEntries.id }).from(journalEntries);
 
       const staged = await stageBankDecisions(user, { items: [{ txn_id: txnId, action: 'accept', account: ACCOUNTS.OFFICE_SUPPLIES }] }, { tx });
 
@@ -42,7 +41,8 @@ describe.skipIf(!hasDatabase)('stage_bank_decisions', () => {
         { account: expect.stringContaining('6740'), debitCents: 4_250, creditCents: 0 },
         { account: expect.stringContaining(bank.name.replace('TEST bank', 'Test bank')), debitCents: 0, creditCents: 4_250 },
       ]);
-      expect(await tx.select({ id: journalEntries.id }).from(journalEntries)).toHaveLength(entriesBefore.length);
+      // Counted for this transaction only: other suites commit entries while this one runs.
+      expect(await tx.select({ id: journalEntries.id }).from(journalEntries).where(eq(journalEntries.sourceId, txnId))).toHaveLength(0);
       const [txn] = await tx.select({ status: bankTransactions.status, entry: bankTransactions.journalEntryId }).from(bankTransactions).where(eq(bankTransactions.id, txnId));
       expect(txn).toEqual({ status: 'unreviewed', entry: null });
     });
